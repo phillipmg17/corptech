@@ -3,7 +3,12 @@ import './globals.css';
 export const metadata = {
   title: 'Corp Tech ERP',
   description: 'Sistema ERP Multi-Empresa — Corp Tech Holding',
-  viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }) {
