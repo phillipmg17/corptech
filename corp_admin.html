@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Corp Tech — Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg:#000;--bg2:#111;--bg3:#1c1c1e;--bg4:#2c2c2e;--border:#3a3a3c;
+    --text:#fff;--text2:#ebebf5cc;--text3:#ebebf599;
+    --accent:#0a84ff;--green:#30d158;--red:#ff453a;--orange:#ff9f0a;
+    --yellow:#ffd60a;--purple:#bf5af2;--teal:#5ac8fa;
+    --safe-top:env(safe-area-inset-top,44px);--safe-bot:env(safe-area-inset-bottom,34px);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,'SF Pro Display',sans-serif;min-height:100dvh;overflow-x:hidden}
+
+  /* AUTH */
+  #auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;padding:40px 24px;gap:24px}
+  .auth-logo{width:80px;height:80px;background:linear-gradient(135deg,#0a84ff,#bf5af2);border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:36px}
+  .auth-card{background:var(--bg3);border-radius:16px;padding:24px;width:100%;max-width:400px;display:flex;flex-direction:column;gap:14px}
+  .auth-label{font-size:13px;color:var(--text3);margin-bottom:4px}
+  .auth-input{background:var(--bg4);border:1px solid var(--border);border-radius:10px;padding:14px 16px;color:var(--text);font-size:16px;width:100%;outline:none}
+  .auth-input:focus{border-color:var(--accent)}
+  .btn-primary{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:600;width:100%;cursor:pointer}
+  .auth-err{color:var(--red);font-size:13px;text-align:center;display:none}
+
+  /* APP */
+  #app{display:none;flex-direction:column;min-height:100dvh}
+  .top-bar{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(0,0,0,.85);backdrop-filter:blur(20px);padding:calc(var(--safe-top) + 8px) 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+  .top-bar-title{font-size:17px;font-weight:700}
+  .top-bar-badge{background:linear-gradient(135deg,#0a84ff,#bf5af2);color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px}
+  .top-bar-user{font-size:12px;color:var(--text3);text-align:right}
+  .top-bar-logout{background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;padding:4px 8px}
+  .content{flex:1;padding-top:calc(var(--safe-top) + 64px);padding-bottom:calc(var(--safe-bot) + 80px);overflow-y:auto}
+  .tab-content{display:none;padding:16px}
+  .tab-content.active{display:block}
+
+  /* BOTTOM NAV */
+  .bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(28,28,30,.95);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;padding-bottom:var(--safe-bot)}
+  .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 0;cursor:pointer;position:relative;color:var(--text3)}
+  .nav-item.active{color:var(--accent)}
+  .nav-item svg{width:24px;height:24px}
+  .nav-label{font-size:10px;font-weight:500}
+  .nav-badge{position:absolute;top:6px;right:calc(50% - 20px);width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--bg3);display:none}
+
+  /* CARDS */
+  .card{background:var(--bg3);border-radius:16px;padding:16px;margin-bottom:12px}
+  .card-title{font-size:13px;color:var(--text3);font-weight:500;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+  .stat-card{background:var(--bg3);border-radius:14px;padding:14px}
+  .stat-val{font-size:26px;font-weight:700}
+  .stat-lbl{font-size:12px;color:var(--text3);margin-top:2px}
+
+  /* BADGES */
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+  .badge-green{background:rgba(48,209,88,.2);color:var(--green)}
+  .badge-red{background:rgba(255,69,58,.2);color:var(--red)}
+  .badge-orange{background:rgba(255,159,10,.2);color:var(--orange)}
+  .badge-blue{background:rgba(10,132,255,.2);color:var(--accent)}
+  .badge-purple{background:rgba(191,90,242,.2);color:var(--purple)}
+  .badge-gray{background:rgba(255,255,255,.1);color:var(--text3)}
+
+  /* LISTS */
+  .list-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);gap:10px}
+  .list-item:last-child{border-bottom:none}
+  .list-left{flex:1;min-width:0}
+  .list-title{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .list-sub{font-size:12px;color:var(--text3);margin-top:2px}
+  .list-right{text-align:right;flex-shrink:0}
+  .list-val{font-size:15px;font-weight:600}
+
+  /* FORMS */
+  .form-group{margin-bottom:14px}
+  .form-label{font-size:13px;color:var(--text3);margin-bottom:6px;display:block}
+  .form-input,.form-select,.form-textarea{width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;appearance:none}
+  .form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--accent)}
+  .form-textarea{resize:none;height:80px}
+  .form-select option{background:var(--bg3)}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  /* BUTTONS */
+  .btn{border:none;border-radius:10px;padding:12px 20px;font-size:15px;font-weight:600;cursor:pointer;width:100%}
+  .btn-green{background:var(--green);color:#000}
+  .btn-red{background:var(--red);color:#fff}
+  .btn-blue{background:var(--accent);color:#fff}
+  .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+  .btn:active{opacity:.8}
+  .btn-sm{padding:7px 14px;font-size:13px;border-radius:8px;width:auto}
+
+  /* SECTION */
+  .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .section-title{font-size:18px;font-weight:700}
+  .section-action{color:var(--accent);font-size:14px;cursor:pointer}
+
+  /* RATE BANNER */
+  .rate-banner{background:linear-gradient(135deg,rgba(10,132,255,.15),rgba(191,90,242,.15));border:1px solid rgba(10,132,255,.3);border-radius:14px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+  .rate-val{font-size:22px;font-weight:700;color:var(--accent)}
+
+  /* MODAL */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:flex-end}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--bg2);border-radius:24px 24px 0 0;padding:24px;padding-bottom:calc(24px + var(--safe-bot));width:100%;max-height:90vh;overflow-y:auto}
+  .modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px}
+  .modal-title{font-size:18px;font-weight:700;margin-bottom:20px}
+  .modal-actions{display:flex;gap:10px;margin-top:16px}
+  .modal-actions .btn{flex:1}
+
+  /* CHAT */
+  .chat-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+  .chat-channel{background:var(--bg3);border-radius:14px;padding:14px;cursor:pointer;display:flex;align-items:center;gap:12px}
+  .chat-channel:active{opacity:.7}
+  .chat-avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .chat-info{flex:1;min-width:0}
+  .chat-name{font-size:15px;font-weight:600}
+  .chat-preview{font-size:13px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* MESSAGES */
+  #msg-screen{display:none;position:fixed;inset:0;background:var(--bg);z-index:150;flex-direction:column}
+  #msg-screen.open{display:flex}
+  .msg-header{padding:calc(var(--safe-top) + 10px) 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.85);backdrop-filter:blur(20px)}
+  .msg-back{background:none;border:none;color:var(--accent);font-size:17px;cursor:pointer;display:flex;align-items:center;gap:4px}
+  .msg-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+  .msg-bubble{max-width:75%;padding:10px 14px;border-radius:16px;font-size:15px;line-height:1.4}
+  .msg-bubble.mine{background:var(--accent);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+  .msg-bubble.theirs{background:var(--bg3);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px}
+  .msg-sender{font-size:11px;color:var(--text3);margin-bottom:3px}
+  .msg-time{font-size:11px;opacity:.6;margin-top:3px}
+  .msg-input-bar{padding:10px 16px;padding-bottom:calc(10px + var(--safe-bot));border-top:1px solid var(--border);display:flex;gap:10px;align-items:flex-end;background:var(--bg2)}
+  .msg-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:10px 16px;color:var(--text);font-size:15px;outline:none;max-height:120px;resize:none}
+  .msg-send-btn{background:var(--accent);border:none;border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+
+  /* STORE CARDS */
+  .store-card{background:var(--bg3);border-radius:14px;padding:14px;margin-bottom:10px;cursor:pointer}
+  .store-stats{display:flex;gap:16px;margin-top:10px}
+  .store-stat{font-size:13px;color:var(--text3)}
+  .store-stat span{color:var(--text);font-weight:600}
+
+  /* PRODUCT */
+  .product-img{width:42px;height:42px;border-radius:10px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+
+  /* LOADING */
+  .loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text3);gap:10px}
+  .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* TOAST */
+  #toast{position:fixed;top:calc(var(--safe-top) + 70px);left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:12px 20px;font-size:14px;font-weight:500;z-index:999;display:none;white-space:nowrap;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+
+  /* PILLS */
+  .tab-pills{display:flex;background:var(--bg4);border-radius:10px;padding:3px;gap:2px;margin-bottom:14px}
+  .tab-pill{flex:1;text-align:center;padding:8px 4px;border-radius:8px;font-size:12px;font-weight:500;color:var(--text3);cursor:pointer}
+  .tab-pill.active{background:var(--bg3);color:var(--text)}
+
+  /* ALERTS */
+  .alert-banner{border-radius:12px;padding:12px 14px;margin-bottom:10px;font-size:13px;display:flex;align-items:flex-start;gap:8px}
+  .alert-info{background:rgba(10,132,255,.12);border:1px solid rgba(10,132,255,.25);color:var(--accent)}
+  .alert-warn{background:rgba(255,159,10,.15);border:1px solid rgba(255,159,10,.3);color:var(--orange)}
+
+  /* ===== PHOTO MODULE ===== */
+  .photo-capture-btn{display:flex;align-items:center;gap:8px;background:rgba(10,132,255,.15);border:2px dashed rgba(10,132,255,.4);border-radius:12px;padding:14px;width:100%;cursor:pointer;color:var(--accent);font-size:14px;font-weight:600;justify-content:center}
+  .photo-capture-btn:active{opacity:.7}
+  .photo-preview-box{position:relative;border-radius:12px;overflow:hidden;background:var(--bg4);margin-top:8px}
+  .photo-preview-box img{width:100%;max-height:200px;object-fit:cover;display:block;border-radius:12px}
+  .photo-preview-remove{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);border:none;border-radius:50%;width:28px;height:28px;color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .photo-thumb{width:44px;height:44px;border-radius:8px;object-fit:cover;cursor:pointer;flex-shrink:0;border:2px solid var(--border)}
+  .photo-thumb:active{opacity:.7}
+  .photo-placeholder{width:44px;height:44px;border-radius:8px;background:var(--bg4);border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;cursor:pointer}
+  .photo-required-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--orange);font-weight:600;margin-bottom:8px}
+  .photos-strip{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  /* Full photo viewer */
+  #photo-viewer{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center}
+  #photo-viewer.open{display:flex}
+  #photo-viewer img{max-width:100%;max-height:85vh;object-fit:contain;border-radius:8px}
+  #photo-viewer-close{position:absolute;top:calc(var(--safe-top) + 16px);right:20px;background:rgba(255,255,255,.15);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:20px;cursor:pointer}
+  /* Logística tab */
+  .logistica-action{background:var(--bg3);border-radius:14px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer}
+  .logistica-action:active{opacity:.7}
+  .logistica-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+  .logistica-title{font-size:16px;font-weight:700}
+  .logistica-sub{font-size:12px;color:var(--text3);margin-top:2px}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth-screen">
+  <div class="auth-logo">🏢</div>
+  <div style="text-align:center">
+    <div style="font-size:28px;font-weight:700">Corp Tech</div>
+    <div style="font-size:15px;color:var(--text3);margin-top:6px">Panel Administrador</div>
+  </div>
+  <div class="auth-card">
+    <div><div class="auth-label">Correo</div><input id="login-email" class="auth-input" type="email" placeholder="usuario@corptech.pe"></div>
+    <div><div class="auth-label">Contraseña</div><input id="login-pass" class="auth-input" type="password" placeholder="••••••••"></div>
+    <div id="login-err" class="auth-err">Acceso denegado. Solo usuarios de Corp Tech.</div>
+    <button class="btn-primary" onclick="doLogin()">Ingresar →</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">🏢 Corp Tech</div>
+      <div id="top-user" class="top-bar-user">—</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="top-bar-badge">CORP</span>
+      <button class="top-bar-logout" onclick="doLogout()">Salir</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div id="tab-dashboard" class="tab-content active">
+      <div id="rate-banner" class="rate-banner">
+        <div>
+          <div style="font-size:12px;color:var(--text3)">Tipo de Cambio USD → PEN</div>
+          <div id="rate-val" class="rate-val">—</div>
+          <div id="rate-date" style="font-size:12px;color:var(--text3)">—</div>
+        </div>
+        <button class="btn btn-sm btn-blue" onclick="openModal('modal-rate')">Actualizar</button>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card"><div id="stat-products" class="stat-val" style="color:var(--accent)">—</div><div class="stat-lbl">Productos activos</div></div>
+        <div class="stat-card"><div id="stat-stock" class="stat-val" style="color:var(--green)">—</div><div class="stat-lbl">Unidades stock</div></div>
+        <div class="stat-card"><div id="stat-debts" class="stat-val" style="color:var(--orange)">—</div><div class="stat-lbl">Deudas pendientes</div></div>
+        <div class="stat-card"><div id="stat-transfers" class="stat-val" style="color:var(--purple)">—</div><div class="stat-lbl">Transferencias hoy</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Tiendas hijas</div>
+        <div id="stores-list"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Transferencias recientes</div>
+        <div id="recent-transfers"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Deudas pendientes</div>
+        <div id="pending-debts"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <!-- INVENTARIO -->
+    <div id="tab-inventory" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">Inventario Global</div>
+        <span class="section-action" onclick="openModal('modal-product')">+ Agregar</span>
+      </div>
+      <div style="margin-bottom:12px">
+        <input id="product-search" class="form-input" placeholder="🔍 Buscar producto..." oninput="searchProducts(this.value)">
+      </div>
+      <div id="products-list"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+
+    <!-- LOGÍSTICA + FOTOS -->
+    <div id="tab-logistica" class="tab-content">
+      <div class="section-title" style="margin-bottom:14px">📸 Registro Logístico</div>
+      <div class="alert-info alert-banner">📷 Todas las operaciones requieren foto obligatoria para auditoría.</div>
+
+      <div class="logistica-action" onclick="openModal('modal-checkin')">
+        <div class="logistica-icon" style="background:rgba(48,209,88,.15)">📥</div>
+        <div>
+          <div class="logistica-title">Check-in de Productos</div>
+          <div class="logistica-sub">Llegada desde USA — foto de empaque y estado</div>
+        </div>
+        <div style="color:var(--text3)">›</div>
+      </div>
+
+      <div class="logistica-action" onclick="openModal('modal-checkout')">
+        <div class="logistica-icon" style="background:rgba(10,132,255,.15)">📤</div>
+        <div>
+          <div class="logistica-title">Check-out / Envío</div>
+          <div class="logistica-sub">Paquete sellado listo para despacho a tienda</div>
+        </div>
+        <div style="color:var(--text3)">›</div>
+      </div>
+
+      <div class="logistica-action" onclick="openModal('modal-delivery')">
+        <div class="logistica-icon" style="background:rgba(191,90,242,.15)">🚚</div>
+        <div>
+          <div class="logistica-title">Confirmar Entrega</div>
+          <div class="logistica-sub">Foto del receptor con el producto o cargo firmado</div>
+        </div>
+        <div style="color:var(--text3)">›</div>
+      </div>
+
+      <div class="card" style="margin-top:8px">
+        <div class="card-title">Historial de Registros Fotográficos</div>
+        <div id="media-history"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <!-- PRECIOS -->
+    <div id="tab-prices" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">Precios Corp → Tiendas</div>
+      </div>
+      <div class="alert-info alert-banner">💡 Define el precio que le cobras a cada tienda. Las tiendas fijan su precio al cliente.</div>
+      <div class="tab-pills">
+        <div class="tab-pill active" onclick="setPriceStore('all',this)">Todas</div>
+        <div class="tab-pill" onclick="setPriceStore('00000000-0000-0000-0000-000000000002',this)">Futurteck</div>
+        <div class="tab-pill" onclick="setPriceStore('00000000-0000-0000-0000-000000000003',this)">Innovatech</div>
+        <div class="tab-pill" onclick="setPriceStore('00000000-0000-0000-0000-000000000004',this)">WeTech</div>
+      </div>
+      <div id="prices-list"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+
+    <!-- FINANZAS -->
+    <div id="tab-finance" class="tab-content">
+      <div class="section-header"><div class="section-title">Finanzas Corp</div></div>
+      <div class="tab-pills">
+        <div class="tab-pill active" onclick="setFinanceTab('debts',this)">Deudas</div>
+        <div class="tab-pill" onclick="setFinanceTab('payments',this)">Pagos</div>
+        <div class="tab-pill" onclick="setFinanceTab('accounting',this)">Contabilidad</div>
+      </div>
+
+      <div id="finance-debts">
+        <div class="section-header" style="margin-bottom:8px">
+          <span style="font-size:14px;color:var(--text3)">Deudas por tienda</span>
+          <button class="btn btn-sm btn-outline" onclick="openModal('modal-debt')">+ Nueva</button>
+        </div>
+        <div id="debts-list"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+
+      <div id="finance-payments" style="display:none">
+        <div class="section-header" style="margin-bottom:8px">
+          <span style="font-size:14px;color:var(--text3)">Pagos recibidos</span>
+          <button class="btn btn-sm btn-outline" onclick="openModal('modal-payment')">+ Registrar</button>
+        </div>
+        <div id="payments-list"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+
+      <div id="finance-accounting" style="display:none">
+        <div class="section-header" style="margin-bottom:8px">
+          <span style="font-size:14px;color:var(--text3)">Transacciones contables</span>
+          <button class="btn btn-sm btn-outline" onclick="openModal('modal-accounting')">+ Agregar</button>
+        </div>
+        <div id="accounting-list"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div id="tab-chat" class="tab-content">
+      <div class="section-header">
+        <div class="section-title">Chat Interno</div>
+        <span class="section-action" onclick="openModal('modal-channel')">+ Canal</span>
+      </div>
+      <div id="channels-list"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+
+    <!-- CONFIG -->
+    <div id="tab-config" class="tab-content">
+      <div class="section-title" style="margin-bottom:14px">Configuración</div>
+      <div class="card">
+        <div class="card-title">Visibilidad de Catálogo</div>
+        <div class="form-group">
+          <label class="form-label">Tienda</label>
+          <select id="visibility-store" class="form-select" onchange="loadVisibility()">
+            <option value="00000000-0000-0000-0000-000000000002">Futurteck</option>
+            <option value="00000000-0000-0000-0000-000000000003">Innovatech Store</option>
+            <option value="00000000-0000-0000-0000-000000000004">WeTech Peru</option>
+          </select>
+        </div>
+        <div id="visibility-list"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Almacenes</div>
+        <div id="warehouses-list"><div class="loading"><div class="spinner"></div></div></div>
+        <button class="btn btn-outline" style="margin-top:12px" onclick="openModal('modal-warehouse')">+ Agregar almacén</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Cuenta</div>
+        <div class="list-item">
+          <div class="list-left">
+            <div class="list-title" id="config-email">—</div>
+            <div class="list-sub">Administrador Corp Tech</div>
+          </div>
+          <span class="badge badge-blue">CORP ADMIN</span>
+        </div>
+        <button class="btn btn-red" style="margin-top:12px" onclick="doLogout()">Cerrar sesión</button>
+      </div>
+    </div>
+  </div><!-- /content -->
+
+  <!-- BOTTOM NAV — 6 pestañas -->
+  <nav class="bottom-nav">
+    <div class="nav-item active" id="nav-dashboard" onclick="showTab('dashboard')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+      <span class="nav-label">Dashboard</span>
+    </div>
+    <div class="nav-item" id="nav-inventory" onclick="showTab('inventory')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 7H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zM4 7l1.5-4.5h13L20 7H4z"/></svg>
+      <span class="nav-label">Inventario</span>
+    </div>
+    <div class="nav-item" id="nav-logistica" onclick="showTab('logistica')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+      <span class="nav-label">Fotos</span>
+    </div>
+    <div class="nav-item" id="nav-finance" onclick="showTab('finance')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+      <span class="nav-label">Finanzas</span>
+    </div>
+    <div class="nav-item" id="nav-chat" onclick="showTab('chat')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+      <span class="nav-label">Chat</span>
+    </div>
+    <div class="nav-item" id="nav-config" onclick="showTab('config')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+      <span class="nav-label">Config</span>
+    </div>
+  </nav>
+</div><!-- /app -->
+
+<!-- CHAT MESSAGES -->
+<div id="msg-screen">
+  <div class="msg-header">
+    <button class="msg-back" onclick="closeChat()">‹ Volver</button>
+    <div style="flex:1">
+      <div id="msg-title" style="font-size:16px;font-weight:700">Canal</div>
+    </div>
+  </div>
+  <div id="msg-body" class="msg-body"></div>
+  <div class="msg-input-bar">
+    <textarea id="msg-input" class="msg-input" rows="1" placeholder="Mensaje..." oninput="autoResize(this)" onkeydown="msgEnter(event)"></textarea>
+    <button class="msg-send-btn" onclick="sendMessage()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- PHOTO VIEWER -->
+<div id="photo-viewer">
+  <button id="photo-viewer-close" onclick="document.getElementById('photo-viewer').classList.remove('open')">✕</button>
+  <img id="photo-viewer-img" src="" alt="Foto">
+</div>
+
+<!-- ===== MODALS ===== -->
+
+<!-- PRODUCT -->
+<div id="modal-product" class="modal-overlay" onclick="closeModal('modal-product')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">➕ Agregar Producto</div>
+    <div class="form-group"><label class="form-label">Nombre *</label><input id="p-name" class="form-input" placeholder="ej. iPhone 15 Pro 256GB"></div>
+    <div class="form-group"><label class="form-label">SKU</label><input id="p-sku" class="form-input" placeholder="ej. IPH15P-256"></div>
+    <div class="form-group"><label class="form-label">Categoría</label><input id="p-category" class="form-input" placeholder="ej. Smartphones"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Costo USD</label><input id="p-cost-usd" class="form-input" type="number" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="form-group"><label class="form-label">Flete USD</label><input id="p-freight" class="form-input" type="number" min="0" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Margen Corp (%)</label><input id="p-margin" class="form-input" type="number" min="0" max="100" step="0.5" value="15"></div>
+      <div class="form-group"><label class="form-label">Requiere IMEI</label>
+        <select id="p-imei" class="form-select"><option value="false">No</option><option value="true">Sí</option></select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Emoji</label><input id="p-emoji" class="form-input" placeholder="📱" maxlength="2" value="📦"></div>
+    <div class="form-group">
+      <label class="form-label">📸 Foto del producto</label>
+      <button type="button" class="photo-capture-btn" onclick="triggerPhotoCapture('photo-product-input','photo-product-preview')">
+        📷 Tomar foto / Elegir de galería
+      </button>
+      <input id="photo-product-input" type="file" accept="image/*" style="display:none" onchange="previewPhoto(this,'photo-product-preview')">
+      <div id="photo-product-preview" class="photo-preview-box" style="display:none">
+        <img id="photo-product-preview-img" src="" alt="">
+        <button class="photo-preview-remove" onclick="clearPhoto('photo-product-input','photo-product-preview')">✕</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-product')">Cancelar</button>
+      <button class="btn btn-green" onclick="saveProduct()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHECK-IN (llegada USA) -->
+<div id="modal-checkin" class="modal-overlay" onclick="closeModal('modal-checkin')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📥 Check-in — Llegada de Productos USA</div>
+    <div class="form-group">
+      <label class="form-label">Producto</label>
+      <select id="ci-product" class="form-select"><option value="">Cargando...</option></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Cantidad</label><input id="ci-qty" class="form-input" type="number" min="1" value="1"></div>
+      <div class="form-group"><label class="form-label">Almacén</label><select id="ci-warehouse" class="form-select"><option value="">—</option></select></div>
+    </div>
+    <div class="form-group"><label class="form-label">IMEI / Serial (uno por línea)</label><textarea id="ci-serials" class="form-textarea" placeholder="Pega aquí los IMEI o seriales..."></textarea></div>
+    <div class="form-group">
+      <div class="photo-required-badge">📷 FOTO OBLIGATORIA</div>
+      <label class="form-label">Foto del empaque al llegar</label>
+      <button type="button" class="photo-capture-btn" onclick="triggerPhotoCapture('photo-ci-input','photo-ci-preview')">
+        📷 Capturar estado del empaque
+      </button>
+      <input id="photo-ci-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this,'photo-ci-preview')">
+      <div id="photo-ci-preview" class="photo-preview-box" style="display:none">
+        <img id="photo-ci-preview-img" src="" alt="">
+        <button class="photo-preview-remove" onclick="clearPhoto('photo-ci-input','photo-ci-preview')">✕</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Foto del producto (interior)</label>
+      <button type="button" class="photo-capture-btn" onclick="triggerPhotoCapture('photo-ci2-input','photo-ci2-preview')">
+        📷 Capturar producto
+      </button>
+      <input id="photo-ci2-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this,'photo-ci2-preview')">
+      <div id="photo-ci2-preview" class="photo-preview-box" style="display:none">
+        <img id="photo-ci2-preview-img" src="" alt="">
+        <button class="photo-preview-remove" onclick="clearPhoto('photo-ci2-input','photo-ci2-preview')">✕</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Notas</label><input id="ci-notes" class="form-input" placeholder="Observaciones del estado..."></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-checkin')">Cancelar</button>
+      <button class="btn btn-green" onclick="saveCheckin()">✅ Registrar Check-in</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHECK-OUT (envío a tienda) -->
+<div id="modal-checkout" class="modal-overlay" onclick="closeModal('modal-checkout')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📤 Check-out — Envío a Tienda</div>
+    <div class="form-group">
+      <label class="form-label">Tienda destino</label>
+      <select id="co-store" class="form-select">
+        <option value="00000000-0000-0000-0000-000000000002">Futurteck</option>
+        <option value="00000000-0000-0000-0000-000000000003">Innovatech Store</option>
+        <option value="00000000-0000-0000-0000-000000000004">WeTech Peru</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Producto</label>
+      <select id="co-product" class="form-select"><option value="">Cargando...</option></select>
+    </div>
+    <div class="form-group"><label class="form-label">Cantidad</label><input id="co-qty" class="form-input" type="number" min="1" value="1"></div>
+    <div class="form-group">
+      <div class="photo-required-badge">📷 FOTO OBLIGATORIA</div>
+      <label class="form-label">Foto del paquete sellado listo para envío</label>
+      <button type="button" class="photo-capture-btn" onclick="triggerPhotoCapture('photo-co-input','photo-co-preview')">
+        📷 Capturar paquete sellado
+      </button>
+      <input id="photo-co-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this,'photo-co-preview')">
+      <div id="photo-co-preview" class="photo-preview-box" style="display:none">
+        <img id="photo-co-preview-img" src="" alt="">
+        <button class="photo-preview-remove" onclick="clearPhoto('photo-co-input','photo-co-preview')">✕</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Notas de envío</label><input id="co-notes" class="form-input" placeholder="ej. Courier, guía de envío..."></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-checkout')">Cancelar</button>
+      <button class="btn btn-blue" onclick="saveCheckout()">📤 Registrar Envío</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELIVERY -->
+<div id="modal-delivery" class="modal-overlay" onclick="closeModal('modal-delivery')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🚚 Confirmar Entrega</div>
+    <div class="form-group"><label class="form-label">Nombre del receptor</label><input id="del-receptor" class="form-input" placeholder="Nombre completo"></div>
+    <div class="form-group"><label class="form-label">Referencia (venta / orden)</label><input id="del-ref" class="form-input" placeholder="ej. ORD-001"></div>
+    <div class="form-group">
+      <div class="photo-required-badge">📷 FOTO OBLIGATORIA</div>
+      <label class="form-label">Foto del receptor con el producto o cargo firmado</label>
+      <button type="button" class="photo-capture-btn" onclick="triggerPhotoCapture('photo-del-input','photo-del-preview')">
+        📷 Foto de la entrega
+      </button>
+      <input id="photo-del-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this,'photo-del-preview')">
+      <div id="photo-del-preview" class="photo-preview-box" style="display:none">
+        <img id="photo-del-preview-img" src="" alt="">
+        <button class="photo-preview-remove" onclick="clearPhoto('photo-del-input','photo-del-preview')">✕</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Notas</label><input id="del-notes" class="form-input" placeholder="Observaciones de la entrega..."></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-delivery')">Cancelar</button>
+      <button class="btn btn-green" onclick="saveDelivery()">✅ Confirmar Entrega</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAYMENT (con voucher) -->
+<div id="modal-payment" class="modal-overlay" onclick="closeModal('modal-payment')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💳 Registrar Pago de Tienda</div>
+    <div class="form-group">
+      <label class="form-label">Tienda que paga</label>
+      <select id="pay-store" class="form-select">
+        <option value="00000000-0000-0000-0000-000000000002">Futurteck</option>
+        <option value="00000000-0000-0000-0000-000000000003">Innovatech Store</option>
+        <option value="00000000-0000-0000-0000-000000000004">WeTech Peru</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Monto (S/)</label><input id="pay-amount" class="form-input" type="number" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="form-group"><label class="form-label">Método</label>
+        <select id="pay-method" class="form-select">
+          <option value="transfer">Transferencia</option>
+          <option value="yape">Yape/Plin</option>
+          <option value="cash">Efectivo</option>
+          <option value="check">Cheque</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <div class="photo-required-badge">📷 FOTO OBLIGATORIA</div>
+      <label class="form-label">Voucher / Comprobante del depósito</label>
+      <button type="button" class="photo-capture-btn" onclick="triggerPhotoCapture('photo-pay-input','photo-pay-preview')">
+        📷 Fotografiar voucher
+      </button>
+      <input id="photo-pay-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this,'photo-pay-preview')">
+      <div id="photo-pay-preview" class="photo-preview-box" style="display:none">
+        <img id="photo-pay-preview-img" src="" alt="">
+        <button class="photo-preview-remove" onclick="clearPhoto('photo-pay-input','photo-pay-preview')">✕</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Notas</label><textarea id="pay-notes" class="form-textarea" placeholder="Referencia del pago..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-payment')">Cancelar</button>
+      <button class="btn btn-green" onclick="savePayment()">Registrar pago</button>
+    </div>
+  </div>
+</div>
+
+<!-- ACCOUNTING (con comprobante) -->
+<div id="modal-accounting" class="modal-overlay" onclick="closeModal('modal-accounting')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📊 Transacción Contable</div>
+    <div class="form-group">
+      <label class="form-label">Tipo</label>
+      <select id="acc-type" class="form-select">
+        <option value="income">Ingreso</option>
+        <option value="expense">Egreso</option>
+        <option value="transfer">Transferencia</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Monto (S/)</label><input id="acc-amount" class="form-input" type="number" min="0" step="0.01" placeholder="0.00"></div>
+    <div class="form-group"><label class="form-label">Categoría</label><input id="acc-category" class="form-input" placeholder="ej. Importación USA, Flete..."></div>
+    <div class="form-group"><label class="form-label">Descripción</label><textarea id="acc-desc" class="form-textarea" placeholder="Detalle..."></textarea></div>
+    <div class="form-group">
+      <label class="form-label">📸 Comprobante (boleta, factura, recibo)</label>
+      <button type="button" class="photo-capture-btn" onclick="triggerPhotoCapture('photo-acc-input','photo-acc-preview')">
+        📷 Fotografiar comprobante
+      </button>
+      <input id="photo-acc-input" type="file" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this,'photo-acc-preview')">
+      <div id="photo-acc-preview" class="photo-preview-box" style="display:none">
+        <img id="photo-acc-preview-img" src="" alt="">
+        <button class="photo-preview-remove" onclick="clearPhoto('photo-acc-input','photo-acc-preview')">✕</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-accounting')">Cancelar</button>
+      <button class="btn btn-green" onclick="saveAccounting()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- DEBT -->
+<div id="modal-debt" class="modal-overlay" onclick="closeModal('modal-debt')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📋 Nueva Deuda / Liquidación</div>
+    <div class="form-group"><label class="form-label">Tienda</label>
+      <select id="debt-store" class="form-select">
+        <option value="00000000-0000-0000-0000-000000000002">Futurteck</option>
+        <option value="00000000-0000-0000-0000-000000000003">Innovatech Store</option>
+        <option value="00000000-0000-0000-0000-000000000004">WeTech Peru</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Monto (S/)</label><input id="debt-amount" class="form-input" type="number" min="0" step="0.01" placeholder="0.00"></div>
+    <div class="form-group"><label class="form-label">Periodo</label>
+      <select id="debt-period" class="form-select"><option value="biweekly">Quincenal</option><option value="monthly">Mensual</option></select>
+    </div>
+    <div class="form-group"><label class="form-label">Notas</label><textarea id="debt-notes" class="form-textarea" placeholder="Descripción..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-debt')">Cancelar</button>
+      <button class="btn" style="background:var(--orange);color:#000" onclick="saveDebt()">Registrar deuda</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRICE EDIT -->
+<div id="modal-price" class="modal-overlay" onclick="closeModal('modal-price')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💰 Editar Precio</div>
+    <input type="hidden" id="price-product-id">
+    <input type="hidden" id="price-store-id">
+    <div id="price-product-name" style="font-size:14px;color:var(--text3);margin-bottom:16px"></div>
+    <div class="form-group"><label class="form-label">Precio Corp → Tienda (S/)</label><input id="price-corp-val" class="form-input" type="number" min="0" step="0.01"></div>
+    <div class="form-group"><label class="form-label">Precio sugerido al cliente (S/)</label><input id="price-retail-val" class="form-input" type="number" min="0" step="0.01"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-price')">Cancelar</button>
+      <button class="btn btn-blue" onclick="savePrice()">Guardar precio</button>
+    </div>
+  </div>
+</div>
+
+<!-- RATE -->
+<div id="modal-rate" class="modal-overlay" onclick="closeModal('modal-rate')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💱 Tipo de Cambio</div>
+    <div class="form-group"><label class="form-label">USD → PEN (Soles)</label><input id="rate-input" class="form-input" type="number" min="1" step="0.001" placeholder="ej. 3.750"></div>
+    <div class="form-group"><label class="form-label">Fuente</label><input id="rate-source" class="form-input" placeholder="SBS, BCRP, Manual" value="Manual"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-rate')">Cancelar</button>
+      <button class="btn btn-blue" onclick="saveRate()">Actualizar</button>
+    </div>
+  </div>
+</div>
+
+<!-- WAREHOUSE -->
+<div id="modal-warehouse" class="modal-overlay" onclick="closeModal('modal-warehouse')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏭 Agregar Almacén</div>
+    <div class="form-group"><label class="form-label">Nombre</label><input id="wh-name" class="form-input" placeholder="ej. Almacén Central Lima"></div>
+    <div class="form-group"><label class="form-label">Ubicación</label><input id="wh-location" class="form-input" placeholder="ej. San Isidro, Lima"></div>
+    <div class="form-group"><label class="form-label">Pasillo / Sección</label><input id="wh-aisle" class="form-input" placeholder="ej. A-1"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-warehouse')">Cancelar</button>
+      <button class="btn btn-blue" onclick="saveWarehouse()">Crear</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHANNEL -->
+<div id="modal-channel" class="modal-overlay" onclick="closeModal('modal-channel')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💬 Nuevo Canal</div>
+    <div class="form-group"><label class="form-label">Nombre</label><input id="ch-name" class="form-input" placeholder="ej. general, logistica"></div>
+    <div class="form-group"><label class="form-label">Tipo</label>
+      <select id="ch-type" class="form-select" onchange="document.getElementById('ch-store-group').style.display=this.value==='corp_store'?'block':'none'">
+        <option value="corp_internal">Corp interno</option>
+        <option value="corp_store">Corp ↔ Tienda</option>
+      </select>
+    </div>
+    <div id="ch-store-group" class="form-group" style="display:none">
+      <label class="form-label">Tienda</label>
+      <select id="ch-store" class="form-select">
+        <option value="00000000-0000-0000-0000-000000000002">Futurteck</option>
+        <option value="00000000-0000-0000-0000-000000000003">Innovatech Store</option>
+        <option value="00000000-0000-0000-0000-000000000004">WeTech Peru</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-channel')">Cancelar</button>
+      <button class="btn btn-blue" onclick="saveChannel()">Crear canal</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SUPA_URL = 'https://jgreajitfugnqruvbavn.supabase.co';
+const SUPA_KEY = 'sb_publishable_YQe_65xuX2olBQDDdRm16g_rnskVFuD';
+const CORP_ORG_ID = '00000000-0000-0000-0000-000000000001';
+const STORAGE_BUCKET = 'corp-media';
+
+const { createClient } = supabase;
+const db = createClient(SUPA_URL, SUPA_KEY);
+
+let currentUser = null;
+let currentTab = 'dashboard';
+let currentChannel = null;
+let msgSubscription = null;
+let allProducts = [];
+let currentPriceStoreFilter = 'all';
+
+// ===== AUTH =====
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const err   = document.getElementById('login-err');
+  err.style.display = 'none';
+  if (!email || !pass) { err.textContent = 'Completa todos los campos.'; err.style.display = 'block'; return; }
+  const { data, error } = await db.auth.signInWithPassword({ email, password: pass });
+  if (error || !data.user) { err.textContent = 'Credenciales incorrectas.'; err.style.display = 'block'; return; }
+  const { data: userRow } = await db.from('users').select('*, organizations(type,name)').eq('id', data.user.id).single();
+  if (!userRow || userRow.organizations?.type !== 'corp') {
+    err.textContent = 'Acceso denegado. Solo usuarios de Corp Tech.'; err.style.display = 'block';
+    await db.auth.signOut(); return;
+  }
+  currentUser = { ...data.user, ...userRow };
+  initApp(data.user.email, userRow.full_name);
+}
+async function doLogout() {
+  await db.auth.signOut(); currentUser = null;
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-pass').value = '';
+}
+function initApp(email, name) {
+  document.getElementById('top-user').textContent = name || email;
+  document.getElementById('config-email').textContent = email;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  loadDashboard();
+}
+window.addEventListener('load', async () => {
+  const { data } = await db.auth.getSession();
+  if (data?.session) {
+    const { data: userRow } = await db.from('users').select('*, organizations(type,name)').eq('id', data.session.user.id).single();
+    if (userRow?.organizations?.type === 'corp') { currentUser = { ...data.session.user, ...userRow }; initApp(data.session.user.email, userRow.full_name); }
+  }
+});
+
+// ===== NAVIGATION =====
+function showTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('nav-' + tab).classList.add('active');
+  currentTab = tab;
+  if (tab === 'dashboard')  loadDashboard();
+  if (tab === 'inventory')  loadInventory();
+  if (tab === 'logistica')  { loadMediaHistory(); populateProductSelects(); }
+  if (tab === 'prices')     loadPrices();
+  if (tab === 'finance')    loadDebts();
+  if (tab === 'chat')       loadChannels();
+  if (tab === 'config')     { loadVisibility(); loadWarehouses(); }
+}
+
+// ===== DASHBOARD =====
+async function loadDashboard() {
+  loadExchangeRate();
+  const today = new Date().toISOString().split('T')[0];
+  const [{ count: prodCount }, { data: stockData }, { data: debtData }, { data: transferData }, { data: orgs }] = await Promise.all([
+    db.from('products').select('id',{count:'exact',head:true}).eq('is_active',true),
+    db.from('stock_items').select('quantity').eq('owner_org_id',CORP_ORG_ID),
+    db.from('store_debts').select('id').eq('status','pending'),
+    db.from('stock_transfers').select('id').gte('created_at',today+'T00:00:00'),
+    db.from('organizations').select('id,name,domain').neq('type','corp')
+  ]);
+  document.getElementById('stat-products').textContent  = prodCount ?? 0;
+  document.getElementById('stat-stock').textContent     = stockData?.reduce((s,r)=>s+(r.quantity||0),0) ?? 0;
+  document.getElementById('stat-debts').textContent     = debtData?.length ?? 0;
+  document.getElementById('stat-transfers').textContent = transferData?.length ?? 0;
+
+  document.getElementById('stores-list').innerHTML = (orgs||[]).map(o=>`
+    <div class="store-card"><div style="font-size:16px;font-weight:700">🏪 ${o.name}</div><div style="font-size:12px;color:var(--accent)">${o.domain}</div></div>
+  `).join('') || '<div style="padding:16px;color:var(--text3);text-align:center">Sin tiendas</div>';
+
+  const { data: transfers } = await db.from('stock_transfers').select('id,transfer_type,status,created_at,checkin_photo_url,checkout_photo_url,from_org:organizations!from_org_id(name),to_org:organizations!to_org_id(name)').order('created_at',{ascending:false}).limit(8);
+  document.getElementById('recent-transfers').innerHTML = (transfers||[]).length === 0
+    ? '<div style="padding:20px;text-align:center;color:var(--text3)">Sin transferencias recientes</div>'
+    : (transfers||[]).map(t => `
+      <div class="list-item">
+        ${photoThumb(t.checkin_photo_url || t.checkout_photo_url)}
+        <div class="list-left">
+          <div class="list-title">${t.from_org?.name||'—'} → ${t.to_org?.name||'—'}</div>
+          <div class="list-sub">${fmtDate(t.created_at)}</div>
+        </div>
+        <span class="badge ${t.status==='completed'?'badge-green':t.status==='pending'?'badge-orange':'badge-gray'}">${t.status}</span>
+      </div>`).join('');
+
+  const { data: debts } = await db.from('store_debts').select('id,amount,period,store:organizations!store_org_id(name)').eq('status','pending').order('created_at',{ascending:false}).limit(5);
+  document.getElementById('pending-debts').innerHTML = (debts||[]).length === 0
+    ? '<div style="padding:20px;text-align:center;color:var(--text3)">Sin deudas pendientes</div>'
+    : (debts||[]).map(d=>`
+      <div class="list-item">
+        <div class="list-left"><div class="list-title">${d.store?.name||'—'}</div><div class="list-sub">${d.period==='biweekly'?'Quincenal':'Mensual'}</div></div>
+        <div class="list-right"><div class="list-val" style="color:var(--orange)">S/ ${Number(d.amount).toFixed(2)}</div></div>
+      </div>`).join('');
+}
+async function loadExchangeRate() {
+  const { data } = await db.from('exchange_rates').select('*').eq('currency_from','USD').eq('currency_to','PEN').order('date',{ascending:false}).limit(1);
+  if (data?.[0]) { document.getElementById('rate-val').textContent = 'S/ '+Number(data[0].rate).toFixed(3); document.getElementById('rate-date').textContent = 'Actualizado: '+fmtDate(data[0].date); }
+  else { document.getElementById('rate-val').textContent = 'Sin datos'; document.getElementById('rate-date').textContent = 'Registra el tipo de cambio →'; }
+}
+
+// ===== INVENTORY =====
+async function loadInventory() {
+  const el = document.getElementById('products-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const { data } = await db.from('products').select('id,name,sku,category,cost_usd,freight_cost,corp_margin_pct,requires_serial,is_active,emoji').order('name');
+  allProducts = data || [];
+  renderProducts(allProducts);
+}
+function renderProducts(products) {
+  const el = document.getElementById('products-list');
+  if (!products.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">No hay productos. Agrega el primero ↑</div>'; return; }
+  el.innerHTML = products.map(p=>`
+    <div class="card" style="padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+      <div class="product-img">${p.emoji||'📦'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="font-size:12px;color:var(--text3)">${p.sku||'Sin SKU'} · ${p.category||'Sin categoría'}</div>
+        <div style="font-size:12px;color:var(--accent);margin-top:2px">USD $${Number(p.cost_usd||0).toFixed(2)} + flete $${Number(p.freight_cost||0).toFixed(2)} · ${p.corp_margin_pct||0}%</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        ${p.requires_serial?'<span class="badge badge-purple" style="font-size:10px">IMEI</span>':''}
+        <span class="badge ${p.is_active?'badge-green':'badge-gray'}" style="font-size:10px">${p.is_active?'Activo':'Inact.'}</span>
+      </div>
+    </div>`).join('');
+}
+function searchProducts(q) { renderProducts(allProducts.filter(p=>p.name.toLowerCase().includes(q.toLowerCase())||(p.sku||'').toLowerCase().includes(q.toLowerCase()))); }
+
+// ===== LOGÍSTICA + FOTOS =====
+async function loadMediaHistory() {
+  const el = document.getElementById('media-history');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const { data } = await db.from('media_attachments').select('*,uploader:users!uploaded_by(full_name)').order('created_at',{ascending:false}).limit(30);
+  if (!data || data.length === 0) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Sin registros fotográficos aún</div>'; return; }
+  const typeLabels = { checkin:'📥 Check-in', checkout:'📤 Check-out', delivery:'🚚 Entrega', receipt:'💳 Voucher', voucher:'📄 Comprobante', product:'📦 Producto' };
+  el.innerHTML = data.map(m=>`
+    <div class="list-item">
+      <img class="photo-thumb" src="${m.photo_url}" alt="foto" onclick="showPhoto('${m.photo_url}')">
+      <div class="list-left">
+        <div class="list-title">${typeLabels[m.photo_type]||m.photo_type}</div>
+        <div class="list-sub">${m.uploader?.full_name||'—'} · ${fmtDate(m.created_at)}</div>
+        ${m.caption?`<div class="list-sub">${m.caption}</div>`:''}
+      </div>
+      <div class="list-right">
+        <button class="btn btn-sm btn-outline" onclick="showPhoto('${m.photo_url}')">Ver</button>
+      </div>
+    </div>`).join('');
+}
+
+async function populateProductSelects() {
+  if (allProducts.length === 0) { const { data } = await db.from('products').select('id,name').eq('is_active',true).order('name'); allProducts = data||[]; }
+  const opts = allProducts.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  ['ci-product','co-product'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = '<option value="">Seleccionar...</option>'+opts; });
+  const { data: whs } = await db.from('warehouses').select('id,name').eq('org_id',CORP_ORG_ID).eq('is_active',true);
+  const whOpts = (whs||[]).map(w=>`<option value="${w.id}">${w.name}</option>`).join('');
+  const ciWh = document.getElementById('ci-warehouse');
+  if (ciWh) ciWh.innerHTML = '<option value="">Sin almacén</option>'+whOpts;
+}
+
+async function saveCheckin() {
+  const productId = document.getElementById('ci-product').value;
+  if (!productId) { showToast('⚠️ Selecciona un producto'); return; }
+  const file1 = document.getElementById('photo-ci-input').files[0];
+  if (!file1) { showToast('📷 La foto del empaque es obligatoria'); return; }
+
+  showToast('⏳ Subiendo fotos...', 8000);
+
+  // Upload fotos
+  const url1 = await uploadPhoto(file1, 'checkin');
+  const file2 = document.getElementById('photo-ci2-input').files[0];
+  const url2  = file2 ? await uploadPhoto(file2, 'checkin') : null;
+
+  if (!url1) { showToast('❌ Error al subir foto'); return; }
+
+  // Crear transferencia de entrada
+  const { data: transfer, error } = await db.from('stock_transfers').insert({
+    from_org_id: CORP_ORG_ID, to_org_id: CORP_ORG_ID,
+    transfer_type: 'checkin', status: 'completed',
+    checkin_photo_url: url1, checkout_photo_url: url2,
+    notes: document.getElementById('ci-notes').value || null,
+    created_by: currentUser?.id
+  }).select().single();
+
+  if (error) { showToast('❌ Error: '+error.message); return; }
+
+  // Guardar en media_attachments
+  await saveMediaAttachment('transfer', transfer.id, url1, 'checkin', 'Empaque al llegar de USA');
+  if (url2) await saveMediaAttachment('transfer', transfer.id, url2, 'checkin', 'Producto interior');
+
+  // Agregar al stock
+  const qty = parseInt(document.getElementById('ci-qty').value) || 1;
+  const warehouseId = document.getElementById('ci-warehouse').value || null;
+  await db.from('stock_items').insert({ product_id: productId, org_id: CORP_ORG_ID, owner_type: 'corp', owner_org_id: CORP_ORG_ID, quantity: qty, warehouse_id: warehouseId });
+
+  // Seriales
+  const serialsRaw = document.getElementById('ci-serials').value.trim();
+  if (serialsRaw) {
+    const serials = serialsRaw.split('\n').map(s=>s.trim()).filter(s=>s);
+    for (const serial of serials) {
+      await db.from('imei_registry').insert({ imei_or_serial: serial, product_id: productId, org_id: CORP_ORG_ID, status: 'in_stock', registered_by: currentUser?.id });
+    }
+  }
+
+  closeModal('modal-checkin');
+  clearFormFields(['ci-serials','ci-notes']);
+  clearPhoto('photo-ci-input','photo-ci-preview');
+  clearPhoto('photo-ci2-input','photo-ci2-preview');
+  showToast('✅ Check-in registrado con fotos');
+  loadMediaHistory();
+}
+
+async function saveCheckout() {
+  const productId = document.getElementById('co-product').value;
+  if (!productId) { showToast('⚠️ Selecciona un producto'); return; }
+  const file = document.getElementById('photo-co-input').files[0];
+  if (!file) { showToast('📷 La foto del paquete sellado es obligatoria'); return; }
+
+  showToast('⏳ Subiendo foto...', 8000);
+  const url = await uploadPhoto(file, 'checkout');
+  if (!url) { showToast('❌ Error al subir foto'); return; }
+
+  const storeId = document.getElementById('co-store').value;
+  const { data: transfer, error } = await db.from('stock_transfers').insert({
+    from_org_id: CORP_ORG_ID, to_org_id: storeId,
+    transfer_type: 'sale', status: 'pending',
+    checkout_photo_url: url,
+    notes: document.getElementById('co-notes').value || null,
+    created_by: currentUser?.id
+  }).select().single();
+
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  await saveMediaAttachment('transfer', transfer.id, url, 'checkout', 'Paquete sellado para envío');
+
+  closeModal('modal-checkout');
+  clearPhoto('photo-co-input','photo-co-preview');
+  document.getElementById('co-notes').value = '';
+  showToast('✅ Check-out registrado con foto');
+  loadMediaHistory();
+}
+
+async function saveDelivery() {
+  const receptor = document.getElementById('del-receptor').value.trim();
+  if (!receptor) { showToast('⚠️ Ingresa el nombre del receptor'); return; }
+  const file = document.getElementById('photo-del-input').files[0];
+  if (!file) { showToast('📷 La foto de la entrega es obligatoria'); return; }
+
+  showToast('⏳ Subiendo foto...', 8000);
+  const url = await uploadPhoto(file, 'delivery');
+  if (!url) { showToast('❌ Error al subir foto'); return; }
+
+  const { data: delivery, error } = await db.from('deliveries').insert({
+    org_id: CORP_ORG_ID,
+    recipient_name: receptor,
+    reference: document.getElementById('del-ref').value.trim() || null,
+    delivery_photo_url: url,
+    notes: document.getElementById('del-notes').value.trim() || null,
+    status: 'delivered',
+    delivered_at: new Date().toISOString(),
+    delivered_by: currentUser?.id
+  }).select().single();
+
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  await saveMediaAttachment('delivery', delivery.id, url, 'delivery', 'Foto de la entrega a '+receptor);
+
+  closeModal('modal-delivery');
+  clearPhoto('photo-del-input','photo-del-preview');
+  clearFormFields(['del-receptor','del-ref','del-notes']);
+  showToast('✅ Entrega confirmada con foto');
+  loadMediaHistory();
+}
+
+// ===== PRICES =====
+async function loadPrices() {
+  const el = document.getElementById('prices-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const { data: products } = await db.from('products').select('id,name,emoji,sku').eq('is_active',true).order('name');
+  if (!products?.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">No hay productos activos</div>'; return; }
+  const stores = ['00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000004'];
+  const storeNames = {'00000000-0000-0000-0000-000000000002':'Futurteck','00000000-0000-0000-0000-000000000003':'Innovatech','00000000-0000-0000-0000-000000000004':'WeTech'};
+  const { data: prices } = await db.from('prices').select('*');
+  const priceMap = {}; (prices||[]).forEach(p=>{ priceMap[p.product_id+'_'+p.org_id]=p; });
+  const showStores = currentPriceStoreFilter === 'all' ? stores : [currentPriceStoreFilter];
+  el.innerHTML = products.map(p=>`
+    <div class="card" style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:20px">${p.emoji||'📦'}</span>
+        <div><div style="font-size:15px;font-weight:600">${p.name}</div><div style="font-size:12px;color:var(--text3)">${p.sku||'—'}</div></div>
+      </div>
+      ${showStores.map(sid=>{ const pr=priceMap[p.id+'_'+sid]; return `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border)">
+          <div><div style="font-size:13px;font-weight:500">${storeNames[sid]}</div><div style="font-size:12px;color:var(--text3)">Corp: ${pr?'S/ '+Number(pr.corp_price||0).toFixed(2):'Sin precio'}</div></div>
+          <button class="btn btn-sm btn-blue" onclick="openEditPrice('${p.id}','${sid}','${p.name.replace(/'/g,"\\'")}','${pr?.corp_price||''}','${pr?.retail_price||''}')">Editar</button>
+        </div>`; }).join('')}
+    </div>`).join('');
+}
+function setPriceStore(s,el) { document.querySelectorAll('#tab-prices .tab-pill').forEach(p=>p.classList.remove('active')); el.classList.add('active'); currentPriceStoreFilter=s; loadPrices(); }
+function openEditPrice(pid,sid,name,corp,retail) {
+  document.getElementById('price-product-id').value=pid; document.getElementById('price-store-id').value=sid;
+  document.getElementById('price-product-name').textContent='📦 '+name;
+  document.getElementById('price-corp-val').value=corp||''; document.getElementById('price-retail-val').value=retail||'';
+  openModal('modal-price');
+}
+async function savePrice() {
+  const pid=document.getElementById('price-product-id').value; const sid=document.getElementById('price-store-id').value;
+  const cp=parseFloat(document.getElementById('price-corp-val').value)||0; const rp=parseFloat(document.getElementById('price-retail-val').value)||0;
+  const { error } = await db.from('prices').upsert({ product_id:pid, org_id:sid, corp_price:cp, retail_price:rp, updated_by:currentUser?.id },{onConflict:'product_id,org_id'});
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  closeModal('modal-price'); showToast('✅ Precio actualizado'); loadPrices();
+}
+
+// ===== FINANCE =====
+async function loadDebts() {
+  const el = document.getElementById('debts-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const { data } = await db.from('store_debts').select('*,store:organizations!store_org_id(name)').order('created_at',{ascending:false});
+  if (!data?.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Sin deudas registradas</div>'; return; }
+  el.innerHTML = data.map(d=>`
+    <div class="list-item">
+      <div class="list-left">
+        <div class="list-title">${d.store?.name||'—'}</div>
+        <div class="list-sub">${d.period==='biweekly'?'Quincenal':'Mensual'} · ${fmtDate(d.created_at)}</div>
+        ${d.notes?`<div class="list-sub">${d.notes}</div>`:''}
+      </div>
+      <div class="list-right">
+        <div class="list-val" style="color:${d.status==='paid'?'var(--green)':'var(--orange)'}">S/ ${Number(d.amount).toFixed(2)}</div>
+        <span class="badge ${d.status==='paid'?'badge-green':'badge-orange'}" style="font-size:10px">${d.status==='paid'?'Pagado':'Pendiente'}</span>
+      </div>
+    </div>`).join('');
+}
+async function loadPayments() {
+  const el = document.getElementById('payments-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const { data } = await db.from('business_payments').select('*,store:organizations!from_org_id(name)').order('created_at',{ascending:false}).limit(30);
+  if (!data?.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Sin pagos registrados</div>'; return; }
+  el.innerHTML = data.map(p=>`
+    <div class="list-item">
+      ${photoThumb(p.receipt_photo_url || p.receipt_url)}
+      <div class="list-left">
+        <div class="list-title">${p.store?.name||'—'}</div>
+        <div class="list-sub">${fmtDate(p.created_at)} · ${p.payment_method||'—'}</div>
+        ${p.notes?`<div class="list-sub">${p.notes}</div>`:''}
+      </div>
+      <div class="list-right">
+        <div class="list-val" style="color:var(--green)">S/ ${Number(p.amount).toFixed(2)}</div>
+        <span class="badge ${p.status==='approved'?'badge-green':p.status==='pending'?'badge-orange':'badge-red'}" style="font-size:10px">${p.status}</span>
+      </div>
+    </div>`).join('');
+}
+async function loadAccounting() {
+  const el = document.getElementById('accounting-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const { data } = await db.from('accounting_tx').select('*').eq('org_id',CORP_ORG_ID).order('created_at',{ascending:false}).limit(50);
+  if (!data?.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Sin transacciones</div>'; return; }
+  el.innerHTML = data.map(a=>`
+    <div class="list-item">
+      ${photoThumb(a.receipt_photo_url)}
+      <div class="list-left">
+        <div class="list-title">${a.description||a.category||'—'}</div>
+        <div class="list-sub">${a.category} · ${fmtDate(a.created_at)}</div>
+      </div>
+      <div class="list-right">
+        <div class="list-val" style="color:${a.tx_type==='income'?'var(--green)':'var(--red)'}">
+          ${a.tx_type==='income'?'+':'−'}S/ ${Number(a.amount).toFixed(2)}</div>
+      </div>
+    </div>`).join('');
+}
+function setFinanceTab(tab,el) {
+  document.querySelectorAll('#tab-finance .tab-pill').forEach(p=>p.classList.remove('active')); el.classList.add('active');
+  document.getElementById('finance-debts').style.display = tab==='debts'?'block':'none';
+  document.getElementById('finance-payments').style.display = tab==='payments'?'block':'none';
+  document.getElementById('finance-accounting').style.display = tab==='accounting'?'block':'none';
+  if (tab==='payments') loadPayments();
+  if (tab==='accounting') loadAccounting();
+}
+
+// ===== CHAT =====
+async function loadChannels() {
+  const el = document.getElementById('channels-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const { data } = await db.from('chat_channels').select('*').order('name');
+  if (!data?.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3)">No hay canales. Crea el primero ↑</div>'; return; }
+  const colors = ['#0a84ff','#30d158','#ff9f0a','#bf5af2','#ff453a','#5ac8fa'];
+  el.innerHTML = '<div class="chat-list">'+data.map((ch,i)=>`
+    <div class="chat-channel" onclick="openChannel('${ch.id}','${ch.name}')">
+      <div class="chat-avatar" style="background:${colors[i%colors.length]}20;color:${colors[i%colors.length]}">#</div>
+      <div class="chat-info"><div class="chat-name">${ch.name}</div><div class="chat-preview">${ch.channel_type==='corp_internal'?'Canal corporativo':'Corp ↔ Tienda'}</div></div>
+    </div>`).join('')+'</div>';
+}
+async function openChannel(channelId, channelName) {
+  currentChannel = channelId;
+  document.getElementById('msg-title').textContent = '# '+channelName;
+  document.getElementById('msg-screen').classList.add('open');
+  document.getElementById('msg-body').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  await loadMessages(channelId);
+  if (msgSubscription) msgSubscription.unsubscribe();
+  msgSubscription = db.channel('chat:'+channelId)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_messages',filter:'channel_id=eq.'+channelId},payload=>appendMessage(payload.new))
+    .subscribe();
+}
+async function loadMessages(channelId) {
+  const { data } = await db.from('chat_messages').select('*,sender:users!sender_id(full_name)').eq('channel_id',channelId).order('created_at').limit(50);
+  const el = document.getElementById('msg-body');
+  if (!data?.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Sin mensajes. Sé el primero.</div>'; return; }
+  el.innerHTML = data.map(m=>renderMsg(m)).join('');
+  el.scrollTop = el.scrollHeight;
+}
+function renderMsg(m) {
+  const mine = m.sender_id === currentUser?.id;
+  return `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'}">
+    ${!mine?`<div class="msg-sender">${m.sender?.full_name||'Usuario'}</div>`:''}
+    <div class="msg-bubble ${mine?'mine':'theirs'}">${escHtml(m.content)}</div>
+    <div class="msg-time">${fmtTime(m.created_at)}</div>
+  </div>`;
+}
+function appendMessage(m) { const el=document.getElementById('msg-body'); const d=document.createElement('div'); d.innerHTML=renderMsg(m); el.appendChild(d.firstChild); el.scrollTop=el.scrollHeight; }
+async function sendMessage() { const input=document.getElementById('msg-input'); const c=input.value.trim(); if(!c||!currentChannel)return; input.value=''; autoResize(input); await db.from('chat_messages').insert({channel_id:currentChannel,sender_id:currentUser?.id,content:c}); }
+function closeChat() { document.getElementById('msg-screen').classList.remove('open'); if(msgSubscription){msgSubscription.unsubscribe();msgSubscription=null;} }
+function msgEnter(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
+
+// ===== CONFIG =====
+async function loadVisibility() {
+  const storeId = document.getElementById('visibility-store').value;
+  const el = document.getElementById('visibility-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const { data: products } = await db.from('products').select('id,name,emoji').eq('is_active',true).order('name');
+  const { data: hidden } = await db.from('product_visibility').select('product_id').eq('org_id',storeId).eq('is_hidden',true);
+  const hiddenSet = new Set((hidden||[]).map(h=>h.product_id));
+  if (!products?.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">No hay productos</div>'; return; }
+  el.innerHTML = products.map(p=>`
+    <div class="list-item">
+      <div class="list-left"><div class="list-title">${p.emoji||'📦'} ${p.name}</div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;color:var(--text3)">${hiddenSet.has(p.id)?'Oculto':'Visible'}</span>
+        <div onclick="toggleVisibility('${p.id}','${storeId}',${hiddenSet.has(p.id)})" style="width:44px;height:26px;border-radius:13px;background:${hiddenSet.has(p.id)?'var(--bg4)':'var(--green)'};position:relative;cursor:pointer">
+          <div style="position:absolute;top:3px;${hiddenSet.has(p.id)?'left:3px':'left:21px'};width:20px;height:20px;background:#fff;border-radius:50%"></div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+async function toggleVisibility(pid,sid,isHidden) {
+  await db.from('product_visibility').upsert({product_id:pid,org_id:sid,is_hidden:!isHidden},{onConflict:'product_id,org_id'});
+  showToast(!isHidden?'🙈 Ocultado':'👁️ Visible'); loadVisibility();
+}
+async function loadWarehouses() {
+  const el = document.getElementById('warehouses-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const { data } = await db.from('warehouses').select('*').eq('org_id',CORP_ORG_ID);
+  if (!data?.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Sin almacenes</div>'; return; }
+  el.innerHTML = data.map(w=>`
+    <div class="list-item">
+      <div class="list-left"><div class="list-title">🏭 ${w.name}</div><div class="list-sub">${w.location||'Sin ubicación'}${w.aisle?' · Pasillo: '+w.aisle:''}</div></div>
+      <span class="badge ${w.is_active?'badge-green':'badge-gray'}">${w.is_active?'Activo':'Inactivo'}</span>
+    </div>`).join('');
+}
+
+// ===== SAVE MODALS =====
+async function saveProduct() {
+  const name = document.getElementById('p-name').value.trim();
+  if (!name) { showToast('⚠️ Ingresa el nombre'); return; }
+  const file = document.getElementById('photo-product-input').files[0];
+  let photoUrl = null;
+  if (file) { showToast('⏳ Subiendo foto...', 6000); photoUrl = await uploadPhoto(file, 'product'); }
+  const { error } = await db.from('products').insert({
+    name, sku:document.getElementById('p-sku').value.trim()||null,
+    category:document.getElementById('p-category').value.trim()||null,
+    cost_usd:parseFloat(document.getElementById('p-cost-usd').value)||0,
+    freight_cost:parseFloat(document.getElementById('p-freight').value)||0,
+    corp_margin_pct:parseFloat(document.getElementById('p-margin').value)||15,
+    requires_serial:document.getElementById('p-imei').value==='true',
+    emoji:document.getElementById('p-emoji').value||'📦',
+    owner_org_id:CORP_ORG_ID, is_active:true, created_by:currentUser?.id
+  });
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  closeModal('modal-product'); showToast('✅ Producto agregado'); loadInventory();
+  clearFormFields(['p-name','p-sku','p-category','p-cost-usd','p-freight']); clearPhoto('photo-product-input','photo-product-preview');
+}
+async function savePayment() {
+  const amount = parseFloat(document.getElementById('pay-amount').value);
+  if (!amount || amount <= 0) { showToast('⚠️ Ingresa un monto válido'); return; }
+  const file = document.getElementById('photo-pay-input').files[0];
+  if (!file) { showToast('📷 El voucher es obligatorio'); return; }
+  showToast('⏳ Subiendo voucher...', 8000);
+  const photoUrl = await uploadPhoto(file, 'voucher');
+  if (!photoUrl) { showToast('❌ Error al subir foto'); return; }
+  const { data: pay, error } = await db.from('business_payments').insert({
+    from_org_id:document.getElementById('pay-store').value, to_org_id:CORP_ORG_ID,
+    amount, payment_method:document.getElementById('pay-method').value,
+    receipt_photo_url:photoUrl, notes:document.getElementById('pay-notes').value.trim()||null,
+    status:'pending', created_by:currentUser?.id
+  }).select().single();
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  await saveMediaAttachment('payment', pay.id, photoUrl, 'receipt', 'Voucher de pago S/ '+amount.toFixed(2));
+  closeModal('modal-payment'); showToast('✅ Pago registrado con voucher'); loadPayments();
+  clearPhoto('photo-pay-input','photo-pay-preview'); clearFormFields(['pay-amount','pay-notes']);
+}
+async function saveAccounting() {
+  const amount = parseFloat(document.getElementById('acc-amount').value);
+  if (!amount || amount <= 0) { showToast('⚠️ Ingresa un monto válido'); return; }
+  const file = document.getElementById('photo-acc-input').files[0];
+  let photoUrl = null;
+  if (file) { showToast('⏳ Subiendo comprobante...', 8000); photoUrl = await uploadPhoto(file, 'voucher'); }
+  const { error } = await db.from('accounting_tx').insert({
+    org_id:CORP_ORG_ID, tx_type:document.getElementById('acc-type').value,
+    amount, category:document.getElementById('acc-category').value.trim()||'General',
+    description:document.getElementById('acc-desc').value.trim()||null,
+    receipt_photo_url:photoUrl, recorded_by:currentUser?.id
+  });
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  closeModal('modal-accounting'); showToast('✅ Transacción registrada'+(photoUrl?' con comprobante':'')); loadAccounting();
+  clearPhoto('photo-acc-input','photo-acc-preview'); clearFormFields(['acc-amount','acc-category','acc-desc']);
+}
+async function saveDebt() {
+  const amount = parseFloat(document.getElementById('debt-amount').value);
+  if (!amount || amount <= 0) { showToast('⚠️ Ingresa un monto válido'); return; }
+  const { error } = await db.from('store_debts').insert({
+    store_org_id:document.getElementById('debt-store').value, corp_org_id:CORP_ORG_ID,
+    amount, period:document.getElementById('debt-period').value,
+    notes:document.getElementById('debt-notes').value.trim()||null, status:'pending'
+  });
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  closeModal('modal-debt'); showToast('✅ Deuda registrada'); loadDebts();
+  clearFormFields(['debt-amount','debt-notes']);
+}
+async function saveRate() {
+  const rate = parseFloat(document.getElementById('rate-input').value);
+  if (!rate || rate < 1) { showToast('⚠️ Tipo de cambio inválido'); return; }
+  const { error } = await db.from('exchange_rates').insert({currency_from:'USD',currency_to:'PEN',rate,source:document.getElementById('rate-source').value||'Manual',date:new Date().toISOString().split('T')[0]});
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  closeModal('modal-rate'); showToast('✅ Tipo de cambio: S/ '+rate.toFixed(3)); loadExchangeRate();
+}
+async function saveWarehouse() {
+  const name = document.getElementById('wh-name').value.trim();
+  if (!name) { showToast('⚠️ Ingresa el nombre'); return; }
+  const { error } = await db.from('warehouses').insert({org_id:CORP_ORG_ID,name,location:document.getElementById('wh-location').value.trim()||null,aisle:document.getElementById('wh-aisle').value.trim()||null,is_active:true});
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  closeModal('modal-warehouse'); showToast('✅ Almacén creado'); loadWarehouses();
+  clearFormFields(['wh-name','wh-location','wh-aisle']);
+}
+async function saveChannel() {
+  const name = document.getElementById('ch-name').value.trim();
+  if (!name) { showToast('⚠️ Ingresa el nombre del canal'); return; }
+  const type = document.getElementById('ch-type').value;
+  const storeId = type==='corp_store' ? document.getElementById('ch-store').value : null;
+  const { error } = await db.from('chat_channels').insert({name:name.toLowerCase().replace(/\s+/g,'-'),channel_type:type,org_id:CORP_ORG_ID,store_org_id:storeId,created_by:currentUser?.id});
+  if (error) { showToast('❌ Error: '+error.message); return; }
+  closeModal('modal-channel'); showToast('✅ Canal creado'); loadChannels();
+  document.getElementById('ch-name').value = '';
+}
+
+// ===== PHOTO UTILITIES =====
+function triggerPhotoCapture(inputId, previewId) {
+  document.getElementById(inputId).click();
+}
+function previewPhoto(input, previewId) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const box = document.getElementById(previewId);
+    const img = document.getElementById(previewId+'-img');
+    img.src = e.target.result;
+    box.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+function clearPhoto(inputId, previewId) {
+  document.getElementById(inputId).value = '';
+  const box = document.getElementById(previewId);
+  if (box) box.style.display = 'none';
+}
+async function uploadPhoto(file, folder) {
+  try {
+    const ext  = file.name.split('.').pop() || 'jpg';
+    const path = `${folder}/${Date.now()}_${Math.random().toString(36).substr(2,6)}.${ext}`;
+    const { data, error } = await db.storage.from(STORAGE_BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+    if (error) { console.error('Upload error:', error); return null; }
+    const { data: urlData } = db.storage.from(STORAGE_BUCKET).getPublicUrl(data.path);
+    return urlData.publicUrl;
+  } catch(e) { console.error(e); return null; }
+}
+async function saveMediaAttachment(entityType, entityId, photoUrl, photoType, caption) {
+  try {
+    await db.from('media_attachments').insert({
+      entity_type: entityType, entity_id: entityId,
+      photo_url: photoUrl, photo_type: photoType,
+      caption, uploaded_by: currentUser?.id, org_id: CORP_ORG_ID
+    });
+  } catch(e) { console.error(e); }
+}
+function showPhoto(url) {
+  document.getElementById('photo-viewer-img').src = url;
+  document.getElementById('photo-viewer').classList.add('open');
+}
+function photoThumb(url) {
+  if (!url) return `<div class="photo-placeholder" title="Sin foto">📷</div>`;
+  return `<img class="photo-thumb" src="${url}" alt="foto" onclick="showPhoto('${url}')">`;
+}
+
+// ===== HELPERS =====
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function showToast(msg, dur=2500) {
+  const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block';
+  clearTimeout(t._t); t._t=setTimeout(()=>{ t.style.display='none'; }, dur);
+}
+function fmtDate(str) { if(!str)return'—'; return new Date(str).toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'}); }
+function fmtTime(str) { if(!str)return''; return new Date(str).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}); }
+function escHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function clearFormFields(ids) { ids.forEach(id=>{ const el=document.getElementById(id); if(el)el.value=''; }); }
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,120)+'px'; }
+</script>
+</body>
+</html>

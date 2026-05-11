@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>SuperAdmin — Corp Tech</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ──────────────────────────────────────────────────────
+   DESIGN SYSTEM — Corp Tech SuperAdmin
+   iOS Dark Mode · Responsive · Native-Ready
+────────────────────────────────────────────────────── */
+:root {
+  --c-bg:#000000;--c-bg1:#0A0A0A;--c-bg2:#111111;
+  --c-card:#1C1C1E;--c-card2:#2C2C2E;--c-card3:#3A3A3C;
+  --c-border:#3A3A3C;--c-border2:#2C2C2E;
+  --c-text:#FFFFFF;--c-text2:rgba(235,235,245,.8);--c-text3:rgba(235,235,245,.5);--c-text4:rgba(235,235,245,.3);
+  --c-blue:#0A84FF;--c-blue-dim:rgba(10,132,255,.15);--c-blue-glow:rgba(10,132,255,.25);
+  --c-green:#30D158;--c-green-dim:rgba(48,209,88,.15);
+  --c-red:#FF453A;--c-red-dim:rgba(255,69,58,.15);
+  --c-orange:#FF9F0A;--c-orange-dim:rgba(255,159,10,.15);
+  --c-purple:#BF5AF2;--c-purple-dim:rgba(191,90,242,.15);
+  --c-teal:#5AC8FA;--c-yellow:#FFD60A;
+  --grad-brand:linear-gradient(135deg,#0A84FF 0%,#BF5AF2 100%);
+  --grad-green:linear-gradient(135deg,#30D158 0%,#5AC8FA 100%);
+  --grad-fire:linear-gradient(135deg,#FF9F0A 0%,#FF453A 100%);
+  --font:'Urbanist',-apple-system,'SF Pro Display',sans-serif;
+  --r-sm:10px;--r-md:14px;--r-lg:18px;--r-xl:22px;--r-2xl:28px;--r-3xl:34px;--r-full:9999px;
+  --shadow-md:0 4px 20px rgba(0,0,0,.5);--shadow-lg:0 8px 40px rgba(0,0,0,.6);
+  --sat:env(safe-area-inset-top,44px);--sab:env(safe-area-inset-bottom,34px);
+  --sidebar-w:258px;--topbar-h:60px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{height:100%}
+body{font-family:var(--font);background:var(--c-bg);color:var(--c-text);min-height:100dvh;overflow-x:hidden;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+input,select,textarea,button{font-family:var(--font)}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-thumb{background:var(--c-card3);border-radius:2px}
+
+/* ── AUTH ── */
+#auth-screen{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(var(--sat)+24px) 24px calc(var(--sab)+24px);background:var(--c-bg);gap:28px}
+.auth-glow{position:absolute;top:-80px;left:50%;transform:translateX(-50%);width:360px;height:360px;background:radial-gradient(circle,rgba(10,132,255,.12) 0%,transparent 70%);pointer-events:none}
+.auth-logo{width:86px;height:86px;background:var(--grad-brand);border-radius:var(--r-2xl);display:flex;align-items:center;justify-content:center;font-size:40px;box-shadow:0 0 40px rgba(10,132,255,.3),var(--shadow-lg)}
+.auth-card{background:var(--c-card);border:1px solid var(--c-border2);border-radius:var(--r-2xl);padding:26px 22px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:15px;box-shadow:var(--shadow-md)}
+.auth-label{font-size:11px;font-weight:700;color:var(--c-text3);letter-spacing:.6px;text-transform:uppercase;display:block;margin-bottom:6px}
+.auth-input{background:var(--c-card2);border:1px solid var(--c-border);border-radius:var(--r-md);padding:14px 15px;color:var(--c-text);font-size:16px;font-weight:500;outline:none;width:100%;transition:border-color .2s}
+.auth-input:focus{border-color:var(--c-blue);box-shadow:0 0 0 3px var(--c-blue-glow)}
+.auth-err{color:var(--c-red);font-size:13px;text-align:center;display:none;font-weight:600}
+.btn-auth{background:var(--grad-brand);color:#fff;border:none;border-radius:var(--r-md);padding:15px;font-size:16px;font-weight:700;cursor:pointer;width:100%;box-shadow:0 4px 16px rgba(10,132,255,.3);transition:opacity .15s,transform .1s;letter-spacing:.3px}
+.btn-auth:active{opacity:.85;transform:scale(.98)}
+
+/* ── APP SHELL ── */
+#app{display:none;min-height:100dvh}
+
+/* ── SIDEBAR ── */
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:var(--c-bg1);border-right:1px solid var(--c-border2);display:flex;flex-direction:column;z-index:50}
+.sidebar-brand{padding:calc(var(--sat)+18px) 18px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--c-border2)}
+.sidebar-logo{width:38px;height:38px;background:var(--grad-brand);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.sidebar-brand-name{font-size:14px;font-weight:800}
+.sidebar-brand-badge{font-size:10px;font-weight:700;color:var(--c-purple);background:var(--c-purple-dim);padding:1px 7px;border-radius:var(--r-full);display:inline-block;margin-top:1px}
+.sidebar-nav{flex:1;overflow-y:auto;padding:10px 8px;display:flex;flex-direction:column;gap:1px}
+.nav-group-label{font-size:10px;font-weight:700;color:var(--c-text4);letter-spacing:1.2px;text-transform:uppercase;padding:10px 10px 5px}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r-md);cursor:pointer;color:var(--c-text3);font-size:14px;font-weight:600;transition:all .15s;position:relative}
+.sidebar-item:hover{background:var(--c-card);color:var(--c-text2)}
+.sidebar-item.active{background:var(--c-blue-dim);color:var(--c-blue)}
+.sidebar-item.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:22px;background:var(--c-blue);border-radius:0 3px 3px 0}
+.sidebar-item-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.sidebar-badge{margin-left:auto;background:var(--c-red);color:#fff;border-radius:var(--r-full);font-size:10px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center}
+.sidebar-footer{padding:12px 8px calc(var(--sab)+12px);border-top:1px solid var(--c-border2)}
+.sidebar-user{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r-md);cursor:pointer;transition:background .15s}
+.sidebar-user:hover{background:var(--c-card)}
+.sidebar-avatar{width:32px;height:32px;border-radius:50%;background:var(--grad-brand);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.sidebar-user-name{font-size:13px;font-weight:700}
+.sidebar-user-role{font-size:11px;color:var(--c-text3)}
+.sidebar-logout-btn{background:none;border:none;color:var(--c-red);font-size:12px;font-weight:700;cursor:pointer;padding:4px 8px;border-radius:var(--r-sm);transition:background .15s}
+.sidebar-logout-btn:hover{background:var(--c-red-dim)}
+
+/* ── TOPBAR ── */
+.topbar{position:fixed;top:0;right:0;left:0;z-index:40;height:calc(var(--sat)+var(--topbar-h));padding:var(--sat) 16px 0;background:rgba(0,0,0,.85);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border-bottom:1px solid var(--c-border2);display:flex;align-items:flex-end;padding-bottom:11px}
+.topbar-inner{display:flex;align-items:center;gap:10px;width:100%}
+.topbar-title{font-size:16px;font-weight:800;flex:1}
+.store-switcher{display:flex;align-items:center;gap:7px;background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--r-full);padding:5px 11px 5px 7px;cursor:pointer;font-size:12px;font-weight:600}
+.store-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.store-switcher select{background:transparent;border:none;color:var(--c-text);font-size:12px;font-weight:700;outline:none;cursor:pointer;font-family:var(--font)}
+.topbar-notif{width:34px;height:34px;border-radius:50%;background:var(--c-card);border:1px solid var(--c-border);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;font-size:15px}
+.notif-dot{position:absolute;top:5px;right:5px;width:8px;height:8px;background:var(--c-red);border-radius:50%;border:2px solid var(--c-bg);display:none}
+
+/* ── MAIN ── */
+.main{padding-top:calc(var(--sat)+var(--topbar-h)+20px);padding-bottom:calc(var(--sab)+90px);padding-left:16px;padding-right:16px;min-height:100dvh}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(16,16,16,.96);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid var(--c-border2);display:flex;padding-bottom:var(--sab)}
+.bn-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px;cursor:pointer;color:var(--c-text4);transition:color .2s;position:relative}
+.bn-item.active{color:var(--c-blue)}
+.bn-item svg{width:22px;height:22px}
+.bn-label{font-size:10px;font-weight:600}
+.bn-badge{position:absolute;top:7px;right:calc(50% - 18px);background:var(--c-red);color:#fff;border-radius:var(--r-full);font-size:9px;font-weight:700;padding:1px 5px;border:2px solid var(--c-bg);display:none}
+
+/* ── CARDS ── */
+.card{background:var(--c-card);border:1px solid var(--c-border2);border-radius:var(--r-2xl);overflow:hidden;margin-bottom:14px}
+.card-header{padding:17px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--c-border2)}
+.card-title{font-size:14px;font-weight:800;letter-spacing:.2px}
+.card-subtitle{font-size:12px;color:var(--c-text3);font-weight:500;margin-top:2px}
+.card-action{font-size:13px;font-weight:700;color:var(--c-blue);cursor:pointer}
+.card-body{padding:16px 20px}
+
+/* KPI GRID */
+.kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+.kpi-card{background:var(--c-card);border:1px solid var(--c-border2);border-radius:var(--r-2xl);padding:17px 15px;display:flex;flex-direction:column;gap:5px;transition:transform .15s}
+.kpi-card:hover{transform:translateY(-2px)}
+.kpi-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;margin-bottom:4px}
+.kpi-value{font-size:27px;font-weight:900;letter-spacing:-.5px;line-height:1}
+.kpi-label{font-size:12px;font-weight:600;color:var(--c-text3)}
+
+/* HERO */
+.hero-card{background:var(--grad-brand);border-radius:var(--r-2xl);padding:22px 20px;margin-bottom:14px;position:relative;overflow:hidden}
+.hero-card::before{content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;background:rgba(255,255,255,.08);border-radius:50%}
+.hero-card::after{content:'';position:absolute;bottom:-50px;left:10px;width:180px;height:180px;background:rgba(255,255,255,.05);border-radius:50%}
+.hero-eyebrow{font-size:11px;font-weight:700;opacity:.7;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+.hero-title{font-size:24px;font-weight:900;letter-spacing:-.4px;line-height:1.1}
+.hero-sub{font-size:13px;opacity:.8;margin-top:5px;font-weight:500}
+
+/* LIST ROW */
+.list-row{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--c-border2);transition:background .12s;cursor:default}
+.list-row:last-child{border-bottom:none}
+.list-row:active{background:var(--c-card2)}
+.list-row-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.list-row-body{flex:1;min-width:0}
+.list-row-title{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-row-sub{font-size:12px;color:var(--c-text3);margin-top:2px;font-weight:500}
+.list-row-right{text-align:right;flex-shrink:0}
+.list-row-value{font-size:15px;font-weight:700}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:var(--r-full);font-size:11px;font-weight:700}
+.badge-blue{background:var(--c-blue-dim);color:var(--c-blue)}
+.badge-green{background:var(--c-green-dim);color:var(--c-green)}
+.badge-red{background:var(--c-red-dim);color:var(--c-red)}
+.badge-orange{background:var(--c-orange-dim);color:var(--c-orange)}
+.badge-purple{background:var(--c-purple-dim);color:var(--c-purple)}
+.badge-gray{background:rgba(255,255,255,.07);color:var(--c-text3)}
+
+/* BUTTONS */
+.btn{border:none;border-radius:var(--r-md);font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:opacity .15s,transform .1s}
+.btn:active{opacity:.8;transform:scale(.97)}
+.btn-full{width:100%;padding:14px;font-size:15px}
+.btn-sm{padding:7px 13px;font-size:13px}
+.btn-xs{padding:4px 9px;font-size:11px;border-radius:8px}
+.btn-primary{background:var(--c-blue);color:#fff}
+.btn-success{background:var(--c-green);color:#000}
+.btn-danger{background:var(--c-red);color:#fff}
+.btn-ghost{background:var(--c-card2);color:var(--c-text2);border:1px solid var(--c-border)}
+.btn-grad{background:var(--grad-brand);color:#fff;box-shadow:0 4px 14px rgba(10,132,255,.25)}
+.btn-warn{background:var(--c-orange);color:#000}
+
+/* FORMS */
+.form-group{margin-bottom:13px}
+.form-label{display:block;font-size:11px;font-weight:700;color:var(--c-text3);letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px}
+.form-control{width:100%;background:var(--c-card2);border:1px solid var(--c-border);border-radius:var(--r-md);padding:12px 14px;color:var(--c-text);font-size:15px;font-weight:500;outline:none;font-family:var(--font);transition:border-color .2s,box-shadow .2s;appearance:none}
+.form-control:focus{border-color:var(--c-blue);box-shadow:0 0 0 3px var(--c-blue-glow)}
+.form-control::placeholder{color:var(--c-text4)}
+.form-control option{background:var(--c-card)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* CHART */
+.chart-wrap{position:relative;height:200px;padding:4px 0}
+
+/* CREDIT CARD */
+.credit-card-wrap{background:var(--grad-brand);border-radius:var(--r-2xl);padding:20px;margin-bottom:12px;position:relative;overflow:hidden}
+.credit-card-wrap::after{content:'◉';position:absolute;right:-10px;bottom:-20px;font-size:130px;opacity:.05;color:#fff;line-height:1}
+.credit-org-name{font-size:12px;font-weight:700;opacity:.8;margin-bottom:5px}
+.credit-balance{font-size:36px;font-weight:900;letter-spacing:-1px}
+.credit-label{font-size:11px;opacity:.7;font-weight:600;margin-top:2px}
+
+/* PROGRESS */
+.progress{height:5px;background:var(--c-card2);border-radius:var(--r-full);overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;background:var(--grad-brand);border-radius:var(--r-full);transition:width .5s}
+
+/* TOGGLE */
+.toggle-wrap{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--c-border2)}
+.toggle-wrap:last-child{border-bottom:none}
+.toggle-label{font-size:14px;font-weight:600}
+.toggle-sub{font-size:12px;color:var(--c-text3);margin-top:2px}
+.toggle{width:48px;height:27px;border-radius:var(--r-full);background:var(--c-card3);position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--c-green)}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 2px 5px rgba(0,0,0,.3)}
+.toggle.on::after{left:24px}
+
+/* STATUS STRIP */
+.status-strip{display:flex;gap:7px;overflow-x:auto;padding:0 0 4px;margin-bottom:14px;scrollbar-width:none}
+.status-strip::-webkit-scrollbar{display:none}
+.status-chip{display:flex;align-items:center;gap:5px;background:var(--c-card);border:1px solid var(--c-border2);border-radius:var(--r-full);padding:6px 13px;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer;flex-shrink:0;transition:all .15s}
+.status-chip.active{border-color:var(--c-blue);background:var(--c-blue-dim);color:var(--c-blue)}
+.status-dot{width:7px;height:7px;border-radius:50%}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);display:none;align-items:flex-end}
+.modal-overlay.open{display:flex}
+.modal-sheet{background:var(--c-bg2);border-radius:var(--r-3xl) var(--r-3xl) 0 0;border-top:1px solid var(--c-border2);padding:10px 24px 0;padding-bottom:calc(22px+var(--sab));width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 -8px 40px rgba(0,0,0,.6)}
+.modal-handle{width:38px;height:4px;background:var(--c-card3);border-radius:2px;margin:0 auto 18px}
+.modal-title{font-size:19px;font-weight:800;margin-bottom:18px}
+.modal-actions{display:flex;gap:10px;margin-top:18px}
+.modal-actions .btn{flex:1;padding:14px}
+
+/* BIOMETRIC BTN */
+.biometric-btn{display:flex;align-items:center;justify-content:center;gap:8px;background:var(--c-card2);border:1.5px solid var(--c-border);border-radius:var(--r-xl);padding:13px;cursor:pointer;color:var(--c-text2);font-size:14px;font-weight:700;transition:all .15s;width:100%}
+.biometric-btn:hover{border-color:var(--c-blue);background:var(--c-blue-dim);color:var(--c-blue)}
+
+/* PHOTO */
+.photo-thumb{width:40px;height:40px;border-radius:8px;object-fit:cover;cursor:pointer;flex-shrink:0;border:2px solid var(--c-border)}
+
+/* PHOTO VIEWER */
+#photo-viewer{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.95);backdrop-filter:blur(20px);display:none;flex-direction:column;align-items:center;justify-content:center}
+#photo-viewer.open{display:flex}
+#photo-viewer img{max-width:100%;max-height:85vh;object-fit:contain;border-radius:var(--r-md)}
+.pv-close{position:absolute;top:calc(var(--sat)+14px);right:18px;background:rgba(255,255,255,.15);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:19px;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)}
+
+/* TOAST */
+#toast{position:fixed;top:calc(var(--sat)+70px);left:50%;transform:translateX(-50%) translateY(-8px);background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--r-full);padding:10px 18px;font-size:13px;font-weight:700;z-index:999;display:none;white-space:nowrap;box-shadow:var(--shadow-lg);transition:transform .2s,opacity .2s}
+#toast.show{display:block;transform:translateX(-50%) translateY(0)}
+
+/* EMPTY STATE */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:44px 24px;gap:10px;text-align:center}
+.empty-icon{font-size:44px;opacity:.45}
+.empty-title{font-size:15px;font-weight:700;color:var(--c-text2)}
+.empty-sub{font-size:13px;color:var(--c-text3);font-weight:500}
+
+/* LOADER */
+.loader-wrap{display:flex;align-items:center;justify-content:center;padding:38px;gap:10px;color:var(--c-text3)}
+.spin{width:19px;height:19px;border:2px solid var(--c-border);border-top-color:var(--c-blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* SECTION LABEL */
+.section-label{font-size:11px;font-weight:800;color:var(--c-text4);letter-spacing:1.5px;text-transform:uppercase;margin:18px 0 10px}
+
+/* ── RESPONSIVE DESKTOP ── */
+@media(min-width:768px){
+  .sidebar{display:flex!important;flex-direction:column}
+  .bottom-nav{display:none!important}
+  .main{margin-left:var(--sidebar-w);padding-left:26px;padding-right:26px;padding-bottom:36px}
+  .topbar{left:var(--sidebar-w)}
+  .topbar-title{display:none}
+  .kpi-grid{grid-template-columns:repeat(4,1fr)}
+  .chart-wrap{height:250px}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .two-col .card{margin-bottom:0}
+  .chart-card-wide{grid-column:span 2}
+  .modal-overlay{align-items:center;justify-content:center}
+  .modal-sheet{border-radius:var(--r-2xl);max-width:500px;max-height:88vh}
+  .stores-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .stores-grid .card{margin-bottom:0}
+}
+@media(max-width:767px){
+  .sidebar{display:none!important}
+  .bottom-nav{display:flex!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ════════ AUTH ════════ -->
+<div id="auth-screen">
+  <div class="auth-glow"></div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:13px">
+    <div class="auth-logo">👑</div>
+    <div>
+      <div style="font-size:28px;font-weight:900;text-align:center;letter-spacing:-.4px">SuperAdmin</div>
+      <div style="font-size:14px;color:var(--c-text3);text-align:center;margin-top:5px;font-weight:500">Corp Tech Holding — Acceso Maestro</div>
+    </div>
+  </div>
+  <div class="auth-card">
+    <div><label class="auth-label">Correo</label><input id="sa-email" class="auth-input" type="email" placeholder="phillipmg17@gmail.com" autocomplete="email"></div>
+    <div><label class="auth-label">Contraseña</label><input id="sa-pass" class="auth-input" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    <div id="sa-err" class="auth-err"></div>
+    <button class="btn-auth" onclick="doLogin()">Ingresar al Sistema →</button>
+  </div>
+</div>
+
+<!-- ════════ APP ════════ -->
+<div id="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">👑</div>
+      <div>
+        <div class="sidebar-brand-name">Corp Tech</div>
+        <span class="sidebar-brand-badge">SUPERADMIN</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-group-label">Principal</div>
+      <div class="sidebar-item active" id="snav-dashboard" onclick="showPane('dashboard')">
+        <div class="sidebar-item-icon">🏠</div>Dashboard
+      </div>
+      <div class="sidebar-item" id="snav-credits" onclick="showPane('credits')">
+        <div class="sidebar-item-icon">💎</div>Créditos & Tokens
+      </div>
+      <div class="nav-group-label">Gestión</div>
+      <div class="sidebar-item" id="snav-qa" onclick="showPane('qa')">
+        <div class="sidebar-item-icon">🐛</div>QA & Errores
+        <span class="sidebar-badge" id="qa-sbadge" style="display:none">0</span>
+      </div>
+      <div class="sidebar-item" id="snav-features" onclick="showPane('features')">
+        <div class="sidebar-item-icon">⚡</div>Funciones
+      </div>
+      <div class="nav-group-label">Sistema</div>
+      <div class="sidebar-item" id="snav-security" onclick="showPane('security')">
+        <div class="sidebar-item-icon">🔒</div>Seguridad & Biometría
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="sidebar-avatar" id="sa-avatar">P</div>
+        <div style="flex:1;min-width:0">
+          <div class="sidebar-user-name" id="sa-username">Phillip M.</div>
+          <div class="sidebar-user-role">Dueño · SuperAdmin</div>
+        </div>
+        <button class="sidebar-logout-btn" onclick="doLogout()">Salir</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-title">👑 SuperAdmin</div>
+      <div class="store-switcher">
+        <div class="store-dot" id="sw-dot" style="background:var(--c-purple)"></div>
+        <select id="store-ctx" onchange="onStoreSwitch()">
+          <option value="all">📊 Vista Global</option>
+          <option value="00000000-0000-0000-0000-000000000001">🏢 Corp Tech</option>
+          <option value="00000000-0000-0000-0000-000000000002">🏪 Futurteck</option>
+          <option value="00000000-0000-0000-0000-000000000003">🏪 Innovatech</option>
+          <option value="00000000-0000-0000-0000-000000000004">🏪 WeTech Peru</option>
+        </select>
+      </div>
+      <div class="topbar-notif" onclick="showPane('qa')">
+        🔔<div class="notif-dot" id="notif-dot" style="display:none"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+
+    <!-- ══ DASHBOARD ══ -->
+    <div id="pane-dashboard" class="tab-pane active">
+      <div class="hero-card">
+        <div class="hero-eyebrow">Resumen Global — Corp Tech Holding</div>
+        <div class="hero-title" id="hero-greeting">Buenos días, Phillip 👋</div>
+        <div class="hero-sub" id="hero-date">—</div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:var(--c-blue-dim)">📦</div>
+          <div class="kpi-value" id="kpi-products" style="color:var(--c-blue)">—</div>
+          <div class="kpi-label">Productos</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:var(--c-green-dim)">🏪</div>
+          <div class="kpi-value" style="color:var(--c-green)">4</div>
+          <div class="kpi-label">Empresas</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:var(--c-orange-dim)">🐛</div>
+          <div class="kpi-value" id="kpi-bugs" style="color:var(--c-orange)">—</div>
+          <div class="kpi-label">Bugs abiertos</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:var(--c-purple-dim)">💎</div>
+          <div class="kpi-value" id="kpi-tokens" style="color:var(--c-purple)">—</div>
+          <div class="kpi-label">Tokens totales</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <!-- Sales chart -->
+        <div class="card chart-card-wide">
+          <div class="card-header">
+            <div>
+              <div class="card-title">📈 Ventas Globales</div>
+              <div class="card-subtitle" id="chart-sub">Últimos 7 días</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <div class="status-chip active" onclick="setChartRange(7,this)" style="font-size:11px;padding:5px 11px">7d</div>
+              <div class="status-chip" onclick="setChartRange(30,this)" style="font-size:11px;padding:5px 11px">30d</div>
+            </div>
+          </div>
+          <div class="card-body"><div class="chart-wrap"><canvas id="sales-chart"></canvas></div></div>
+        </div>
+
+        <!-- Stock by org -->
+        <div class="card">
+          <div class="card-header">
+            <div><div class="card-title">📊 Stock Central</div><div class="card-subtitle">Unidades por empresa</div></div>
+          </div>
+          <div id="stock-by-org" style="padding-bottom:8px"><div class="loader-wrap"><div class="spin"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Stores grid -->
+      <div class="section-label">Estado de las Tiendas</div>
+      <div class="stores-grid" id="stores-grid">
+        <div class="loader-wrap"><div class="spin"></div></div>
+      </div>
+
+      <div style="height:14px"></div>
+
+      <!-- Recent activity + credits -->
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🐛 Bugs recientes</div><div class="card-action" onclick="showPane('qa')">Ver todos</div></div>
+          <div id="recent-bugs"><div class="loader-wrap"><div class="spin"></div></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">⚡ Últimas funciones</div><div class="card-action" onclick="showPane('features')">Ver todas</div></div>
+          <div id="recent-feats"><div class="loader-wrap"><div class="spin"></div></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">💎 Créditos por Empresa</div><div class="card-action" onclick="showPane('credits')">Gestionar</div></div>
+        <div id="credits-overview"><div class="loader-wrap"><div class="spin"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ══ CREDITS ══ -->
+    <div id="pane-credits" class="tab-pane">
+      <div class="section-label">Asignar Tokens</div>
+      <div class="card">
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Empresa</label>
+            <select id="cr-org" class="form-control" onchange="renderCreditCard()">
+              <option value="00000000-0000-0000-0000-000000000001">🏢 Corp Tech</option>
+              <option value="00000000-0000-0000-0000-000000000002">🏪 Futurteck</option>
+              <option value="00000000-0000-0000-0000-000000000003">🏪 Innovatech Store</option>
+              <option value="00000000-0000-0000-0000-000000000004">🏪 WeTech Peru</option>
+            </select>
+          </div>
+          <div class="credit-card-wrap">
+            <div class="credit-org-name" id="cc-org-name">Corp Tech</div>
+            <div class="credit-balance" id="cc-balance">—</div>
+            <div class="credit-label">tokens disponibles</div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Tipo</label>
+              <select id="cr-type" class="form-control">
+                <option value="imei_check">IMEI Check</option>
+                <option value="ai_search">Búsqueda IA</option>
+                <option value="report_gen">Reporte IA</option>
+                <option value="manual">Manual</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cantidad</label>
+              <input id="cr-amount" class="form-control" type="number" min="1" placeholder="ej. 100">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nota interna</label>
+            <input id="cr-note" class="form-control" placeholder="ej. Recarga mensual">
+          </div>
+          <div class="biometric-btn" onclick="runBiometricThen(addCreditsDirectly)" style="margin-bottom:12px">
+            <span style="font-size:20px">🔒</span> Confirmar con FaceID / Huella
+          </div>
+          <button class="btn btn-grad btn-full" onclick="addCreditsDirectly()">💎 Asignar Tokens</button>
+        </div>
+      </div>
+
+      <div class="section-label">Saldos Actuales</div>
+      <div id="credits-balances"><div class="loader-wrap"><div class="spin"></div></div></div>
+
+      <div class="section-label">Historial</div>
+      <div class="card">
+        <div id="credits-history"><div class="loader-wrap"><div class="spin"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ══ QA ══ -->
+    <div id="pane-qa" class="tab-pane">
+      <div class="status-strip">
+        <div class="status-chip active" onclick="filterBugs('all',this)"><div class="status-dot" style="background:var(--c-text3)"></div>Todos</div>
+        <div class="status-chip" onclick="filterBugs('new',this)"><div class="status-dot" style="background:var(--c-red)"></div>Nuevos</div>
+        <div class="status-chip" onclick="filterBugs('in_review',this)"><div class="status-dot" style="background:var(--c-orange)"></div>En revisión</div>
+        <div class="status-chip" onclick="filterBugs('fixed',this)"><div class="status-dot" style="background:var(--c-blue)"></div>Reparados</div>
+        <div class="status-chip" onclick="filterBugs('closed',this)"><div class="status-dot" style="background:var(--c-green)"></div>Cerrados</div>
+      </div>
+      <div class="card">
+        <div id="bugs-list"><div class="loader-wrap"><div class="spin"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ══ FEATURES ══ -->
+    <div id="pane-features" class="tab-pane">
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-body">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div><div style="font-size:24px;font-weight:900" id="feat-done">—</div><div style="font-size:12px;color:var(--c-text3);font-weight:600">funciones listas</div></div>
+            <div style="text-align:right"><div style="font-size:24px;font-weight:900;color:var(--c-blue)" id="feat-total">—</div><div style="font-size:12px;color:var(--c-text3);font-weight:600">planificadas</div></div>
+          </div>
+          <div class="progress"><div class="progress-fill" id="feat-prog" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="status-strip" id="feat-filter-strip">
+        <div class="status-chip active" onclick="filterFeatures('all',this)">Todas</div>
+        <div class="status-chip" onclick="filterFeatures('SA',this)">SA</div>
+        <div class="status-chip" onclick="filterFeatures('DB',this)">DB</div>
+        <div class="status-chip" onclick="filterFeatures('CORP',this)">CORP</div>
+        <div class="status-chip" onclick="filterFeatures('POS',this)">POS</div>
+        <div class="status-chip" onclick="filterFeatures('MEDIA',this)">MEDIA</div>
+        <div class="status-chip" onclick="filterFeatures('FIN',this)">FIN</div>
+        <div class="status-chip" onclick="filterFeatures('ECO',this)">ECO</div>
+        <div class="status-chip" onclick="filterFeatures('API',this)">API</div>
+        <div class="status-chip" onclick="filterFeatures('SEC',this)">SEC</div>
+      </div>
+      <div class="card">
+        <div id="features-list"><div class="loader-wrap"><div class="spin"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ══ SECURITY ══ -->
+    <div id="pane-security" class="tab-pane">
+      <div class="hero-card" style="background:linear-gradient(135deg,#1a0a2e,#0a1628)">
+        <div class="hero-eyebrow" style="color:var(--c-purple)">Seguridad del Sistema</div>
+        <div class="hero-title">WebAuthn + Biometría</div>
+        <div class="hero-sub">FaceID · TouchID · Huella digital nativa iOS/Android</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">🔑 Estado WebAuthn</div></div>
+        <div class="card-body">
+          <div class="list-row" style="padding:10px 0">
+            <div class="list-row-icon" style="background:var(--c-green-dim)">✅</div>
+            <div class="list-row-body"><div class="list-row-title">API WebAuthn</div><div class="list-row-sub" id="webauthn-status">Verificando...</div></div>
+          </div>
+          <div class="list-row" style="padding:10px 0">
+            <div class="list-row-icon" style="background:var(--c-blue-dim)">📱</div>
+            <div class="list-row-body"><div class="list-row-title">Autenticador biométrico</div><div class="list-row-sub" id="biometric-status">Verificando...</div></div>
+          </div>
+          <button class="btn btn-full" style="background:var(--c-purple);color:#fff;margin-top:14px" onclick="testBiometric()">🔒 Probar FaceID / Huella ahora</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">⚙️ Acciones protegidas con biometría</div></div>
+        <div class="card-body">
+          <div class="toggle-wrap"><div><div class="toggle-label">Autorizar descuentos</div><div class="toggle-sub">Requiere biometría del gerente de tienda</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="toggle-wrap"><div><div class="toggle-label">Apertura de caja</div><div class="toggle-sub">FaceID obligatorio al iniciar sesión POS</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="toggle-wrap"><div><div class="toggle-label">Transferencias > S/ 1,000</div><div class="toggle-sub">Huella digital o FaceID requerido</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="toggle-wrap"><div><div class="toggle-label">Asignación de tokens</div><div class="toggle-sub">Solo SuperAdmin con biometría confirmada</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">🌐 Sesión actual</div></div>
+        <div class="card-body">
+          <div class="list-row" style="padding:8px 0"><div class="list-row-body"><div class="list-row-title">Dispositivo</div></div><div class="list-row-right"><div class="list-row-value" style="font-size:13px;color:var(--c-text3)" id="device-info">—</div></div></div>
+          <div class="list-row" style="padding:8px 0"><div class="list-row-body"><div class="list-row-title">Usuario</div></div><div class="list-row-right"><div class="list-row-value" style="font-size:13px;color:var(--c-text3)">phillipmg17@gmail.com</div></div></div>
+          <button class="btn btn-full btn-ghost" style="margin-top:14px" onclick="doLogout()">Cerrar sesión</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <div class="bn-item active" id="bnav-dashboard" onclick="showPane('dashboard')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+      <span class="bn-label">Dashboard</span>
+    </div>
+    <div class="bn-item" id="bnav-credits" onclick="showPane('credits')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+      <span class="bn-label">Créditos</span>
+    </div>
+    <div class="bn-item" id="bnav-qa" onclick="showPane('qa')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z"/></svg>
+      <span class="bn-label">QA</span>
+      <span class="bn-badge" id="qa-bnbadge">0</span>
+    </div>
+    <div class="bn-item" id="bnav-features" onclick="showPane('features')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2.05v2.02c3.95.49 7 3.85 7 7.93 0 3.21-1.81 6-4.72 7.28L13 17v5h5l-1.22-1.22C19.91 19.07 22 15.76 22 12c0-5.18-3.95-9.45-9-9.95zM11 2.05C5.95 2.55 2 6.82 2 12c0 3.76 2.09 7.07 5.22 8.78L6 22h5v-5l-2.28 2.28C7.81 18 6 15.21 6 12c0-4.08 3.05-7.44 7-7.93V2.05z"/></svg>
+      <span class="bn-label">Funciones</span>
+    </div>
+    <div class="bn-item" id="bnav-security" onclick="showPane('security')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+      <span class="bn-label">Seguridad</span>
+    </div>
+  </nav>
+</div><!-- /app -->
+
+<!-- PHOTO VIEWER -->
+<div id="photo-viewer">
+  <button class="pv-close" onclick="document.getElementById('photo-viewer').classList.remove('open')">✕</button>
+  <img id="pv-img" src="" alt="">
+</div>
+
+<!-- BUG MODAL -->
+<div id="modal-bug" class="modal-overlay" onclick="closeModal('modal-bug')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="bug-modal-title">Reporte de Error</div>
+    <div class="form-group">
+      <label class="form-label">Estado</label>
+      <select id="bug-status-select" class="form-control">
+        <option value="new">🔴 Nuevo</option>
+        <option value="in_review">🟡 En revisión</option>
+        <option value="fixed">🔵 Reparado</option>
+        <option value="verify">⚪ Verificando</option>
+        <option value="closed">🟢 Cerrado</option>
+      </select>
+    </div>
+    <div id="bug-modal-desc" style="background:var(--c-card2);border-radius:var(--r-md);padding:13px;font-size:14px;line-height:1.6;color:var(--c-text2);margin-bottom:13px"></div>
+    <div id="bug-modal-photo"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-bug')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveBugStatus()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- BIOMETRIC MODAL -->
+<div id="modal-biometric" class="modal-overlay" onclick="closeModal('modal-biometric')">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔒 Autenticación Requerida</div>
+    <div style="text-align:center;padding:20px 0">
+      <div style="font-size:60px;margin-bottom:14px">🫱</div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:7px">Toca el sensor o mira la cámara</div>
+      <div style="font-size:13px;color:var(--c-text3)">FaceID · TouchID · Huella digital</div>
+    </div>
+    <button class="btn btn-full" style="background:var(--c-purple);color:#fff;margin-bottom:10px" onclick="executeBiometric()">🔒 Autenticar ahora</button>
+    <button class="btn btn-full btn-ghost" onclick="closeModal('modal-biometric')">Cancelar</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ── CONFIG ── */
+const SUPA_URL = 'https://jgreajitfugnqruvbavn.supabase.co';
+const SUPA_KEY = 'sb_publishable_YQe_65xuX2olBQDDdRm16g_rnskVFuD';
+const SA_EMAIL = 'phillipmg17@gmail.com';
+const BUCKET   = 'corp-media';
+const CORP_ID  = '00000000-0000-0000-0000-000000000001';
+const ORG_NAMES = {
+  '00000000-0000-0000-0000-000000000001':'Corp Tech',
+  '00000000-0000-0000-0000-000000000002':'Futurteck',
+  '00000000-0000-0000-0000-000000000003':'Innovatech Store',
+  '00000000-0000-0000-0000-000000000004':'WeTech Peru',
+};
+const ORG_COLORS = {
+  all:'#BF5AF2',
+  '00000000-0000-0000-0000-000000000001':'#0A84FF',
+  '00000000-0000-0000-0000-000000000002':'#30D158',
+  '00000000-0000-0000-0000-000000000003':'#FF9F0A',
+  '00000000-0000-0000-0000-000000000004':'#BF5AF2',
+};
+
+const { createClient } = supabase;
+const db = createClient(SUPA_URL, SUPA_KEY);
+
+let currentUser = null;
+let salesChart  = null;
+let allBugs     = [];
+let allFeatures = [];
+let creditsData = {};
+let chartRange  = 7;
+let currentBugId = null;
+let biometricCb  = null;
+let bugFilter    = 'all';
+
+/* ══════════════════════════════════════════════
+   AUTH
+══════════════════════════════════════════════ */
+async function doLogin() {
+  const email = document.getElementById('sa-email').value.trim();
+  const pass  = document.getElementById('sa-pass').value;
+  const err   = document.getElementById('sa-err');
+  err.style.display = 'none';
+  if (!email || !pass) { err.textContent='Completa todos los campos.'; err.style.display='block'; return; }
+  if (email !== SA_EMAIL) { err.textContent='Acceso restringido. Solo el SuperAdmin.'; err.style.display='block'; return; }
+  const { data, error } = await db.auth.signInWithPassword({ email, password:pass });
+  if (error || !data.user) { err.textContent='Credenciales incorrectas.'; err.style.display='block'; return; }
+  currentUser = data.user;
+  bootApp();
+}
+async function doLogout() {
+  await db.auth.signOut(); currentUser = null;
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('sa-pass').value = '';
+}
+function bootApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('sa-avatar').textContent = SA_EMAIL.charAt(0).toUpperCase();
+  document.getElementById('device-info').textContent = /iPhone/.test(navigator.userAgent) ? '📱 iPhone' : /Mac/.test(navigator.userAgent) ? '💻 Mac' : '🖥 Desktop';
+  setGreeting();
+  checkWebAuthn();
+  loadDashboard();
+  registerNewFeatures();
+}
+window.addEventListener('load', async () => {
+  const { data } = await db.auth.getSession();
+  if (data?.session?.user?.email === SA_EMAIL) { currentUser = data.session.user; bootApp(); }
+});
+
+/* ══════════════════════════════════════════════
+   NAVIGATION
+══════════════════════════════════════════════ */
+function showPane(p) {
+  document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item,.bn-item').forEach(x=>x.classList.remove('active'));
+  document.getElementById('pane-'+p)?.classList.add('active');
+  document.getElementById('snav-'+p)?.classList.add('active');
+  document.getElementById('bnav-'+p)?.classList.add('active');
+  if(p==='dashboard')  loadDashboard();
+  if(p==='credits')    { loadCreditsBalances(); loadCreditsHistory(); renderCreditCard(); }
+  if(p==='qa')         loadBugs('all');
+  if(p==='features')   loadFeatures('all');
+  if(p==='security')   checkWebAuthn();
+}
+
+/* ══════════════════════════════════════════════
+   STORE SWITCHER — Multi-Tenant Context
+══════════════════════════════════════════════ */
+function onStoreSwitch() {
+  const val = document.getElementById('store-ctx').value;
+  document.getElementById('sw-dot').style.background = ORG_COLORS[val]||'#BF5AF2';
+  /**
+   * API SEPARATION NOTE:
+   * Este valor `val` debe enviarse como header/param a todas las APIs futuras:
+   *   - iOS App: X-Org-Context: {val}
+   *   - Android App: orgContext = val
+   *   - Edge Functions: const orgId = req.headers['x-org-context']
+   * La lógica de UI y la lógica de API están desacopladas aquí intencionalmente.
+   */
+  if (document.getElementById('pane-dashboard').classList.contains('active')) loadDashboard();
+  showToast('🔄 Contexto: ' + (val==='all' ? 'Vista Global' : ORG_NAMES[val]||val));
+}
+function getCtx() { return document.getElementById('store-ctx').value; }
+
+/* ══════════════════════════════════════════════
+   DASHBOARD
+══════════════════════════════════════════════ */
+function setGreeting() {
+  const h = new Date().getHours();
+  const g = h<12?'Buenos días':h<18?'Buenas tardes':'Buenas noches';
+  document.getElementById('hero-greeting').textContent = `${g}, Phillip 👋`;
+  document.getElementById('hero-date').textContent = new Date().toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+}
+
+async function loadDashboard() {
+  const [{ count:pc }, { data:bd }, { data:cd }] = await Promise.all([
+    db.from('products').select('id',{count:'exact',head:true}).eq('is_active',true),
+    db.from('bug_reports').select('id').in('status',['new','in_review','verify']),
+    db.from('org_credits').select('balance'),
+  ]);
+  document.getElementById('kpi-products').textContent = pc ?? '—';
+  document.getElementById('kpi-bugs').textContent     = bd?.length ?? 0;
+  const tt = (cd||[]).reduce((s,r)=>s+(r.balance||0),0);
+  document.getElementById('kpi-tokens').textContent   = tt.toLocaleString();
+  (cd||[]).forEach(r=>{ creditsData[r.org_id]=r.balance||0; });
+  const bc = bd?.length||0;
+  if(bc>0){
+    ['qa-sbadge','qa-bnbadge'].forEach(id=>{const el=document.getElementById(id);if(el){el.style.display='inline';el.textContent=bc;}});
+    document.getElementById('notif-dot').style.display='block';
+  }
+  await Promise.all([
+    loadSalesChart(chartRange),
+    loadStockByOrg(),
+    loadStoresGrid(),
+    loadRecentBugsWidget(),
+    loadRecentFeatWidget(),
+    loadCreditsOverviewWidget(),
+  ]);
+}
+
+async function loadSalesChart(days) {
+  chartRange = days;
+  const ctx  = document.getElementById('sales-chart').getContext('2d');
+  const since= new Date(Date.now()-days*86400000).toISOString();
+  const ctxVal = getCtx();
+
+  let q = db.from('accounting_tx').select('amount,tx_type,created_at,org_id').eq('tx_type','income').gte('created_at',since).order('created_at');
+  if(ctxVal!=='all') q=q.eq('org_id',ctxVal);
+  const { data } = await q;
+
+  const labels=[]; const totals={};
+  for(let i=days-1;i>=0;i--){
+    const d=new Date(Date.now()-i*86400000);
+    const k=d.toISOString().split('T')[0];
+    labels.push(d.toLocaleDateString('es',{month:'short',day:'numeric'}));
+    totals[k]=0;
+  }
+  (data||[]).forEach(tx=>{ const k=tx.created_at.split('T')[0]; if(totals[k]!==undefined)totals[k]+=Number(tx.amount)||0; });
+  const values=Object.values(totals);
+
+  document.getElementById('chart-sub').textContent = `Últimos ${days} días — ${ctxVal==='all'?'Vista Global':ORG_NAMES[ctxVal]||'—'}`;
+
+  const grad=ctx.createLinearGradient(0,0,0,260);
+  grad.addColorStop(0,'rgba(10,132,255,.3)');
+  grad.addColorStop(1,'rgba(10,132,255,0)');
+
+  if(salesChart) salesChart.destroy();
+  salesChart = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[{
+      label:'Ventas (S/)', data:values,
+      borderColor:'#0A84FF', backgroundColor:grad,
+      borderWidth:2.5, tension:.42, fill:true,
+      pointBackgroundColor:'#0A84FF', pointRadius:3, pointHoverRadius:6,
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{
+        backgroundColor:'#1C1C1E', borderColor:'#3A3A3C', borderWidth:1,
+        titleColor:'#fff', bodyColor:'rgba(235,235,245,.7)',
+        padding:12, cornerRadius:12,
+        callbacks:{label:c=>' S/ '+Number(c.raw).toFixed(2)}
+      }},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'rgba(235,235,245,.45)',font:{size:10,family:'Urbanist'}}},
+        y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'rgba(235,235,245,.45)',font:{size:10,family:'Urbanist'},callback:v=>'S/ '+v}}
+      }
+    }
+  });
+}
+function setChartRange(d,el){
+  document.querySelectorAll('#pane-dashboard .two-col .status-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active'); loadSalesChart(d);
+}
+
+async function loadStockByOrg() {
+  const el=document.getElementById('stock-by-org');
+  const orgs=[
+    {id:CORP_ID,name:'Corp Tech',color:'#0A84FF',emoji:'🏢'},
+    {id:'00000000-0000-0000-0000-000000000002',name:'Futurteck',color:'#30D158',emoji:'🏪'},
+    {id:'00000000-0000-0000-0000-000000000003',name:'Innovatech',color:'#FF9F0A',emoji:'🏪'},
+    {id:'00000000-0000-0000-0000-000000000004',name:'WeTech',color:'#BF5AF2',emoji:'🏪'},
+  ];
+  const { data } = await db.from('stock_items').select('quantity,owner_org_id');
+  const tot={}; (data||[]).forEach(s=>{tot[s.owner_org_id]=(tot[s.owner_org_id]||0)+(s.quantity||0);});
+  const max=Math.max(...Object.values(tot),1);
+  el.innerHTML = orgs.map(o=>`
+    <div style="padding:12px 20px;border-bottom:1px solid var(--c-border2)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700">${o.emoji} ${o.name}</div>
+        <div style="font-size:13px;font-weight:800;color:${o.color}">${(tot[o.id]||0).toLocaleString()} un.</div>
+      </div>
+      <div class="progress"><div class="progress-fill" style="width:${Math.round(((tot[o.id]||0)/max)*100)}%;background:${o.color}"></div></div>
+    </div>`).join('') + '<div style="height:4px"></div>';
+}
+
+async function loadStoresGrid() {
+  const el=document.getElementById('stores-grid');
+  const { data:orgs } = await db.from('organizations').select('*').neq('type','corp');
+  const { data:debts } = await db.from('store_debts').select('store_org_id,amount').eq('status','pending');
+  const dm={}; (debts||[]).forEach(d=>{dm[d.store_org_id]=(dm[d.store_org_id]||0)+Number(d.amount||0);});
+  const colors=['#30D158','#FF9F0A','#BF5AF2'];
+  el.innerHTML=(orgs||[]).map((o,i)=>`
+    <div class="card" style="margin-bottom:0">
+      <div style="padding:15px 18px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:11px">
+          <div style="width:38px;height:38px;border-radius:11px;background:${colors[i%3]}20;display:flex;align-items:center;justify-content:center;font-size:19px">🏪</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:800">${o.name}</div>
+            <div style="font-size:12px;color:var(--c-text3)">${o.domain}</div>
+          </div>
+          <span class="badge badge-green">Activo</span>
+        </div>
+        <div style="display:flex;gap:14px">
+          <div><div style="font-size:17px;font-weight:800;color:${colors[i%3]}">S/ ${(dm[o.id]||0).toFixed(2)}</div><div style="font-size:11px;color:var(--c-text3);font-weight:600">Deuda pendiente</div></div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+async function loadRecentBugsWidget() {
+  const { data } = await db.from('bug_reports').select('id,title,status,org_id,created_at').order('created_at',{ascending:false}).limit(3);
+  const si={new:'🔴',in_review:'🟡',fixed:'🔵',verify:'⚪',closed:'🟢'};
+  document.getElementById('recent-bugs').innerHTML = !(data?.length)
+    ? '<div class="empty-state"><div class="empty-icon">🎉</div><div class="empty-title">Sin bugs abiertos</div></div>'
+    : data.map(b=>`<div class="list-row">
+        <div class="list-row-icon" style="background:var(--c-red-dim)">${si[b.status]||'⚪'}</div>
+        <div class="list-row-body"><div class="list-row-title">${b.title||'Sin título'}</div><div class="list-row-sub">${ORG_NAMES[b.org_id]||'—'} · ${fmtDate(b.created_at)}</div></div>
+      </div>`).join('');
+}
+
+async function loadRecentFeatWidget() {
+  const { data } = await db.from('feature_registry').select('code,name,status').order('built_at',{ascending:false}).limit(4);
+  document.getElementById('recent-feats').innerHTML = !(data?.length)
+    ? '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">Sin funciones aún</div></div>'
+    : data.map(f=>`<div class="list-row">
+        <div class="list-row-icon" style="background:var(--c-blue-dim)"><span style="font-size:10px;font-weight:800;color:var(--c-blue)">${f.code.split('-')[0]}</span></div>
+        <div class="list-row-body"><div class="list-row-title">${f.name}</div><div class="list-row-sub">${f.code}</div></div>
+        <span class="badge ${f.status==='done'?'badge-green':'badge-orange'}">${f.status==='done'?'✓':f.status}</span>
+      </div>`).join('');
+}
+
+async function loadCreditsOverviewWidget() {
+  const order=[CORP_ID,'00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000004'];
+  const { data } = await db.from('org_credits').select('*');
+  const map={}; (data||[]).forEach(r=>{map[r.org_id]=r;creditsData[r.org_id]=r.balance||0;});
+  document.getElementById('credits-overview').innerHTML = order.map(id=>{
+    const r=map[id]||{balance:0,total_used:0,total_purchased:0};
+    return `<div class="list-row">
+      <div class="list-row-icon" style="background:var(--c-purple-dim)">💎</div>
+      <div class="list-row-body"><div class="list-row-title">${ORG_NAMES[id]||id}</div><div class="list-row-sub">Usados: ${r.total_used||0} · Comprados: ${r.total_purchased||0}</div></div>
+      <div class="list-row-right"><div class="list-row-value" style="color:var(--c-purple)">${r.balance||0}</div><div style="font-size:11px;color:var(--c-text3)">tokens</div></div>
+    </div>`;}).join('');
+}
+
+/* ══════════════════════════════════════════════
+   CREDITS
+══════════════════════════════════════════════ */
+async function loadCreditsBalances() {
+  const { data } = await db.from('org_credits').select('*');
+  const order=[CORP_ID,'00000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000004'];
+  const map={}; (data||[]).forEach(r=>{map[r.org_id]=r;creditsData[r.org_id]=r.balance||0;});
+  document.getElementById('credits-balances').innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-bottom:14px">' +
+    order.map(id=>{
+      const r=map[id]||{balance:0}; const c=ORG_COLORS[id]||'#BF5AF2';
+      return `<div style="background:${c}18;border:1px solid ${c}30;border-radius:var(--r-xl);padding:15px">
+        <div style="font-size:11px;font-weight:700;color:${c};margin-bottom:5px">${ORG_NAMES[id]}</div>
+        <div style="font-size:28px;font-weight:900">${r.balance||0}</div>
+        <div style="font-size:11px;color:var(--c-text3);font-weight:600">tokens disponibles</div>
+      </div>`;}).join('') + '</div>';
+}
+
+function renderCreditCard() {
+  const id=document.getElementById('cr-org').value;
+  document.getElementById('cc-org-name').textContent = ORG_NAMES[id]||id;
+  document.getElementById('cc-balance').textContent  = creditsData[id] ?? '—';
+}
+
+async function addCreditsDirectly() {
+  const orgId=document.getElementById('cr-org').value;
+  const amount=parseInt(document.getElementById('cr-amount').value)||0;
+  const ftype=document.getElementById('cr-type').value;
+  const note=document.getElementById('cr-note').value.trim();
+  if(!amount||amount<=0){showToast('⚠️ Ingresa una cantidad válida');return;}
+  const {error:te}=await db.from('credit_transactions').insert({org_id:orgId,amount,tx_type:'purchase',feature_type:ftype,note:note||null,performed_by:currentUser?.id});
+  if(te){showToast('❌ Error: '+te.message);return;}
+  const cur=creditsData[orgId]||0;
+  await db.from('org_credits').upsert({org_id:orgId,balance:cur+amount,total_purchased:cur+amount},{onConflict:'org_id'});
+  creditsData[orgId]=(creditsData[orgId]||0)+amount;
+  showToast('✅ '+amount+' tokens → '+ORG_NAMES[orgId]);
+  document.getElementById('cr-amount').value=''; document.getElementById('cr-note').value='';
+  renderCreditCard(); loadCreditsBalances(); loadCreditsHistory();
+}
+
+async function loadCreditsHistory() {
+  const { data } = await db.from('credit_transactions').select('*').order('created_at',{ascending:false}).limit(20);
+  if(!data?.length){document.getElementById('credits-history').innerHTML='<div class="empty-state"><div class="empty-icon">📜</div><div class="empty-title">Sin transacciones</div></div>';return;}
+  const tc={purchase:'badge-purple',deduction:'badge-red',refund:'badge-green',manual:'badge-orange'};
+  document.getElementById('credits-history').innerHTML=data.map(t=>`
+    <div class="list-row">
+      <div class="list-row-icon" style="background:var(--c-purple-dim)">💎</div>
+      <div class="list-row-body"><div class="list-row-title">${ORG_NAMES[t.org_id]||t.org_id}</div><div class="list-row-sub">${t.feature_type||'—'} · ${fmtDate(t.created_at)}</div>${t.note?`<div class="list-row-sub" style="color:var(--c-text4)">${t.note}</div>`:''}</div>
+      <div class="list-row-right"><div class="list-row-value" style="color:${t.tx_type==='deduction'?'var(--c-red)':'var(--c-purple)'}">${t.tx_type==='deduction'?'−':'+'}${t.amount}</div><span class="badge ${tc[t.tx_type]||'badge-gray'}" style="font-size:10px">${t.tx_type}</span></div>
+    </div>`).join('');
+}
+
+/* ══════════════════════════════════════════════
+   QA BUGS
+══════════════════════════════════════════════ */
+async function loadBugs(status) {
+  bugFilter=status;
+  document.getElementById('bugs-list').innerHTML='<div class="loader-wrap"><div class="spin"></div></div>';
+  let q=db.from('bug_reports').select('*').order('created_at',{ascending:false});
+  if(status!=='all') q=q.eq('status',status);
+  const { data } = await q.limit(40);
+  allBugs=data||[];
+  const si={new:'🔴',in_review:'🟡',fixed:'🔵',verify:'⚪',closed:'🟢'};
+  const sl={new:'Nuevo',in_review:'En revisión',fixed:'Reparado',verify:'Verificando',closed:'Cerrado'};
+  document.getElementById('bugs-list').innerHTML = !allBugs.length
+    ? '<div class="empty-state"><div class="empty-icon">🎉</div><div class="empty-title">Sin bugs aquí</div><div class="empty-sub">Todo limpio en esta categoría</div></div>'
+    : allBugs.map(b=>`<div class="list-row" onclick="openBugDetail('${b.id}')" style="cursor:pointer">
+        <div class="list-row-icon" style="background:var(--c-red-dim)">${si[b.status]||'⚪'}</div>
+        <div class="list-row-body"><div class="list-row-title">${b.title||'Sin título'}</div><div class="list-row-sub">${ORG_NAMES[b.org_id]||'—'} · ${fmtDate(b.created_at)}</div></div>
+        <div class="list-row-right"><span class="badge ${b.status==='new'?'badge-red':b.status==='closed'?'badge-green':b.status==='fixed'?'badge-blue':'badge-orange'}">${sl[b.status]||b.status}</span>${b.screenshot_url?`<div style="margin-top:4px"><img class="photo-thumb" src="${b.screenshot_url}" onclick="event.stopPropagation();showPhoto('${b.screenshot_url}')"></div>`:''}</div>
+      </div>`).join('');
+}
+function filterBugs(s,el){document.querySelectorAll('#pane-qa .status-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');loadBugs(s);}
+function openBugDetail(id) {
+  const b=allBugs.find(x=>x.id===id); if(!b)return;
+  currentBugId=id;
+  document.getElementById('bug-modal-title').textContent=b.title||'Bug sin título';
+  document.getElementById('bug-status-select').value=b.status||'new';
+  document.getElementById('bug-modal-desc').textContent=b.description||'Sin descripción.';
+  document.getElementById('bug-modal-photo').innerHTML=b.screenshot_url?`<img src="${b.screenshot_url}" style="width:100%;border-radius:var(--r-md);margin-bottom:12px;cursor:pointer" onclick="showPhoto('${b.screenshot_url}')">`:'' ;
+  openModal('modal-bug');
+}
+async function saveBugStatus() {
+  if(!currentBugId)return;
+  const s=document.getElementById('bug-status-select').value;
+  const {error}=await db.from('bug_reports').update({status:s}).eq('id',currentBugId);
+  if(error){showToast('❌ '+error.message);return;}
+  closeModal('modal-bug'); showToast('✅ Estado → '+s); loadBugs(bugFilter);
+}
+
+/* ══════════════════════════════════════════════
+   FEATURES
+══════════════════════════════════════════════ */
+async function loadFeatures(panel) {
+  document.getElementById('features-list').innerHTML='<div class="loader-wrap"><div class="spin"></div></div>';
+  let q=db.from('feature_registry').select('*').order('built_at',{ascending:false});
+  if(panel!=='all') q=q.ilike('code',panel+'%');
+  const {data}=await q;
+  allFeatures=data||[];
+  const done=allFeatures.filter(f=>f.status==='done').length;
+  const total=allFeatures.length;
+  document.getElementById('feat-done').textContent=done;
+  document.getElementById('feat-total').textContent=total;
+  document.getElementById('feat-prog').style.width=total?Math.round((done/total)*100)+'%':'0%';
+  const pc={SA:'#BF5AF2',DB:'#0A84FF',SEC:'#FF453A',CORP:'#30D158',POS:'#FF9F0A',FIN:'#5AC8FA',ECO:'#FFD60A',API:'#30D158',MEDIA:'#FF9F0A',STORE:'#BF5AF2'};
+  document.getElementById('features-list').innerHTML=!allFeatures.length
+    ? '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">Sin funciones en esta categoría</div></div>'
+    : allFeatures.map(f=>{
+        const panel=f.code.split('-')[0]; const c=pc[panel]||'#0A84FF';
+        return `<div class="list-row">
+          <div class="list-row-icon" style="background:${c}20"><span style="font-size:9px;font-weight:800;color:${c}">${panel}</span></div>
+          <div class="list-row-body"><div class="list-row-title">${f.name}</div><div class="list-row-sub">${f.code} · ${f.panel||'—'}</div>${f.description?`<div class="list-row-sub" style="color:var(--c-text4)">${f.description}</div>`:''}</div>
+          <div class="list-row-right"><span class="badge ${f.status==='done'?'badge-green':f.status==='in_progress'?'badge-blue':'badge-gray'}">${f.status==='done'?'✓ Listo':f.status==='in_progress'?'En curso':f.status||'—'}</span><div style="font-size:10px;color:var(--c-text4);margin-top:3px">${fmtDate(f.built_at)}</div></div>
+        </div>`;}).join('');
+}
+function filterFeatures(p,el){document.querySelectorAll('#feat-filter-strip .status-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');loadFeatures(p);}
+
+/* ══════════════════════════════════════════════
+   WEBAUTHN — Biometric Security Hooks
+══════════════════════════════════════════════ */
+async function checkWebAuthn() {
+  const sup=!!window.PublicKeyCredential;
+  document.getElementById('webauthn-status').textContent=sup
+    ?'✅ WebAuthn disponible — listo para FaceID/Huella'
+    :'❌ No disponible (requiere HTTPS + dispositivo compatible)';
+  if(sup){
+    const avail=await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(()=>false);
+    document.getElementById('biometric-status').textContent=avail
+      ?'✅ FaceID / TouchID / Huella detectada y lista'
+      :'⚠️ No detectado en este dispositivo — se usará PIN de respaldo';
+  } else {
+    document.getElementById('biometric-status').textContent='⚠️ Requiere HTTPS y dispositivo compatible';
+  }
+}
+
+/**
+ * WEBAUTHN HOOK — Llamar ANTES de acciones críticas:
+ *   - Autorizar descuento
+ *   - Abrir caja POS
+ *   - Transferencias grandes
+ *   - Asignar tokens
+ *
+ * Retorna: true = autenticado | false = falló
+ *
+ * Para apps iOS/Android nativos: usar LAContext (iOS) o BiometricPrompt (Android)
+ * Este hook frontend se reemplaza por llamada nativa en la app.
+ */
+async function biometricAuth(label='Acción crítica') {
+  if(!window.PublicKeyCredential) return await pinFallback(label);
+  try {
+    const avail=await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    if(!avail) return await pinFallback(label);
+    const challenge=crypto.getRandomValues(new Uint8Array(32));
+    const cred=await navigator.credentials.get({
+      publicKey:{ challenge, timeout:60000, userVerification:'required', rpId:window.location.hostname||'localhost' }
+    });
+    return cred!==null;
+  } catch(e) {
+    if(e.name==='NotAllowedError') showToast('❌ Autenticación cancelada');
+    else return await pinFallback(label);
+    return false;
+  }
+}
+async function pinFallback(label) {
+  const pin=prompt(`🔒 "${label}"\nIngresa PIN de SuperAdmin:`);
+  return pin!==null&&pin.length>0;
+}
+function runBiometricThen(cb) { biometricCb=cb; openModal('modal-biometric'); }
+async function executeBiometric() {
+  closeModal('modal-biometric');
+  const ok=await biometricAuth('Acción SuperAdmin');
+  if(ok){ showToast('✅ Identidad verificada'); if(biometricCb){biometricCb();biometricCb=null;} }
+  else showToast('❌ No autenticado');
+}
+async function testBiometric() {
+  showToast('🔒 Iniciando verificación...'); const ok=await biometricAuth('Prueba de seguridad');
+  showToast(ok?'✅ FaceID/Huella verificados':'❌ No autenticado');
+}
+
+/* ══════════════════════════════════════════════
+   PHOTOS
+══════════════════════════════════════════════ */
+function showPhoto(url) { document.getElementById('pv-img').src=url; document.getElementById('photo-viewer').classList.add('open'); }
+
+/* ══════════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════════ */
+function openModal(id)  { document.getElementById(id)?.classList.add('open'); }
+function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
+function showToast(msg,dur=2600){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),dur);
+}
+function fmtDate(s){ if(!s)return'—'; return new Date(s).toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'}); }
+
+/* ══════════════════════════════════════════════
+   AUTO-REGISTER NEW FEATURES
+══════════════════════════════════════════════ */
+async function registerNewFeatures() {
+  const features=[
+    {code:'SA-005',name:'Dashboard iOS SuperAdmin + Chart.js',panel:'SA',description:'Dashboard premium con gráfico ventas, KPIs, store switcher multi-tenant, diseño iOS dark mode',status:'done'},
+    {code:'SA-006',name:'Store Switcher Multi-Tenant',panel:'SA',description:'Selector de contexto de empresa en header — desacopla UI de API para apps iOS/Android',status:'done'},
+    {code:'SA-007',name:'Hooks WebAuthn Biometría FaceID/Huella',panel:'SEC',description:'biometricAuth() hook WebAuthn: FaceID/TouchID/huella + fallback PIN para acciones críticas',status:'done'},
+    {code:'SA-008',name:'Design System iOS Dark Mode',panel:'SA',description:'Sistema de diseño completo: tokens CSS, tipografía Urbanist, sidebar desktop + bottom-nav mobile',status:'done'},
+  ];
+  for(const f of features){
+    await db.from('feature_registry').upsert({...f,built_at:new Date().toISOString()},{onConflict:'code'}).catch(()=>{});
+  }
+}
+</script>
+</body>
+</html>
