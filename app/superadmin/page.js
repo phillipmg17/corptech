@@ -175,6 +175,38 @@ export default function SuperadminPage() {
     showToast('Test actualizado ✓');
   }
 
+  /* ── Sincronizar QA desde feature_registry ── */
+  const [syncing, setSyncing] = useState(false);
+  async function syncQAFromFeatures() {
+    setSyncing(true);
+    // Cargar features y qa_test_cases actuales
+    const { data: allFeatures } = await supabase.from('feature_registry').select('code, name, panel, description');
+    const { data: existingQA }  = await supabase.from('qa_test_cases').select('feature_code');
+    const existingCodes = new Set((existingQA || []).map(q => q.feature_code));
+    const newFeatures   = (allFeatures || []).filter(f => !existingCodes.has(f.code));
+
+    if (newFeatures.length === 0) {
+      showToast('Todo al día — sin funciones nuevas que sincronizar ✓');
+      setSyncing(false);
+      return;
+    }
+
+    const rows = newFeatures.map(f => ({
+      feature_code:    f.code,
+      name:            `Verificar: ${f.name}`,
+      steps:           `1. Abrir panel ${f.panel || f.code.split('-')[0]}\n2. Ejecutar función "${f.name}"\n3. Verificar resultado esperado`,
+      expected_result: `La función "${f.name}" debe ejecutarse sin errores y mostrar el resultado correcto.`,
+      status:          'pending',
+    }));
+
+    const { error } = await supabase.from('qa_test_cases').insert(rows);
+    if (error) { showToast('Error: ' + error.message, 'err'); setSyncing(false); return; }
+
+    showToast(`✅ ${newFeatures.length} caso${newFeatures.length !== 1 ? 's' : ''} de QA generado${newFeatures.length !== 1 ? 's' : ''}`);
+    await loadQA();
+    setSyncing(false);
+  }
+
   async function doLogout() {
     await supabase.auth.signOut();
     router.replace('/');
@@ -465,9 +497,30 @@ export default function SuperadminPage() {
         {/* ── QA ── */}
         {tab === 'qa' && (
           <div style={{ padding: '16px' }}>
-            <div className="section-title">🧪 Casos de prueba ({qaTests.length})</div>
+            {/* Header con botón sync */}
+            <div className="section-header" style={{ marginBottom: 12 }}>
+              <div>
+                <div className="section-title" style={{ marginBottom: 2 }}>🧪 Control de Calidad</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                  {qaTests.filter(t => t.status === 'passed').length} ✅ · {qaTests.filter(t => t.status === 'failed').length} ❌ · {qaTests.filter(t => t.status === 'pending').length} ⏳
+                </div>
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={syncQAFromFeatures}
+                disabled={syncing}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                {syncing ? '⏳ Sincronizando...' : '🔄 Sincronizar QA'}
+              </button>
+            </div>
+
+            {/* Info box */}
+            <div style={{ background: 'rgba(0,122,255,0.08)', border: '1px solid rgba(0,122,255,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: 'var(--text3)' }}>
+              💡 El botón <b style={{ color: 'var(--blue)' }}>Sincronizar QA</b> genera automáticamente un caso de prueba por cada función nueva en el registro. Nunca se borra lo existente.
+            </div>
+
             {qaTests.length === 0 ? (
-              <div className="empty-msg">Sin casos de prueba registrados</div>
+              <div className="empty-msg">Sin casos de prueba — presiona Sincronizar QA para generarlos</div>
             ) : (
               qaTests.map(t => {
                 const sc = STATUS_COLORS[t.status] || STATUS_COLORS.pending;
@@ -480,7 +533,7 @@ export default function SuperadminPage() {
                           <span style={{ fontWeight: 800, fontSize: 14 }}>{t.name}</span>
                         </div>
                         {t.steps && (
-                          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>📋 {t.steps}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4, whiteSpace: 'pre-line' }}>📋 {t.steps}</div>
                         )}
                         {t.expected_result && (
                           <div style={{ fontSize: 12, color: 'var(--text3)' }}>✔️ {t.expected_result}</div>
