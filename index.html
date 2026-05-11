@@ -1007,10 +1007,10 @@ const ORGS = {
    3 · API EXTERNAS — STUBS LISTOS
    ══════════════════════════════════════ */
 
-// ── ExchangeRate (gratis, sin key) ─────────────
-// Docs: https://www.exchangerate-api.com/docs/free
-// Límite: 1500 req/mes gratis
-const FX_URL = 'https://open.er-api.com/v6/latest/USD';
+// ── ExchangeRate (gratis, sin key, sin límite) ──
+// Frankfurter: open-source, CORS nativo, sin registro
+const FX_URL  = 'https://api.frankfurter.app/latest?from=USD&to=PEN';
+const FX_URL2 = 'https://open.er-api.com/v6/latest/USD'; // fallback
 
 // ── Sickw IMEI Validation ──────────────────────
 // Docs: https://sickw.com/api-docs
@@ -1118,7 +1118,7 @@ async function boot() {
   const { data: profile, error } = await db
     .from('users')
     .select('*, organizations(*)')
-    .eq('auth_id', me.id)
+    .eq('id', me.id)
     .maybeSingle();
 
   if (error || !profile) {
@@ -1203,15 +1203,50 @@ const NAV_STORE = [
   {id:'cfg',      ico:'⚙️', lbl:'Cuenta',  pane:'p-cfg'},
 ];
 
+// Links externos por rol
+const QUICK_LINKS = {
+  superadmin: [
+    {ico:'🛒', lbl:'Punto de Venta',   href:'./pos.html'},
+    {ico:'🏪', lbl:'Panel de Tienda',  href:'./store_admin.html'},
+    {ico:'🏢', lbl:'Panel Corp',       href:'./corp_admin.html'},
+    {ico:'⚡', lbl:'SuperAdmin',       href:'./superadmin_panel.html'},
+  ],
+  corp: [
+    {ico:'🏢', lbl:'Panel Corp',       href:'./corp_admin.html'},
+    {ico:'🏪', lbl:'Panel de Tienda',  href:'./store_admin.html'},
+    {ico:'🛒', lbl:'Punto de Venta',   href:'./pos.html'},
+  ],
+  store: [
+    {ico:'🛒', lbl:'Punto de Venta',   href:'./pos.html'},
+    {ico:'🏪', lbl:'Panel de Tienda',  href:'./store_admin.html'},
+  ],
+};
+
 function buildNav(role) {
   const items = (role==='superadmin'||role==='corp') ? NAV_CORP : NAV_STORE;
+
+  // Menú principal (panes internos)
   const sb = items.map(n=>`
     <div class="ni ${n.id==='dashboard'?'on':''}" id="si-${n.id}"
          onclick="goPane('${n.pane}','${n.id}','${n.lbl}')">
       <div class="ni-i">${n.ico}</div>${n.lbl}
     </div>`).join('');
+
+  // Accesos rápidos (links externos)
+  const roleKey = (role==='superadmin') ? 'superadmin' : (role==='corp'||role==='admin_corp') ? 'corp' : 'store';
+  const links = QUICK_LINKS[roleKey] || QUICK_LINKS.store;
+  const quickHtml = links.map(l=>`
+    <a class="ni" href="${l.href}"
+       style="text-decoration:none;color:inherit;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:2px">
+      <div class="ni-i">${l.ico}</div>
+      <span style="flex:1">${l.lbl}</span>
+      <span style="font-size:10px;color:var(--t4)">↗</span>
+    </a>`).join('');
+
   document.getElementById('sb-body').innerHTML =
-    `<div class="nav-lbl">Principal</div>${sb}`;
+    `<div class="nav-lbl">Principal</div>${sb}
+     <div class="nav-lbl" style="margin-top:10px">Accesos Rápidos</div>
+     ${quickHtml}`;
 
   const bn = items.map(n=>`
     <div class="bn ${n.id==='dashboard'?'on':''}" id="bn-${n.id}"
@@ -1219,7 +1254,15 @@ function buildNav(role) {
       <div class="bn-i">${n.ico}</div>
       <div class="bn-l">${n.lbl}</div>
     </div>`).join('');
-  document.getElementById('bnav').innerHTML = bn;
+
+  // Agregar botón POS en bottom nav móvil
+  const posBtn = `
+    <a class="bn" href="./pos.html"
+       style="text-decoration:none;color:inherit;background:var(--accent-d);border-radius:10px">
+      <div class="bn-i">🛒</div>
+      <div class="bn-l">POS</div>
+    </a>`;
+  document.getElementById('bnav').innerHTML = bn + posBtn;
 }
 
 function goPane(pane, navId, title) {
@@ -1286,7 +1329,7 @@ async function corpKPIs(totalV, txN) {
 
 async function storeKPIs(totalV, txN) {
   const [s,c,d] = await Promise.all([
-    db.from('stock_items').select('*',{count:'exact',head:true}).eq('org_id',myOrgId).eq('status','available'),
+    db.from('stock_items').select('*',{count:'exact',head:true}).eq('owner_org_id',myOrgId).eq('status','available'),
     db.from('customers').select('*',{count:'exact',head:true}).eq('org_id',myOrgId),
     db.from('store_debts').select('balance').eq('store_org_id',myOrgId).maybeSingle(),
   ]);
@@ -1309,7 +1352,7 @@ async function orgCards(isCorp) {
     : [{key:myOrgId, oc:ORGS[myOrgKey]||ORGS.corp}];
 
   const counts = await Promise.all(ids.map(o=>
-    db.from('stock_items').select('*',{count:'exact',head:true}).eq('org_id',o.key).eq('status','available')
+    db.from('stock_items').select('*',{count:'exact',head:true}).eq('owner_org_id',o.key).eq('status','available')
   ));
   const max = Math.max(...counts.map(c=>c.count||0), 1);
   document.getElementById('org-cards').innerHTML = ids.map((o,i)=>{
@@ -1457,9 +1500,9 @@ async function loadEvidenceHistory() {
 async function loadStock() {
   const isCorp = myRole==='superadmin'||myRole==='corp';
   let q = db.from('stock_items')
-    .select('id,status,created_at,checkin_photo_url,products(name,brand,sku),imei_registry(imei),organizations(name),prices(price)')
-    .order('created_at',{ascending:false}).limit(60);
-  if(!isCorp) q=q.eq('org_id',myOrgId);
+    .select('id,status,imei,serial_number,purchase_price,created_at,owner_org_id,products(name,brand,model,category,sale_price,emoji),organizations!owner_org_id(name)')
+    .order('created_at',{ascending:false}).limit(100);
+  if(!isCorp) q=q.eq('owner_org_id',myOrgId);
   const {data} = await q;
   allStock = data||[];
   renderStock(allStock);
@@ -1471,16 +1514,16 @@ function renderStock(list) {
   el.innerHTML = list.map(s=>{
     const bc = s.status==='available'?'bg-g':s.status==='sold'?'bg-x':'bg-o';
     const bl = s.status==='available'?'Disponible':s.status==='sold'?'Vendido':'Reservado';
+    const imeiVal = s.imei || s.serial_number || '';
+    const emoji   = s.products?.emoji || '📦';
     return `<div class="gli">
-      ${s.checkin_photo_url
-        ?`<img src="${s.checkin_photo_url}" onclick="openPV('${s.checkin_photo_url}')" style="width:42px;height:42px;object-fit:cover;border-radius:9px;cursor:pointer;flex-shrink:0;border:1px solid var(--stroke)">`
-        :`<div class="gli-ic" style="background:var(--blue-d)">📱</div>`}
+      <div class="gli-ic" style="background:var(--blue-d);font-size:22px">${emoji}</div>
       <div class="gli-m">
-        <div class="gli-t">${s.products?.name||'—'}</div>
-        <div class="gli-s">${s.organizations?.name||''} ${s.imei_registry?.[0]?.imei?'· '+s.imei_registry[0].imei:''}</div>
+        <div class="gli-t">${s.products?.name||'—'} ${s.products?.model?'· '+s.products.model:''}</div>
+        <div class="gli-s">${s.organizations?.name||''} ${imeiVal?'· '+imeiVal:''}</div>
       </div>
       <div class="gli-r">
-        <div class="gli-v" style="font-size:13px">${money(s.prices?.[0]?.price||0)}</div>
+        <div class="gli-v" style="font-size:13px">${money(s.products?.sale_price||s.purchase_price||0)}</div>
         <div class="badge ${bc}">${bl}</div>
       </div>
     </div>`;
@@ -1493,7 +1536,8 @@ function filterStock(q){
   renderStock(allStock.filter(s=>
     (s.products?.name||'').toLowerCase().includes(f)||
     (s.products?.brand||'').toLowerCase().includes(f)||
-    (s.imei_registry?.[0]?.imei||'').includes(f)||
+    (s.imei||'').includes(f)||
+    (s.serial_number||'').includes(f)||
     (s.organizations?.name||'').toLowerCase().includes(f)
   ));
 }
@@ -1542,27 +1586,36 @@ async function saveCheckin(){
    15 · APIS EXTERNAS
    ══════════════════════════════════════ */
 
-// ExchangeRate — gratis, sin key
+// ExchangeRate — gratis, sin key (frankfurter.app)
 async function loadFX(){
+  let rate=null, fecha='';
+  // Intento 1: Frankfurter (open-source, sin límite)
   try{
-    const r=await fetch(FX_URL);
+    const r=await fetch(FX_URL,{cache:'no-store'});
     const d=await r.json();
-    if(d?.rates?.PEN){
-      const rate=d.rates.PEN;
-      const fecha=new Date(d.time_last_update_utc).toLocaleDateString('es-PE');
-      document.getElementById('fx-v').textContent=`S/ ${rate.toFixed(3)}`;
-      document.getElementById('fx-l').textContent=`USD → PEN · ${fecha}`;
-      document.getElementById('dot-fx').className='api-dot live';
-      document.getElementById('val-fx').textContent=`S/ ${rate.toFixed(3)}`;
-      // Guardar en Supabase para cálculos de importación
-      await db.from('exchange_rates').upsert({
-        currency_from:'USD',currency_to:'PEN',
-        rate,fetched_at:new Date().toISOString()
-      },{onConflict:'currency_from,currency_to'}).catch(()=>{});
-    }
-  }catch(e){
+    if(d?.rates?.PEN){ rate=d.rates.PEN; fecha=d.date||''; }
+  }catch(e1){}
+  // Intento 2: open.er-api fallback
+  if(!rate){
+    try{
+      const r=await fetch(FX_URL2,{cache:'no-store'});
+      const d=await r.json();
+      if(d?.rates?.PEN){ rate=d.rates.PEN; fecha=new Date(d.time_last_update_utc).toLocaleDateString('es-PE'); }
+    }catch(e2){}
+  }
+  if(rate){
+    document.getElementById('fx-v').textContent=`S/ ${rate.toFixed(3)}`;
+    document.getElementById('fx-l').textContent=`USD → PEN · ${fecha}`;
+    document.getElementById('dot-fx').className='api-dot live';
+    document.getElementById('val-fx').textContent=`S/ ${rate.toFixed(3)}`;
+    await db.from('exchange_rates').upsert({
+      currency_from:'USD',currency_to:'PEN',
+      rate,fetched_at:new Date().toISOString()
+    },{onConflict:'currency_from,currency_to'}).catch(()=>{});
+  }else{
     document.getElementById('dot-fx').className='api-dot off';
     document.getElementById('fx-l').textContent='Sin conexión · reintenta';
+    document.getElementById('fx-v').textContent='S/ —';
   }
 }
 

@@ -334,11 +334,13 @@ input,select,textarea,button{font-family:var(--font)}
 
   <!-- TOPBAR -->
   <div class="topbar">
+    <button class="topbar-btn" onclick="window.location.href='./index.html'" title="Inicio">🏠</button>
     <div class="topbar-title" id="tb-title">Dashboard</div>
     <div class="store-badge">
       <div class="store-dot" id="tb-dot"></div>
       <span id="tb-store">Tienda</span>
     </div>
+    <button class="topbar-btn" onclick="window.location.href='./pos.html'" title="Ir al POS">🛒</button>
   </div>
 
   <!-- CONTENT -->
@@ -803,7 +805,7 @@ function showAuthErr(msg) {
 async function loadUserProfile() {
   const { data: profile } = await db
     .from('users').select('*, organizations(*)')
-    .eq('auth_id', currentUser.id).single();
+    .eq('id', currentUser.id).single();
 
   if (!profile) { showAuthErr('Usuario no encontrado en el sistema'); return; }
 
