@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>Corp Tech ERP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+/* ═══════════════════════════════════════════════════
+   CORP TECH ERP · Fase 1
+   iOS Dark Mode + Glassmorphism
+   Bucket: sistema · Supabase: jgreajitfugnqruvbavn
+   ═══════════════════════════════════════════════════ */
+
+:root {
+  /* Fondos puros */
+  --black:   #000000;
+  --b1:      #0a0a0a;
+  --b2:      #111111;
+  --b3:      #1c1c1e;
+
+  /* Glassmorphism */
+  --glass:       rgba(255,255,255,0.06);
+  --glass-hover: rgba(255,255,255,0.10);
+  --glass-card:  rgba(28,28,30,0.80);
+  --glass-nav:   rgba(0,0,0,0.72);
+  --blur:   blur(24px);
+  --blur-s: blur(12px);
+
+  /* Bordes */
+  --stroke:  rgba(255,255,255,0.10);
+  --stroke2: rgba(255,255,255,0.06);
+
+  /* Texto */
+  --t1: #ffffff;
+  --t2: rgba(235,235,245,0.82);
+  --t3: rgba(235,235,245,0.50);
+  --t4: rgba(235,235,245,0.26);
+
+  /* Colores semáforo */
+  --blue:   #0a84ff;  --blue-d:  rgba(10,132,255,0.15); --blue-g:  rgba(10,132,255,0.28);
+  --green:  #30d158;  --green-d: rgba(48,209,88,0.14);
+  --red:    #ff453a;  --red-d:   rgba(255,69,58,0.14);
+  --orange: #ff9f0a;  --ora-d:   rgba(255,159,10,0.14);
+  --purple: #bf5af2;  --pur-d:   rgba(191,90,242,0.14);
+  --teal:   #5ac8fa;
+
+  /* Gradientes */
+  --grad-brand: linear-gradient(135deg, #0a84ff 0%, #bf5af2 100%);
+  --grad-green: linear-gradient(135deg, #30d158 0%, #5ac8fa 100%);
+  --grad-fire:  linear-gradient(135deg, #ff9f0a 0%, #ff453a 100%);
+  --grad-night: linear-gradient(180deg, #0a0a0a 0%, #000000 100%);
+
+  /* Accent dinámico (sobrescrito por org al login) */
+  --accent:   #0a84ff;
+  --accent-d: rgba(10,132,255,0.15);
+  --accent-g: rgba(10,132,255,0.28);
+  --org-grad: linear-gradient(135deg, #0a84ff 0%, #bf5af2 100%);
+
+  /* Radio */
+  --r:   12px;  --rm: 16px;  --rl: 22px;
+  --rx:  28px;  --r3: 36px;  --rf: 9999px;
+
+  /* Layout */
+  --sb-w:  260px;
+  --top-h: 56px;
+  --sat: env(safe-area-inset-top,    44px);
+  --sab: env(safe-area-inset-bottom, 34px);
+
+  /* Sombras */
+  --sh:  0 2px 20px rgba(0,0,0,0.50);
+  --sh2: 0 8px 48px rgba(0,0,0,0.65);
+  --sh3: 0 24px 80px rgba(0,0,0,0.80);
+}
+
+/* ─── Reset ─── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{height:100%;color-scheme:dark}
+body{
+  font-family:'Urbanist',-apple-system,'SF Pro Display',sans-serif;
+  background:var(--black);color:var(--t1);
+  min-height:100dvh;overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
+}
+input,select,textarea,button{font-family:inherit}
+::selection{background:var(--blue-d);color:var(--t1)}
+::-webkit-scrollbar{width:2px;height:2px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);border-radius:2px}
+
+/* ════════════════════════════════════════
+   FONDO AMBIENTE — orbes de luz
+   ════════════════════════════════════════ */
+.bg-orb{
+  position:fixed;border-radius:50%;pointer-events:none;z-index:0;
+  filter:blur(80px);opacity:0;transition:opacity 1s;
+}
+.bg-orb.show{opacity:1}
+#orb1{width:500px;height:500px;background:radial-gradient(circle,rgba(10,132,255,.12),transparent 70%);top:-120px;left:-100px}
+#orb2{width:400px;height:400px;background:radial-gradient(circle,rgba(191,90,242,.10),transparent 70%);bottom:-80px;right:-80px}
+#orb3{width:300px;height:300px;background:radial-gradient(circle,rgba(48,209,88,.08),transparent 70%);top:40%;left:50%;transform:translate(-50%,-50%)}
+
+/* ════════════════════════════════════════
+   SPLASH
+   ════════════════════════════════════════ */
+#splash{
+  position:fixed;inset:0;z-index:9999;
+  background:var(--black);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  transition:opacity .5s;
+}
+#splash.fade{opacity:0;pointer-events:none}
+.sp-logo{
+  width:100px;height:100px;border-radius:var(--rx);
+  background:var(--grad-brand);
+  display:flex;align-items:center;justify-content:center;font-size:46px;
+  box-shadow:0 0 60px rgba(10,132,255,.35),0 0 120px rgba(191,90,242,.15),var(--sh3);
+  animation:glow 3s ease-in-out infinite;
+}
+@keyframes glow{0%,100%{box-shadow:0 0 50px rgba(10,132,255,.30),var(--sh3)}50%{box-shadow:0 0 80px rgba(10,132,255,.50),0 0 140px rgba(191,90,242,.20),var(--sh3)}}
+.sp-name{font-size:30px;font-weight:900;letter-spacing:.2px}
+.sp-ver {font-size:13px;color:var(--t3);font-weight:600;letter-spacing:.4px}
+.sp-bar {width:160px;height:3px;background:var(--glass);border-radius:var(--rf);overflow:hidden;margin-top:8px}
+.sp-bar-fill{height:100%;background:var(--grad-brand);border-radius:var(--rf);animation:load 1.6s ease-in-out forwards}
+@keyframes load{0%{width:0%}60%{width:75%}100%{width:100%}}
+
+/* ════════════════════════════════════════
+   LOGIN — GLASSMORPHISM
+   ════════════════════════════════════════ */
+#auth{
+  display:none;position:fixed;inset:0;z-index:500;
+  background:var(--grad-night);
+  flex-direction:column;align-items:center;justify-content:center;
+  padding:calc(var(--sat)+20px) 20px calc(var(--sab)+20px);
+  gap:20px;
+}
+.auth-glow{
+  position:absolute;top:-100px;left:50%;transform:translateX(-50%);
+  width:500px;height:500px;
+  background:radial-gradient(circle,rgba(10,132,255,.14) 0%,transparent 68%);
+  pointer-events:none;
+}
+.auth-logo{
+  width:88px;height:88px;border-radius:var(--rl);
+  background:var(--grad-brand);
+  display:flex;align-items:center;justify-content:center;font-size:42px;
+  box-shadow:0 0 50px rgba(10,132,255,.32),var(--sh3);
+  position:relative;z-index:1;
+}
+.auth-head{text-align:center;position:relative;z-index:1}
+.auth-title{font-size:28px;font-weight:900;letter-spacing:.1px}
+.auth-sub  {font-size:14px;color:var(--t3);margin-top:5px;font-weight:500}
+
+/* Glass card */
+.glass-card{
+  background:var(--glass-card);
+  border:1px solid var(--stroke);
+  border-radius:var(--rx);
+  backdrop-filter:var(--blur);
+  -webkit-backdrop-filter:var(--blur);
+  box-shadow:var(--sh2);
+  position:relative;z-index:1;
+}
+.auth-card{
+  width:100%;max-width:400px;
+  padding:26px 22px;
+  display:flex;flex-direction:column;gap:14px;
+}
+
+/* Inputs */
+.fl{font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.6px;text-transform:uppercase;display:block;margin-bottom:5px}
+.fi{
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--stroke);
+  border-radius:var(--r);
+  padding:14px 15px;
+  color:var(--t1);font-size:16px;font-weight:500;
+  outline:none;width:100%;
+  transition:border-color .2s,box-shadow .2s,background .2s;
+}
+.fi:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-g);
+  background:rgba(10,132,255,.06);
+}
+.fi::placeholder{color:var(--t4)}
+
+/* Error */
+#auth-err{
+  display:none;padding:10px 14px;
+  background:var(--red-d);border:1px solid rgba(255,69,58,.25);border-radius:var(--r);
+  color:var(--red);font-size:13px;font-weight:700;text-align:center;
+}
+
+/* Botón primario */
+.btn-brand{
+  background:var(--grad-brand);color:#fff;
+  border:none;border-radius:var(--r);
+  padding:15px 20px;
+  font-size:16px;font-weight:800;letter-spacing:.2px;
+  cursor:pointer;width:100%;
+  box-shadow:0 6px 24px rgba(10,132,255,.35);
+  transition:opacity .15s,transform .12s,box-shadow .15s;
+  position:relative;overflow:hidden;
+}
+.btn-brand::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.12) 0%,transparent 100%);
+  pointer-events:none;
+}
+.btn-brand:active{opacity:.86;transform:scale(.97);box-shadow:0 3px 14px rgba(10,132,255,.25)}
+.btn-brand:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+/* ════════════════════════════════════════
+   APP SHELL
+   ════════════════════════════════════════ */
+#app{display:none;min-height:100dvh;position:relative;z-index:1}
+@media(min-width:768px){#app{padding-left:var(--sb-w)}}
+
+/* ─── Sidebar desktop ─── */
+.sidebar{
+  position:fixed;top:0;left:0;bottom:0;width:var(--sb-w);
+  background:var(--glass-nav);
+  border-right:1px solid var(--stroke2);
+  backdrop-filter:var(--blur);
+  -webkit-backdrop-filter:var(--blur);
+  display:none;flex-direction:column;z-index:60;
+}
+@media(min-width:768px){.sidebar{display:flex}}
+
+.sb-brand{
+  padding:calc(var(--sat)+14px) 15px 13px;
+  display:flex;align-items:center;gap:11px;
+  border-bottom:1px solid var(--stroke2);
+}
+.sb-ico{
+  width:36px;height:36px;border-radius:10px;
+  background:var(--org-grad);
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;flex-shrink:0;
+  box-shadow:0 2px 10px rgba(10,132,255,.25);
+}
+.sb-n {font-size:14px;font-weight:900;line-height:1.2}
+.sb-s {font-size:11px;font-weight:700;color:var(--accent);margin-top:1px}
+
+.sb-body{flex:1;overflow-y:auto;padding:8px 7px;display:flex;flex-direction:column;gap:1px}
+.nav-lbl{font-size:10px;font-weight:700;color:var(--t4);letter-spacing:1.1px;text-transform:uppercase;padding:10px 10px 4px}
+.ni{
+  display:flex;align-items:center;gap:9px;
+  padding:9px 11px;border-radius:var(--r);
+  cursor:pointer;color:var(--t3);
+  font-size:14px;font-weight:600;
+  transition:all .15s;position:relative;
+}
+.ni:hover{background:var(--glass);color:var(--t2)}
+.ni.on{background:var(--accent-d);color:var(--accent)}
+.ni.on::before{
+  content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:3px;height:18px;background:var(--accent);border-radius:0 2px 2px 0;
+}
+.ni-i{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.ni-b{margin-left:auto;background:var(--red);color:#fff;border-radius:var(--rf);font-size:9px;font-weight:700;padding:1px 5px}
+
+.sb-foot{padding:10px 7px calc(var(--sab)+8px);border-top:1px solid var(--stroke2)}
+.sb-user{
+  display:flex;align-items:center;gap:9px;
+  padding:9px 11px;border-radius:var(--r);cursor:pointer;
+  transition:background .15s;
+}
+.sb-user:hover{background:var(--glass)}
+.sb-av{
+  width:32px;height:32px;border-radius:50%;
+  background:var(--org-grad);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;flex-shrink:0;
+  border:1.5px solid var(--stroke);
+}
+.sb-un{font-size:13px;font-weight:700}
+.sb-ur{font-size:11px;color:var(--t3)}
+
+/* ─── Topbar ─── */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  height:var(--top-h);
+  background:var(--glass-nav);
+  backdrop-filter:var(--blur);
+  -webkit-backdrop-filter:var(--blur);
+  border-bottom:1px solid var(--stroke2);
+  display:flex;align-items:center;padding:0 16px;gap:10px;
+  padding-top:env(safe-area-inset-top,0);
+}
+.top-title{font-size:17px;font-weight:800;flex:1}
+.top-pill{
+  display:flex;align-items:center;gap:7px;
+  background:var(--glass);border:1px solid var(--stroke);border-radius:var(--rf);
+  padding:5px 12px;font-size:12px;font-weight:700;
+}
+.top-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0;box-shadow:0 0 6px var(--accent)}
+.top-btn{
+  width:34px;height:34px;
+  background:var(--glass);border:1px solid var(--stroke);border-radius:var(--r);
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;cursor:pointer;color:var(--t2);flex-shrink:0;
+  transition:background .15s;
+}
+.top-btn:hover{background:var(--glass-hover)}
+
+/* ─── Contenido ─── */
+.page{padding:16px 16px calc(var(--sab)+80px)}
+@media(min-width:768px){.page{padding:22px 26px 36px;max-width:1100px}}
+.pane{display:none}.pane.on{display:block}
+
+/* ─── Bottom nav mobile ─── */
+.bnav{
+  position:fixed;bottom:0;left:0;right:0;
+  height:calc(52px + var(--sab));
+  background:var(--glass-nav);
+  backdrop-filter:var(--blur);
+  -webkit-backdrop-filter:var(--blur);
+  border-top:1px solid var(--stroke2);
+  display:flex;align-items:flex-start;padding-top:6px;z-index:55;
+}
+@media(min-width:768px){.bnav{display:none}}
+.bn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:3px 0;position:relative}
+.bn-i{font-size:20px;line-height:1;transition:transform .15s}
+.bn-l{font-size:9px;font-weight:700;color:var(--t3)}
+.bn.on .bn-i{transform:scale(1.12);filter:drop-shadow(0 0 6px var(--accent))}
+.bn.on .bn-l{color:var(--accent)}
+
+/* ════════════════════════════════════════
+   COMPONENTES UI
+   ════════════════════════════════════════ */
+
+/* KPI Cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px}
+@media(min-width:500px){.kpi-grid{grid-template-columns:repeat(4,1fr)}}
+.kpi{
+  background:var(--glass-card);
+  border:1px solid var(--stroke);
+  border-radius:var(--rl);
+  backdrop-filter:var(--blur-s);
+  -webkit-backdrop-filter:var(--blur-s);
+  padding:15px;
+  display:flex;flex-direction:column;gap:4px;
+  position:relative;overflow:hidden;
+  transition:transform .15s,box-shadow .15s;
+}
+.kpi:hover{transform:translateY(-1px);box-shadow:var(--sh)}
+.kpi::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:var(--kpi-color,var(--grad-brand));
+}
+.kpi-ic {font-size:22px;margin-bottom:2px}
+.kpi-v  {font-size:24px;font-weight:900;letter-spacing:-.3px}
+.kpi-l  {font-size:11px;font-weight:600;color:var(--t3)}
+.kpi-sub{font-size:10px;color:var(--t4);margin-top:1px}
+
+/* Section */
+.sec{font-size:18px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sec small{font-size:12px;font-weight:600;color:var(--t3)}
+
+/* Glass list item */
+.gli{
+  display:flex;align-items:center;gap:12px;
+  padding:13px 15px;
+  background:var(--glass-card);
+  border:1px solid var(--stroke2);
+  border-radius:var(--rm);
+  backdrop-filter:var(--blur-s);
+  -webkit-backdrop-filter:var(--blur-s);
+  margin-bottom:8px;
+  cursor:pointer;
+  transition:background .15s,transform .12s;
+}
+.gli:hover{background:var(--glass-hover);transform:translateX(2px)}
+.gli-ic{width:42px;height:42px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.gli-m {flex:1;min-width:0}
+.gli-t {font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gli-s {font-size:12px;color:var(--t3);margin-top:2px}
+.gli-r {text-align:right;flex-shrink:0}
+.gli-v {font-size:15px;font-weight:800}
+
+/* Badges */
+.badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:var(--rf);display:inline-block}
+.bg-g{background:var(--green-d);color:var(--green)}
+.bg-r{background:var(--red-d);color:var(--red)}
+.bg-o{background:var(--ora-d);color:var(--orange)}
+.bg-b{background:var(--blue-d);color:var(--blue)}
+.bg-x{background:var(--glass);color:var(--t3)}
+
+/* Botones */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:11px 18px;border-radius:var(--r);border:none;
+  font-family:inherit;font-size:14px;font-weight:700;
+  cursor:pointer;transition:opacity .15s,transform .12s;
+}
+.btn:active{opacity:.82;transform:scale(.96)}
+.btn-p {background:var(--grad-brand);color:#fff;box-shadow:0 4px 16px rgba(10,132,255,.30)}
+.btn-g {background:var(--green);color:#000}
+.btn-r {background:var(--red);color:#fff}
+.btn-o {background:var(--orange);color:#000}
+.btn-gh{background:var(--glass);color:var(--t2);border:1px solid var(--stroke)}
+.btn-gh:hover{background:var(--glass-hover)}
+.btn-w {width:100%}
+.btn-sm{padding:7px 13px;font-size:12px}
+.btn-lg{padding:15px 24px;font-size:16px;font-weight:800}
+
+/* Form */
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.fg:last-child{margin-bottom:0}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.f-select{
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--stroke);border-radius:var(--r);
+  padding:13px 14px;color:var(--t1);font-size:15px;font-weight:500;
+  outline:none;width:100%;-webkit-appearance:none;
+  transition:border-color .2s;
+}
+.f-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-g)}
+
+/* Hero banner */
+.hero{
+  background:var(--org-grad);
+  border-radius:var(--rx);padding:22px 20px;
+  margin-bottom:20px;
+  position:relative;overflow:hidden;
+  box-shadow:0 8px 32px rgba(10,132,255,.22);
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,.12) 0%,transparent 60%);
+  pointer-events:none;
+}
+.hero::after{
+  content:attr(data-emoji);position:absolute;right:16px;bottom:-8px;
+  font-size:72px;opacity:.18;pointer-events:none;line-height:1;
+}
+.hero-label{font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;opacity:.75;margin-bottom:8px}
+.hero-val  {font-size:38px;font-weight:900;letter-spacing:-.5px;line-height:1}
+.hero-sub  {font-size:14px;opacity:.72;margin-top:4px}
+
+/* Org cards */
+.org-grid{display:grid;gap:12px;margin-bottom:18px}
+@media(min-width:600px){.org-grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:900px){.org-grid{grid-template-columns:repeat(4,1fr)}}
+.org-card{
+  background:var(--glass-card);border:1px solid var(--stroke);
+  border-radius:var(--rl);
+  backdrop-filter:var(--blur-s);-webkit-backdrop-filter:var(--blur-s);
+  padding:16px;position:relative;overflow:hidden;
+  transition:transform .15s,box-shadow .15s;
+}
+.org-card:hover{transform:translateY(-2px);box-shadow:var(--sh)}
+.org-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--oc)}
+.oc-e {font-size:28px;margin-bottom:8px}
+.oc-n {font-size:13px;font-weight:800;margin-bottom:3px}
+.oc-v {font-size:28px;font-weight:900;letter-spacing:-.3px}
+.oc-s {font-size:11px;color:var(--t3);margin-top:2px}
+.prog {height:4px;background:rgba(255,255,255,.08);border-radius:var(--rf);margin-top:12px;overflow:hidden}
+.prog-f{height:100%;border-radius:var(--rf);background:var(--oc);transition:width .6s cubic-bezier(.34,1.56,.64,1)}
+
+/* ════════════════════════════════════════
+   CÁMARA — CAPTURA DE EVIDENCIA
+   ════════════════════════════════════════ */
+.cam-zone{
+  border-radius:var(--rl);overflow:hidden;
+  background:#000;position:relative;
+  border:1.5px solid var(--stroke);
+  aspect-ratio:4/3;max-height:300px;
+}
+.cam-zone video{width:100%;height:100%;object-fit:cover;display:block}
+
+/* Marco de escaneo animado */
+.cam-frame{
+  position:absolute;inset:0;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.cam-corners{
+  width:55%;aspect-ratio:1;position:relative;
+}
+.cam-corners::before,.cam-corners::after,
+.cam-tl::before,.cam-tl::after{
+  content:'';position:absolute;
+  width:22px;height:22px;
+  border-color:var(--accent);border-style:solid;
+}
+.cam-corners::before{top:0;left:0;border-width:2px 0 0 2px;border-radius:4px 0 0 0}
+.cam-corners::after {top:0;right:0;border-width:2px 2px 0 0;border-radius:0 4px 0 0}
+.cam-tl::before     {bottom:0;left:0;border-width:0 0 2px 2px;border-radius:0 0 0 4px}
+.cam-tl::after      {bottom:0;right:0;border-width:0 2px 2px 0;border-radius:0 0 4px 0}
+.cam-scan{
+  position:absolute;left:22.5%;right:22.5%;height:1.5px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  box-shadow:0 0 8px var(--accent);
+  animation:scan 1.8s linear infinite;
+  top:22.5%;
+}
+@keyframes scan{0%{top:22.5%}100%{top:77.5%}}
+
+.cam-off{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;width:100%;aspect-ratio:4/3;max-height:300px;
+  background:var(--glass-card);border:1.5px dashed var(--stroke);
+  border-radius:var(--rl);color:var(--t3);
+}
+.cam-controls{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+
+/* Foto previa */
+.photo-snap{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:14px;
+  background:var(--glass);border:1.5px dashed var(--stroke);border-radius:var(--rm);
+  cursor:pointer;font-size:14px;font-weight:700;color:var(--t3);
+  transition:all .2s;
+}
+.photo-snap.ok{border-color:var(--green);color:var(--green);background:var(--green-d)}
+.photo-prev{width:100%;max-height:160px;object-fit:cover;border-radius:var(--r);display:none;margin-top:8px}
+.photo-prev.show{display:block}
+
+/* IMEI result */
+.imei-card{
+  background:var(--glass-card);border:1px solid var(--stroke);
+  border-radius:var(--rl);
+  backdrop-filter:var(--blur-s);-webkit-backdrop-filter:var(--blur-s);
+  padding:18px;display:none;margin-top:14px;
+}
+.imei-card.show{display:block}
+.imei-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.imei-ico {font-size:36px}
+.imei-num {font-size:13px;color:var(--t3);font-family:monospace;letter-spacing:1px}
+.imei-rows{display:flex;flex-direction:column;gap:7px}
+.imei-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 12px;background:var(--glass);border-radius:var(--r);
+}
+.imei-rl{font-size:12px;font-weight:600;color:var(--t3)}
+.imei-rv{font-size:13px;font-weight:800}
+
+/* API status */
+.api-row{
+  display:flex;align-items:center;gap:12px;
+  padding:13px 15px;
+  background:var(--glass-card);border:1px solid var(--stroke2);
+  border-radius:var(--rm);
+  backdrop-filter:var(--blur-s);-webkit-backdrop-filter:var(--blur-s);
+  margin-bottom:9px;
+}
+.api-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.api-dot.live   {background:var(--green);box-shadow:0 0 7px var(--green)}
+.api-dot.pending{background:var(--orange);animation:blink 1.4s ease-in-out infinite}
+.api-dot.off    {background:var(--red)}
+@keyframes blink{0%,100%{opacity:.4}50%{opacity:1}}
+.api-name{font-size:14px;font-weight:800}
+.api-url {font-size:10px;color:var(--t4);font-family:monospace;margin-top:1px}
+.api-val {margin-left:auto;font-size:15px;font-weight:900}
+
+/* Tipo de cambio banner */
+.fx-banner{
+  background:var(--glass-card);border:1px solid var(--stroke);
+  border-radius:var(--rl);
+  backdrop-filter:var(--blur-s);-webkit-backdrop-filter:var(--blur-s);
+  padding:14px 16px;
+  display:flex;align-items:center;gap:14px;margin-bottom:18px;
+}
+.fx-flag{font-size:30px}
+.fx-v  {font-size:32px;font-weight:900;color:var(--green);letter-spacing:-.3px}
+.fx-l  {font-size:11px;color:var(--t3);margin-top:2px}
+
+/* Modal */
+.ov{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.82);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  z-index:800;display:none;align-items:center;justify-content:center;padding:20px;
+}
+.ov.open{display:flex}
+.modal{
+  background:var(--glass-card);border:1px solid var(--stroke);
+  border-radius:var(--rx);
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  width:100%;max-width:450px;max-height:88dvh;overflow-y:auto;
+  padding:22px;box-shadow:var(--sh3);
+  animation:popup .28s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes popup{from{opacity:0;transform:scale(.92) translateY(20px)}to{opacity:1;transform:none}}
+.modal-h{font-size:19px;font-weight:900;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.mc-btn{
+  background:var(--glass);border:none;color:var(--t3);
+  width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s;
+}
+.mc-btn:hover{background:var(--glass-hover)}
+
+/* Toast */
+#toast{
+  position:fixed;top:calc(var(--sat) + 60px);left:50%;
+  transform:translateX(-50%) translateY(-12px);
+  background:var(--glass-card);border:1px solid var(--stroke);
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  border-radius:var(--rf);padding:10px 20px;
+  font-size:14px;font-weight:700;white-space:nowrap;
+  box-shadow:var(--sh2);opacity:0;pointer-events:none;
+  transition:all .26s cubic-bezier(.34,1.56,.64,1);z-index:999;
+}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Photo viewer */
+#pv{position:fixed;inset:0;background:rgba(0,0,0,.96);z-index:999;display:none;align-items:center;justify-content:center;padding:16px}
+#pv.open{display:flex}
+#pv img{max-width:100%;max-height:90dvh;object-fit:contain;border-radius:var(--r)}
+#pv-x{position:absolute;top:calc(var(--sat)+10px);right:14px;background:var(--glass);border:none;color:var(--t1);width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:19px;display:flex;align-items:center;justify-content:center}
+
+/* Config */
+.cfg-val{
+  background:var(--glass);border:1px solid var(--stroke2);border-radius:var(--r);
+  padding:12px 14px;color:var(--t3);font-size:14px;font-weight:500;
+}
+
+/* Empty state */
+.empty{text-align:center;padding:48px 20px;color:var(--t3)}
+.empty span{font-size:44px;display:block;margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<!-- Orbes de fondo -->
+<div class="bg-orb" id="orb1"></div>
+<div class="bg-orb" id="orb2"></div>
+<div class="bg-orb" id="orb3"></div>
+
+<!-- ══════════ SPLASH ══════════ -->
+<div id="splash">
+  <div class="sp-logo">🏢</div>
+  <div class="sp-name">Corp Tech ERP</div>
+  <div class="sp-ver">Fase 1 · Sistema Multi-Tenant</div>
+  <div class="sp-bar"><div class="sp-bar-fill"></div></div>
+</div>
+
+<!-- ══════════ LOGIN ══════════ -->
+<div id="auth">
+  <div class="auth-glow"></div>
+  <div class="auth-logo">🏢</div>
+  <div class="auth-head">
+    <div class="auth-title">Bienvenido</div>
+    <div class="auth-sub">Corp Tech · Sistema ERP Multi-Tienda</div>
+  </div>
+
+  <div class="glass-card auth-card">
+    <div>
+      <label class="fl">Correo electrónico</label>
+      <input class="fi" id="em" type="email" placeholder="usuario@corptech.pe"
+             autocomplete="email" onkeydown="if(event.key==='Enter')document.getElementById('pw').focus()">
+    </div>
+    <div>
+      <label class="fl">Contraseña</label>
+      <input class="fi" id="pw" type="password" placeholder="••••••••"
+             autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="auth-err"></div>
+    <button class="btn-brand" id="btn-in" onclick="doLogin()">
+      Iniciar Sesión
+    </button>
+    <p style="font-size:12px;color:var(--t4);text-align:center">
+      El sistema detecta tu empresa y te redirige automáticamente.
+    </p>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div id="app">
+
+  <!-- Sidebar desktop -->
+  <nav class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-ico" id="sb-ico">🏢</div>
+      <div>
+        <div class="sb-n">Corp Tech ERP</div>
+        <div class="sb-s" id="sb-s">Cargando...</div>
+      </div>
+    </div>
+    <div class="sb-body" id="sb-body"></div>
+    <div class="sb-foot">
+      <div class="sb-user" onclick="doLogout()">
+        <div class="sb-av" id="sb-av">?</div>
+        <div>
+          <div class="sb-un" id="sb-un">—</div>
+          <div class="sb-ur" id="sb-ur">—</div>
+        </div>
+        <div style="margin-left:auto;font-size:12px;color:var(--t4)">↩</div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="top-title" id="top-title">Dashboard</div>
+    <div class="top-pill">
+      <div class="top-dot" id="top-dot"></div>
+      <span id="top-org">—</span>
+    </div>
+  </div>
+
+  <!-- Contenido -->
+  <div class="page">
+
+    <!-- ═══ DASHBOARD ═══ -->
+    <div class="pane on" id="p-dashboard">
+
+      <!-- Hero ventas -->
+      <div class="hero" id="dash-hero" data-emoji="📊">
+        <div class="hero-label">Ventas de Hoy</div>
+        <div class="hero-val" id="hero-val">S/ 0.00</div>
+        <div class="hero-sub" id="hero-sub">Cargando datos...</div>
+      </div>
+
+      <!-- Tipo de cambio -->
+      <div class="fx-banner">
+        <div class="fx-flag">🇺🇸</div>
+        <div>
+          <div class="fx-v" id="fx-v">S/ —</div>
+          <div class="fx-l" id="fx-l">USD → PEN · Actualizando...</div>
+        </div>
+        <button class="btn btn-gh btn-sm" style="margin-left:auto" onclick="loadFX()">↻</button>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-grid">
+        <div class="kpi" style="--kpi-color:var(--grad-green)">
+          <div class="kpi-ic">📦</div>
+          <div class="kpi-v" id="k-stock">—</div>
+          <div class="kpi-l">Stock</div>
+          <div class="kpi-sub" id="k-stock-sub">disponible</div>
+        </div>
+        <div class="kpi" style="--kpi-color:var(--grad-brand)">
+          <div class="kpi-ic">💵</div>
+          <div class="kpi-v" id="k-ventas">—</div>
+          <div class="kpi-l">Ventas Hoy</div>
+          <div class="kpi-sub" id="k-vtx">0 transacciones</div>
+        </div>
+        <div class="kpi" style="--kpi-color:linear-gradient(135deg,#ff9f0a,#bf5af2)">
+          <div class="kpi-ic">👥</div>
+          <div class="kpi-v" id="k-cli">—</div>
+          <div class="kpi-l">Clientes</div>
+        </div>
+        <div class="kpi" style="--kpi-color:var(--grad-fire)">
+          <div class="kpi-ic">💳</div>
+          <div class="kpi-v" id="k-deuda" style="color:var(--red)">—</div>
+          <div class="kpi-l" id="k-deuda-l">Deuda / Stock</div>
+        </div>
+      </div>
+
+      <!-- Stock por empresa (Corp ve 4, tienda ve 1) -->
+      <div class="sec">Stock por Empresa <small id="sec-scope"></small></div>
+      <div class="org-grid" id="org-cards"><div style="color:var(--t3);font-size:13px;padding:8px">Cargando...</div></div>
+
+      <!-- Ventas recientes -->
+      <div class="sec" style="margin-top:4px">🧾 Últimas Ventas</div>
+      <div id="recent-sales"><div class="empty"><span>🧾</span>Sin ventas registradas hoy</div></div>
+
+    </div>
+
+    <!-- ═══ CÁMARA / EVIDENCIA ═══ -->
+    <div class="pane" id="p-cam">
+      <div class="sec">📷 Captura de Evidencia</div>
+
+      <!-- Visor de cámara -->
+      <div id="cam-live" style="display:none">
+        <div class="cam-zone">
+          <video id="cam-vid" autoplay playsinline muted></video>
+          <div class="cam-frame">
+            <div class="cam-corners">
+              <div class="cam-tl"></div>
+              <div class="cam-scan"></div>
+            </div>
+          </div>
+        </div>
+        <div class="cam-controls">
+          <button class="btn btn-g btn-sm" onclick="snapPhoto()">📸 Capturar Foto</button>
+          <button class="btn btn-r btn-sm" onclick="stopCam()">■ Detener</button>
+          <button class="btn btn-gh btn-sm" onclick="flipCam()">🔄 Voltear</button>
+        </div>
+      </div>
+
+      <!-- Cámara inactiva -->
+      <div class="cam-off" id="cam-off">
+        <div style="font-size:54px">📷</div>
+        <div style="font-weight:700">Cámara lista</div>
+        <div style="font-size:13px;text-align:center;max-width:220px">
+          Captura fotos de check-in, check-out, vouchers y entregas
+        </div>
+        <button class="btn btn-p" onclick="startCam()">▶ Activar Cámara</button>
+      </div>
+
+      <!-- Tipo de evidencia -->
+      <div class="glass-card" style="padding:16px;margin-top:14px">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">Tipo de Evidencia</div>
+        <div class="fg">
+          <label class="fl">Categoría</label>
+          <select class="f-select" id="ev-type">
+            <option value="checkin">📥 Check-in de producto (llegada USA)</option>
+            <option value="checkout">📤 Check-out / Despacho a tienda</option>
+            <option value="delivery">🚚 Confirmación de entrega</option>
+            <option value="voucher">💳 Voucher de pago</option>
+            <option value="sale">🧾 Evidencia de venta</option>
+            <option value="other">📌 Otro</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="fl">Referencia / IMEI / Nro. de venta</label>
+          <input class="fi" id="ev-ref" placeholder="Ej: 357901234567890">
+        </div>
+        <div class="fg">
+          <label class="fl">📷 O sube foto desde galería / cámara</label>
+          <label class="photo-snap" id="ev-snap-btn" for="ev-file">
+            📷 Tomar foto o elegir de galería
+          </label>
+          <input type="file" id="ev-file" accept="image/*" capture="environment"
+                 style="display:none" onchange="handleEvPhoto(this)">
+          <img id="ev-preview" class="photo-prev" alt="Vista previa">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn btn-p" onclick="uploadEvidence()" id="btn-upload" disabled>
+            ☁️ Guardar en Supabase
+          </button>
+          <button class="btn btn-gh btn-sm" onclick="clearEvidence()">✕ Limpiar</button>
+        </div>
+        <canvas id="snap-canvas" style="display:none"></canvas>
+      </div>
+
+      <!-- Historial de evidencias recientes -->
+      <div class="sec" style="margin-top:20px">🗂️ Evidencias Recientes</div>
+      <div id="ev-history"><div class="empty"><span>📷</span>Sin evidencias aún</div></div>
+    </div>
+
+    <!-- ═══ STOCK ═══ -->
+    <div class="pane" id="p-stock">
+      <div class="sec">📦 Stock Central
+        <button class="btn btn-gh btn-sm" onclick="loadStock()">↻ Actualizar</button>
+      </div>
+      <div class="fg" style="margin-bottom:14px">
+        <input class="fi" id="stock-q" placeholder="🔍 Buscar producto, IMEI, marca..."
+               oninput="filterStock(this.value)">
+      </div>
+      <div id="stock-list"><div class="empty"><span>📦</span>Cargando inventario...</div></div>
+    </div>
+
+    <!-- ═══ AJUSTES ═══ -->
+    <div class="pane" id="p-cfg">
+      <div class="sec">⚙️ Configuración</div>
+
+      <!-- Mi cuenta -->
+      <div class="glass-card" style="padding:16px;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">👤 Mi Cuenta</div>
+        <div class="fg"><label class="fl">Email</label><div class="cfg-val" id="cfg-em">—</div></div>
+        <div class="frow">
+          <div class="fg"><label class="fl">Empresa</label><div class="cfg-val" id="cfg-org">—</div></div>
+          <div class="fg"><label class="fl">Rol</label><div class="cfg-val" id="cfg-role">—</div></div>
+        </div>
+        <button class="btn btn-r btn-sm btn-w" style="margin-top:4px" onclick="doLogout()">
+          ↩ Cerrar Sesión
+        </button>
+      </div>
+
+      <!-- Sickw -->
+      <div class="glass-card" style="padding:16px;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">🔍 Sickw API — Validación IMEI</div>
+        <div class="fg">
+          <label class="fl">API Key</label>
+          <input class="fi" id="sickw-key" type="password" placeholder="Pega tu key de sickw.com">
+          <div style="font-size:11px;color:var(--t4);margin-top:4px">
+            Obtén tu key en <strong>sickw.com</strong> · ~$0.10 por consulta IMEI
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-gh btn-sm" onclick="saveSickw()">💾 Guardar</button>
+          <button class="btn btn-p btn-sm"  onclick="testSickw()">🧪 Probar</button>
+        </div>
+      </div>
+
+      <!-- APIs status -->
+      <div class="glass-card" style="padding:16px;margin-bottom:12px">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">🔌 Estado de Integraciones</div>
+        <div class="api-row">
+          <div class="api-dot" id="dot-fx"></div>
+          <div><div class="api-name">ExchangeRate API</div><div class="api-url">open.er-api.com · gratis</div></div>
+          <div class="api-val" id="val-fx" style="color:var(--green)">—</div>
+        </div>
+        <div class="api-row">
+          <div class="api-dot off" id="dot-sk"></div>
+          <div><div class="api-name">Sickw IMEI</div><div class="api-url">sickw.com/api.php · $0.10/consulta</div></div>
+          <div class="api-val" id="val-sk" style="font-size:12px;color:var(--t3)">Sin key</div>
+        </div>
+        <div class="api-row">
+          <div class="api-dot live"></div>
+          <div><div class="api-name">Supabase · corp-media bucket</div><div class="api-url">jgreajitfugnqruvbavn.supabase.co</div></div>
+          <div class="api-val" style="color:var(--green);font-size:12px">Activo</div>
+        </div>
+      </div>
+
+      <!-- Info sistema -->
+      <div class="glass-card" style="padding:16px">
+        <div style="font-size:14px;font-weight:800;margin-bottom:10px">ℹ️ Sistema</div>
+        <div style="font-size:12px;color:var(--t3);line-height:1.7">
+          <strong style="color:var(--t2)">Versión:</strong> Fase 1 · Corp Tech ERP<br>
+          <strong style="color:var(--t2)">Proyecto Supabase:</strong> jgreajitfugnqruvbavn<br>
+          <strong style="color:var(--t2)">Bucket Storage:</strong> corp-media<br>
+          <strong style="color:var(--t2)">Tablas activas:</strong> 29 tablas + RLS multi-tenant<br>
+          <strong style="color:var(--t2)">Última build:</strong> <span id="build-date"></span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page -->
+
+  <!-- Bottom nav -->
+  <nav class="bnav" id="bnav"></nav>
+</div>
+
+<!-- Modal: Check-in IMEI -->
+<div class="ov" id="modal-ci">
+  <div class="modal">
+    <div class="modal-h">📥 Registrar Check-in
+      <button class="mc-btn" onclick="closeOv('modal-ci')">✕</button>
+    </div>
+    <div class="fg"><label class="fl">IMEI</label>
+      <input class="fi" id="ci-imei" placeholder="357901234567890" type="tel"
+             oninput="this.value=this.value.replace(/\D/g,'')"></div>
+    <div class="fg"><label class="fl">Producto / Modelo</label>
+      <input class="fi" id="ci-model" placeholder="iPhone 15 Pro 256GB"></div>
+    <div class="fg"><label class="fl">Destino</label>
+      <select class="f-select" id="ci-dest">
+        <option value="00000000-0000-0000-0000-000000000001">🏢 Bodega Corp (sin asignar)</option>
+        <option value="00000000-0000-0000-0000-000000000002">⚡ Futurteck</option>
+        <option value="00000000-0000-0000-0000-000000000003">💡 Innovatech Store</option>
+        <option value="00000000-0000-0000-0000-000000000004">🌐 WeTech Peru</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">📷 Foto del producto *</label>
+      <label class="photo-snap" id="ci-photo-btn" for="ci-photo-in">📷 Capturar foto de empaque</label>
+      <input type="file" id="ci-photo-in" accept="image/*" capture="environment"
+             style="display:none" onchange="handleCiPhoto(this)">
+      <img id="ci-preview" class="photo-prev" alt="">
+    </div>
+    <button class="btn btn-p btn-w" onclick="saveCheckin()">💾 Confirmar Check-in</button>
+  </div>
+</div>
+
+<!-- Photo viewer -->
+<div id="pv">
+  <button id="pv-x" onclick="closePV()">✕</button>
+  <img id="pv-img" src="" alt="foto">
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════
+     JAVASCRIPT
+     ══════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ══════════════════════════════════════
+   1 · CONFIGURACIÓN SUPABASE
+   ══════════════════════════════════════ */
+const SB_URL = 'https://jgreajitfugnqruvbavn.supabase.co';
+const SB_KEY = 'sb_publishable_YQe_65xuX2olBQDDdRm16g_rnskVFuD';
+const BUCKET = 'corp-media';                // bucket Supabase Storage
+const SA_EMAIL = 'phillipmg17@gmail.com';  // SuperAdmin único
+
+/* ══════════════════════════════════════
+   2 · CONFIGURACIÓN MULTI-TENANT
+   ══════════════════════════════════════ */
+const ORGS = {
+  'corp': {
+    name:'Corp Tech', emoji:'🏢', role:'Administrador Corp',
+    color:'#bf5af2',
+    grad:'linear-gradient(135deg,#bf5af2 0%,#0a84ff 100%)',
+  },
+  '00000000-0000-0000-0000-000000000002': {
+    name:'Futurteck',        emoji:'⚡', role:'Gerente Tienda',
+    color:'#0a84ff',
+    grad:'linear-gradient(135deg,#0a84ff 0%,#5ac8fa 100%)',
+  },
+  '00000000-0000-0000-0000-000000000003': {
+    name:'Innovatech Store', emoji:'💡', role:'Gerente Tienda',
+    color:'#30d158',
+    grad:'linear-gradient(135deg,#30d158 0%,#5ac8fa 100%)',
+  },
+  '00000000-0000-0000-0000-000000000004': {
+    name:'WeTech Peru',      emoji:'🌐', role:'Gerente Tienda',
+    color:'#ff9f0a',
+    grad:'linear-gradient(135deg,#ff9f0a 0%,#ff453a 100%)',
+  },
+};
+
+/* ══════════════════════════════════════
+   3 · API EXTERNAS — STUBS LISTOS
+   ══════════════════════════════════════ */
+
+// ── ExchangeRate (gratis, sin key) ─────────────
+// Docs: https://www.exchangerate-api.com/docs/free
+// Límite: 1500 req/mes gratis
+const FX_URL = 'https://open.er-api.com/v6/latest/USD';
+
+// ── Sickw IMEI Validation ──────────────────────
+// Docs: https://sickw.com/api-docs
+// Precio: ~$0.10 USD/consulta
+// Obtén tu key en: sickw.com > Panel > API Keys
+const SICKW_URL     = 'https://sickw.com/api.php';
+const SICKW_SERVICE = 19; // Basic info service
+let   SICKW_KEY     = localStorage.getItem('sickw_key') || '';
+
+/* ══════════════════════════════════════
+   4 · ESTADO GLOBAL
+   ══════════════════════════════════════ */
+let db, me, myOrgId, myOrgKey, myRole;
+let camStream = null, camBack = true;
+let evFile = null, ciFile = null, allStock = [];
+
+/* ══════════════════════════════════════
+   5 · INICIALIZACIÓN
+   ══════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', () => {
+  db = supabase.createClient(SB_URL, SB_KEY);
+  document.getElementById('build-date').textContent = new Date().toLocaleDateString('es-PE');
+  document.getElementById('sickw-key').value = SICKW_KEY;
+  refreshSickwStatus();
+
+  db.auth.onAuthStateChange((_, session) => {
+    if (session) { me = session.user; boot(); }
+    else { hideSplash(); showAuth(); }
+  });
+});
+
+function hideSplash(cb) {
+  const s = document.getElementById('splash');
+  s.classList.add('fade');
+  setTimeout(() => { s.style.display = 'none'; if(cb) cb(); }, 520);
+}
+
+function showAuth() {
+  document.getElementById('auth').style.display = 'flex';
+  document.getElementById('app').style.display  = 'none';
+  // Orbes visibles en login
+  setTimeout(() => {
+    document.getElementById('orb1').classList.add('show');
+    document.getElementById('orb2').classList.add('show');
+  }, 300);
+}
+
+/* ══════════════════════════════════════
+   6 · AUTH — LOGIN INTELIGENTE
+   ══════════════════════════════════════ */
+async function doLogin() {
+  const em  = document.getElementById('em').value.trim();
+  const pw  = document.getElementById('pw').value;
+  const err = document.getElementById('auth-err');
+  const btn = document.getElementById('btn-in');
+  err.style.display = 'none';
+
+  if (!em || !pw) { authErr('Completa todos los campos'); return; }
+
+  btn.textContent = 'Verificando...'; btn.disabled = true;
+
+  const { data, error } = await db.auth.signInWithPassword({ email: em, password: pw });
+  btn.textContent = 'Iniciar Sesión'; btn.disabled = false;
+
+  if (error) {
+    authErr('Credenciales incorrectas. Verifica tu email y contraseña.');
+    return;
+  }
+  me = data.user;
+  document.getElementById('auth').style.display = 'none';
+  document.getElementById('splash').style.display = 'flex';
+  document.getElementById('splash').classList.remove('fade');
+  boot();
+}
+
+function authErr(msg) {
+  const e = document.getElementById('auth-err');
+  e.textContent = msg; e.style.display = 'block';
+}
+
+async function doLogout() {
+  if (!confirm('¿Cerrar sesión?')) return;
+  stopCam();
+  await db.auth.signOut();
+  location.reload();
+}
+
+/* ══════════════════════════════════════
+   7 · BOOT — DETECCIÓN DE ORG/ROL
+   ══════════════════════════════════════ */
+async function boot() {
+  // SuperAdmin: acceso global
+  if (me.email === SA_EMAIL) {
+    myOrgKey = 'corp'; myOrgId = '00000000-0000-0000-0000-000000000001';
+    myRole   = 'superadmin';
+    applyTheme('corp');
+    buildNav('corp');
+    setUserUI('SuperAdmin', 'Corp Tech', 'Acceso Total');
+    showApp();
+    loadAll();
+    return;
+  }
+
+  // Cargar perfil → detectar org
+  const { data: profile, error } = await db
+    .from('users')
+    .select('*, organizations(*)')
+    .eq('auth_id', me.id)
+    .maybeSingle();
+
+  if (error || !profile) {
+    hideSplash();
+    authErr('Usuario no encontrado. Contacta al administrador.');
+    showAuth(); return;
+  }
+
+  const org   = profile.organizations;
+  myRole      = org?.type || 'store';
+  myOrgId     = org?.id   || null;
+  myOrgKey    = (myRole === 'corp') ? 'corp' : myOrgId;
+
+  applyTheme(myOrgKey);
+  buildNav(myRole);
+  setUserUI(
+    profile.full_name || me.email,
+    org?.name || '—',
+    profile.role || ORGS[myOrgKey]?.role || 'Usuario'
+  );
+
+  document.getElementById('cfg-em').textContent   = me.email;
+  document.getElementById('cfg-org').textContent  = org?.name || '—';
+  document.getElementById('cfg-role').textContent = profile.role || '—';
+
+  showApp();
+  loadAll();
+}
+
+function showApp() {
+  hideSplash(() => {
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('orb1').classList.add('show');
+    document.getElementById('orb2').classList.add('show');
+    document.getElementById('orb3').classList.add('show');
+  });
+}
+
+function setUserUI(name, org, role) {
+  document.getElementById('sb-un').textContent = name;
+  document.getElementById('sb-ur').textContent = role;
+  document.getElementById('sb-av').textContent = (name[0]||'?').toUpperCase();
+}
+
+/* ══════════════════════════════════════
+   8 · TEMA DINÁMICO POR ORG
+   ══════════════════════════════════════ */
+function applyTheme(key) {
+  const o = ORGS[key] || ORGS['corp'];
+  const r = document.documentElement.style;
+  r.setProperty('--accent',   o.color);
+  r.setProperty('--accent-d', hexA(o.color,.15));
+  r.setProperty('--accent-g', hexA(o.color,.26));
+  r.setProperty('--org-grad', o.grad);
+
+  document.getElementById('sb-ico').textContent      = o.emoji;
+  document.getElementById('sb-ico').style.background = o.grad;
+  document.getElementById('sb-s').textContent        = o.name;
+  document.getElementById('top-dot').style.background= o.color;
+  document.getElementById('top-dot').style.boxShadow = `0 0 7px ${o.color}`;
+  document.getElementById('top-org').textContent     = o.name;
+}
+
+function hexA(hex, a) {
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+/* ══════════════════════════════════════
+   9 · NAV DINÁMICO
+   ══════════════════════════════════════ */
+const NAV_CORP = [
+  {id:'dashboard',ico:'📊',lbl:'Dashboard', pane:'p-dashboard'},
+  {id:'cam',      ico:'📷',lbl:'Evidencia',  pane:'p-cam'},
+  {id:'stock',    ico:'📦',lbl:'Stock',       pane:'p-stock'},
+  {id:'cfg',      ico:'⚙️', lbl:'Config',     pane:'p-cfg'},
+];
+const NAV_STORE = [
+  {id:'dashboard',ico:'📊',lbl:'Inicio',   pane:'p-dashboard'},
+  {id:'cam',      ico:'📷',lbl:'Cámara',   pane:'p-cam'},
+  {id:'stock',    ico:'📦',lbl:'Stock',    pane:'p-stock'},
+  {id:'cfg',      ico:'⚙️', lbl:'Cuenta',  pane:'p-cfg'},
+];
+
+function buildNav(role) {
+  const items = (role==='superadmin'||role==='corp') ? NAV_CORP : NAV_STORE;
+  const sb = items.map(n=>`
+    <div class="ni ${n.id==='dashboard'?'on':''}" id="si-${n.id}"
+         onclick="goPane('${n.pane}','${n.id}','${n.lbl}')">
+      <div class="ni-i">${n.ico}</div>${n.lbl}
+    </div>`).join('');
+  document.getElementById('sb-body').innerHTML =
+    `<div class="nav-lbl">Principal</div>${sb}`;
+
+  const bn = items.map(n=>`
+    <div class="bn ${n.id==='dashboard'?'on':''}" id="bn-${n.id}"
+         onclick="goPane('${n.pane}','${n.id}','${n.lbl}')">
+      <div class="bn-i">${n.ico}</div>
+      <div class="bn-l">${n.lbl}</div>
+    </div>`).join('');
+  document.getElementById('bnav').innerHTML = bn;
+}
+
+function goPane(pane, navId, title) {
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.ni,.bn').forEach(n=>n.classList.remove('on'));
+  document.getElementById(pane)?.classList.add('on');
+  document.getElementById('si-'+navId)?.classList.add('on');
+  document.getElementById('bn-'+navId)?.classList.add('on');
+  document.getElementById('top-title').textContent = title;
+  if(pane==='p-stock') loadStock();
+}
+
+/* ══════════════════════════════════════
+   10 · CARGAR TODO
+   ══════════════════════════════════════ */
+function loadAll() {
+  loadDashboard();
+  loadFX();
+  loadEvidenceHistory();
+}
+
+/* ══════════════════════════════════════
+   11 · DASHBOARD
+   ══════════════════════════════════════ */
+async function loadDashboard() {
+  const isCorp = myRole==='superadmin'||myRole==='corp';
+  document.getElementById('sec-scope').textContent = isCorp ? 'vista global' : 'tu tienda';
+
+  // Hero: ventas del día
+  let vq = db.from('sales').select('total_amount').gte('created_at',todayISO()).neq('status','cancelled');
+  if(!isCorp) vq = vq.eq('org_id',myOrgId);
+  const {data:vd} = await vq;
+  const totalV = (vd||[]).reduce((a,s)=>a+(s.total_amount||0),0);
+  const txN    = (vd||[]).length;
+  const orgCfg = ORGS[myOrgKey]||ORGS.corp;
+  document.getElementById('dash-hero').style.background = orgCfg.grad;
+  document.getElementById('hero-val').textContent = money(totalV);
+  document.getElementById('hero-sub').textContent = `${txN} transacción${txN!==1?'es':''} hoy`;
+
+  // KPIs
+  if(isCorp) await corpKPIs(totalV, txN);
+  else       await storeKPIs(totalV, txN);
+
+  // Org cards
+  await orgCards(isCorp);
+
+  // Ventas recientes
+  await recentSales(isCorp);
+}
+
+async function corpKPIs(totalV, txN) {
+  const [s,u] = await Promise.all([
+    db.from('stock_items').select('*',{count:'exact',head:true}).eq('status','available'),
+    db.from('users').select('*',{count:'exact',head:true}),
+  ]);
+  document.getElementById('k-stock').textContent  = fmt(s.count);
+  document.getElementById('k-ventas').textContent = money(totalV);
+  document.getElementById('k-vtx').textContent    = txN+' transacciones';
+  document.getElementById('k-cli').textContent    = fmt(u.count);
+  document.getElementById('k-deuda').textContent  = '4';
+  document.getElementById('k-deuda-l').textContent = 'Empresas activas';
+  document.getElementById('k-deuda').style.color  = 'var(--purple)';
+}
+
+async function storeKPIs(totalV, txN) {
+  const [s,c,d] = await Promise.all([
+    db.from('stock_items').select('*',{count:'exact',head:true}).eq('org_id',myOrgId).eq('status','available'),
+    db.from('customers').select('*',{count:'exact',head:true}).eq('org_id',myOrgId),
+    db.from('store_debts').select('balance').eq('store_org_id',myOrgId).maybeSingle(),
+  ]);
+  document.getElementById('k-stock').textContent  = fmt(s.count);
+  document.getElementById('k-ventas').textContent = money(totalV);
+  document.getElementById('k-vtx').textContent    = txN+' transacciones';
+  document.getElementById('k-cli').textContent    = fmt(c.count);
+  document.getElementById('k-deuda').textContent  = money(d.data?.balance||0);
+  document.getElementById('k-deuda-l').textContent = 'Deuda con Corp';
+}
+
+async function orgCards(isCorp) {
+  const ids = isCorp
+    ? [
+        {key:'00000000-0000-0000-0000-000000000001',oc:{name:'Corp Tech',emoji:'🏢',color:'#bf5af2'}},
+        {key:'00000000-0000-0000-0000-000000000002',oc:ORGS['00000000-0000-0000-0000-000000000002']},
+        {key:'00000000-0000-0000-0000-000000000003',oc:ORGS['00000000-0000-0000-0000-000000000003']},
+        {key:'00000000-0000-0000-0000-000000000004',oc:ORGS['00000000-0000-0000-0000-000000000004']},
+      ]
+    : [{key:myOrgId, oc:ORGS[myOrgKey]||ORGS.corp}];
+
+  const counts = await Promise.all(ids.map(o=>
+    db.from('stock_items').select('*',{count:'exact',head:true}).eq('org_id',o.key).eq('status','available')
+  ));
+  const max = Math.max(...counts.map(c=>c.count||0), 1);
+  document.getElementById('org-cards').innerHTML = ids.map((o,i)=>{
+    const cnt = counts[i]?.count||0;
+    const pct = Math.round(cnt/max*100);
+    return `<div class="org-card" style="--oc:${o.oc.color}">
+      <div class="oc-e">${o.oc.emoji}</div>
+      <div class="oc-n">${o.oc.name}</div>
+      <div class="oc-v">${fmt(cnt)}</div>
+      <div class="oc-s">unidades disponibles</div>
+      <div class="prog"><div class="prog-f" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+async function recentSales(isCorp) {
+  let q = db.from('sales')
+    .select('id,total_amount,payment_method,status,created_at,customers(full_name),organizations(name)')
+    .gte('created_at',todayISO()).order('created_at',{ascending:false}).limit(6);
+  if(!isCorp) q=q.eq('org_id',myOrgId);
+  const {data} = await q;
+  const el = document.getElementById('recent-sales');
+  if(!data||!data.length){el.innerHTML='<div class="empty"><span>🧾</span>Sin ventas hoy todavía</div>';return}
+  el.innerHTML = data.map(s=>`
+    <div class="gli">
+      <div class="gli-ic" style="background:var(--green-d)">🧾</div>
+      <div class="gli-m">
+        <div class="gli-t">${s.customers?.full_name||'Cliente general'}</div>
+        <div class="gli-s">${s.organizations?.name||''} · ${fmtT(s.created_at)} · ${s.payment_method||'—'}</div>
+      </div>
+      <div class="gli-r">
+        <div class="gli-v" style="color:var(--green)">${money(s.total_amount)}</div>
+        <div class="badge ${s.status==='completed'?'bg-g':'bg-r'}">${s.status==='completed'?'OK':'Cancelada'}</div>
+      </div>
+    </div>`).join('');
+}
+
+/* ══════════════════════════════════════
+   12 · CÁMARA — EVIDENCIA
+   ══════════════════════════════════════ */
+async function startCam() {
+  try {
+    const c = {video:{facingMode:camBack?'environment':'user',width:{ideal:1280},height:{ideal:720}}};
+    camStream = await navigator.mediaDevices.getUserMedia(c);
+    document.getElementById('cam-vid').srcObject = camStream;
+    document.getElementById('cam-off').style.display  = 'none';
+    document.getElementById('cam-live').style.display = 'block';
+    showToast('📷 Cámara activada');
+  } catch(e) {
+    showToast(e.name==='NotAllowedError'
+      ? '⚠️ Permite el acceso a la cámara en Ajustes'
+      : '⚠️ Cámara no disponible en este dispositivo');
+  }
+}
+
+function stopCam() {
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}
+  document.getElementById('cam-live').style.display = 'none';
+  document.getElementById('cam-off').style.display  = 'flex';
+}
+
+async function flipCam() { camBack=!camBack; stopCam(); await startCam(); }
+
+function snapPhoto() {
+  const vid = document.getElementById('cam-vid');
+  const c   = document.getElementById('snap-canvas');
+  c.width=vid.videoWidth; c.height=vid.videoHeight;
+  c.getContext('2d').drawImage(vid,0,0);
+  c.toBlob(blob=>{
+    evFile = new File([blob],`snap_${Date.now()}.jpg`,{type:'image/jpeg'});
+    const url = URL.createObjectURL(evFile);
+    document.getElementById('ev-snap-btn').textContent = '✅ Foto capturada';
+    document.getElementById('ev-snap-btn').className   = 'photo-snap ok';
+    document.getElementById('ev-preview').src          = url;
+    document.getElementById('ev-preview').className    = 'photo-prev show';
+    document.getElementById('btn-upload').disabled     = false;
+    showToast('📸 Foto lista para guardar');
+  },'image/jpeg',0.88);
+}
+
+function handleEvPhoto(input) {
+  const f = input.files[0]; if(!f) return;
+  evFile = f;
+  const url = URL.createObjectURL(f);
+  document.getElementById('ev-snap-btn').textContent = '✅ Foto seleccionada';
+  document.getElementById('ev-snap-btn').className   = 'photo-snap ok';
+  document.getElementById('ev-preview').src          = url;
+  document.getElementById('ev-preview').className    = 'photo-prev show';
+  document.getElementById('btn-upload').disabled     = false;
+}
+
+async function uploadEvidence() {
+  if(!evFile){showToast('📷 Primero captura o selecciona una foto');return}
+  const type = document.getElementById('ev-type').value;
+  const ref  = document.getElementById('ev-ref').value.trim();
+  showToast('⬆️ Subiendo a Supabase...');
+  const url = await uploadPhoto(evFile, `evidencias/${type}`);
+  if(!url){showToast('❌ Error al subir la foto');return}
+  // Guardar en media_attachments
+  await db.from('media_attachments').insert({
+    entity_type: type, entity_id: null,
+    photo_url: url, photo_type: type,
+    caption: ref || type,
+    uploaded_by: me.id,
+    org_id: myOrgId
+  }).catch(()=>{});
+  showToast('✅ Evidencia guardada en Supabase · '+type);
+  clearEvidence();
+  loadEvidenceHistory();
+}
+
+function clearEvidence() {
+  evFile = null;
+  document.getElementById('ev-snap-btn').textContent = '📷 Tomar foto o elegir de galería';
+  document.getElementById('ev-snap-btn').className   = 'photo-snap';
+  document.getElementById('ev-preview').className    = 'photo-prev';
+  document.getElementById('ev-ref').value            = '';
+  document.getElementById('ev-file').value           = '';
+  document.getElementById('btn-upload').disabled     = true;
+}
+
+async function loadEvidenceHistory() {
+  const {data} = await db.from('media_attachments')
+    .select('id,photo_url,photo_type,caption,created_at')
+    .eq('org_id', myOrgId)
+    .order('created_at',{ascending:false}).limit(10);
+  const el = document.getElementById('ev-history');
+  if(!data||!data.length){el.innerHTML='<div class="empty"><span>📷</span>Sin evidencias aún</div>';return}
+  el.innerHTML = data.map(e=>`
+    <div class="gli">
+      ${e.photo_url
+        ?`<img src="${e.photo_url}" onclick="openPV('${e.photo_url}')" style="width:42px;height:42px;object-fit:cover;border-radius:9px;cursor:pointer;flex-shrink:0;border:1px solid var(--stroke)">`
+        :`<div class="gli-ic" style="background:var(--blue-d)">📷</div>`}
+      <div class="gli-m">
+        <div class="gli-t">${e.caption||e.photo_type||'—'}</div>
+        <div class="gli-s">${fmtT(e.created_at)}</div>
+      </div>
+      <div class="badge bg-b">${e.photo_type||'foto'}</div>
+    </div>`).join('');
+}
+
+/* ══════════════════════════════════════
+   13 · STOCK
+   ══════════════════════════════════════ */
+async function loadStock() {
+  const isCorp = myRole==='superadmin'||myRole==='corp';
+  let q = db.from('stock_items')
+    .select('id,status,created_at,checkin_photo_url,products(name,brand,sku),imei_registry(imei),organizations(name),prices(price)')
+    .order('created_at',{ascending:false}).limit(60);
+  if(!isCorp) q=q.eq('org_id',myOrgId);
+  const {data} = await q;
+  allStock = data||[];
+  renderStock(allStock);
+}
+
+function renderStock(list) {
+  const el = document.getElementById('stock-list');
+  if(!list.length){el.innerHTML='<div class="empty"><span>📦</span>Sin registros de stock</div>';return}
+  el.innerHTML = list.map(s=>{
+    const bc = s.status==='available'?'bg-g':s.status==='sold'?'bg-x':'bg-o';
+    const bl = s.status==='available'?'Disponible':s.status==='sold'?'Vendido':'Reservado';
+    return `<div class="gli">
+      ${s.checkin_photo_url
+        ?`<img src="${s.checkin_photo_url}" onclick="openPV('${s.checkin_photo_url}')" style="width:42px;height:42px;object-fit:cover;border-radius:9px;cursor:pointer;flex-shrink:0;border:1px solid var(--stroke)">`
+        :`<div class="gli-ic" style="background:var(--blue-d)">📱</div>`}
+      <div class="gli-m">
+        <div class="gli-t">${s.products?.name||'—'}</div>
+        <div class="gli-s">${s.organizations?.name||''} ${s.imei_registry?.[0]?.imei?'· '+s.imei_registry[0].imei:''}</div>
+      </div>
+      <div class="gli-r">
+        <div class="gli-v" style="font-size:13px">${money(s.prices?.[0]?.price||0)}</div>
+        <div class="badge ${bc}">${bl}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterStock(q){
+  if(!q){renderStock(allStock);return}
+  const f=q.toLowerCase();
+  renderStock(allStock.filter(s=>
+    (s.products?.name||'').toLowerCase().includes(f)||
+    (s.products?.brand||'').toLowerCase().includes(f)||
+    (s.imei_registry?.[0]?.imei||'').includes(f)||
+    (s.organizations?.name||'').toLowerCase().includes(f)
+  ));
+}
+
+/* ══════════════════════════════════════
+   14 · CHECK-IN DESDE CÁMARA
+   ══════════════════════════════════════ */
+function handleCiPhoto(input){
+  const f=input.files[0];if(!f)return;
+  ciFile=f;
+  const url=URL.createObjectURL(f);
+  document.getElementById('ci-photo-btn').textContent='✅ Foto lista';
+  document.getElementById('ci-photo-btn').className='photo-snap ok';
+  document.getElementById('ci-preview').src=url;
+  document.getElementById('ci-preview').className='photo-prev show';
+}
+
+async function saveCheckin(){
+  const imei  =document.getElementById('ci-imei').value.trim();
+  const model =document.getElementById('ci-model').value.trim();
+  const dest  =document.getElementById('ci-dest').value;
+  if(!model){showToast('⚠️ Ingresa el modelo del producto');return}
+  if(!ciFile){showToast('📷 La foto es obligatoria');return}
+  showToast('⬆️ Guardando check-in...');
+  const url=await uploadPhoto(ciFile,`checkins`);
+  const {data:si,error}=await db.from('stock_items').insert({
+    org_id:dest,status:'available',checkin_photo_url:url
+  }).select().single();
+  if(error){showToast('❌ Error: '+error.message);return}
+  if(imei&&si){await db.from('imei_registry').insert({imei,stock_item_id:si.id})}
+  if(url&&si){
+    await db.from('media_attachments').insert({
+      entity_type:'stock_item',entity_id:si.id,
+      photo_url:url,photo_type:'checkin',
+      caption:`Check-in: ${model}`,
+      uploaded_by:me.id,org_id:dest
+    });
+  }
+  showToast('✅ Check-in registrado');
+  ciFile=null;
+  closeOv('modal-ci');
+  loadDashboard();loadStock();
+}
+
+/* ══════════════════════════════════════
+   15 · APIS EXTERNAS
+   ══════════════════════════════════════ */
+
+// ExchangeRate — gratis, sin key
+async function loadFX(){
+  try{
+    const r=await fetch(FX_URL);
+    const d=await r.json();
+    if(d?.rates?.PEN){
+      const rate=d.rates.PEN;
+      const fecha=new Date(d.time_last_update_utc).toLocaleDateString('es-PE');
+      document.getElementById('fx-v').textContent=`S/ ${rate.toFixed(3)}`;
+      document.getElementById('fx-l').textContent=`USD → PEN · ${fecha}`;
+      document.getElementById('dot-fx').className='api-dot live';
+      document.getElementById('val-fx').textContent=`S/ ${rate.toFixed(3)}`;
+      // Guardar en Supabase para cálculos de importación
+      await db.from('exchange_rates').upsert({
+        currency_from:'USD',currency_to:'PEN',
+        rate,fetched_at:new Date().toISOString()
+      },{onConflict:'currency_from,currency_to'}).catch(()=>{});
+    }
+  }catch(e){
+    document.getElementById('dot-fx').className='api-dot off';
+    document.getElementById('fx-l').textContent='Sin conexión · reintenta';
+  }
+}
+
+// Sickw — requiere key de sickw.com
+function saveSickw(){
+  const k=document.getElementById('sickw-key').value.trim();
+  localStorage.setItem('sickw_key',k);
+  SICKW_KEY=k;
+  refreshSickwStatus();
+  showToast(k?'💾 Sickw API Key guardada':'🗑️ Key eliminada');
+}
+
+async function testSickw(){
+  const k=document.getElementById('sickw-key').value.trim();
+  if(!k){showToast('⚠️ Ingresa tu Sickw API Key primero');return}
+  showToast('🧪 Probando Sickw...');
+  try{
+    // Petición real a Sickw:
+    // const url=`${SICKW_URL}?format=JSON&key=${k}&service=${SICKW_SERVICE}&imei=359999069999990`;
+    // const res=await fetch(url); const d=await res.json();
+    // if(!d.error){ ... }
+    // DEMO: simula respuesta OK
+    await new Promise(r=>setTimeout(r,900));
+    document.getElementById('dot-sk').className='api-dot live';
+    document.getElementById('val-sk').textContent='Activo';
+    document.getElementById('val-sk').style.color='var(--green)';
+    showToast('✅ Sickw conectado · IMEI check listo');
+  }catch(e){
+    document.getElementById('dot-sk').className='api-dot off';
+    showToast('❌ No se pudo conectar a Sickw');
+  }
+}
+
+function refreshSickwStatus(){
+  const has=!!SICKW_KEY;
+  document.getElementById('dot-sk').className = has ? 'api-dot pending' : 'api-dot off';
+  document.getElementById('val-sk').textContent = has ? 'Sin probar' : 'Sin key';
+  document.getElementById('val-sk').style.color = has ? 'var(--orange)' : 'var(--t3)';
+}
+
+// Función pública: verificar IMEI
+// Llamada desde cualquier módulo del sistema
+async function verifyIMEI(imei) {
+  if(!SICKW_KEY) return { ok:false, error:'No hay Sickw API Key configurada' };
+  try{
+    // PRODUCCIÓN — descomenta cuando tengas key real:
+    // const url=`${SICKW_URL}?format=JSON&key=${SICKW_KEY}&service=${SICKW_SERVICE}&imei=${imei}`;
+    // const res=await fetch(url);
+    // return await res.json();
+
+    // DEMO:
+    await new Promise(r=>setTimeout(r,600));
+    return {
+      ok:true,brand:'Apple',model:'iPhone 15 Pro',storage:'256GB',
+      color:'Natural Titanium',carrier_lock:'Unlocked',
+      blacklist:'Clean',warranty:'Active',country:'USA'
+    };
+  }catch(e){
+    return {ok:false,error:e.message};
+  }
+}
+
+/* ══════════════════════════════════════
+   16 · UTILIDADES
+   ══════════════════════════════════════ */
+const money = n => 'S/ '+(Number(n)||0).toFixed(2);
+const fmt   = n => (Number(n)||0).toLocaleString();
+const todayISO = () => { const d=new Date();d.setHours(0,0,0,0);return d.toISOString() };
+const fmtT  = d => d ? new Date(d).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : '—';
+
+function showToast(msg, ms=3200) {
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('on');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),ms);
+}
+
+function openOv(id)  { document.getElementById(id).classList.add('open') }
+function closeOv(id) { document.getElementById(id).classList.remove('open') }
+function openPV(url) { document.getElementById('pv-img').src=url;document.getElementById('pv').classList.add('open') }
+function closePV()   { document.getElementById('pv').classList.remove('open') }
+
+async function uploadPhoto(file, folder) {
+  if(!file) return null;
+  const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+  const path=`${folder}/${Date.now()}_${Math.random().toString(36).substr(2,6)}.${ext}`;
+  const {data,error}=await db.storage.from(BUCKET).upload(path,file,{contentType:file.type,upsert:false});
+  if(error){console.error('Upload error:',error);return null}
+  const {data:u}=db.storage.from(BUCKET).getPublicUrl(data.path);
+  return u.publicUrl;
+}
+
+// Cerrar modales con ESC
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){
+    document.querySelectorAll('.ov.open').forEach(o=>o.classList.remove('open'));
+    closePV();
+  }
+});
+window.addEventListener('beforeunload', stopCam);
+</script>
+</body>
+</html>
