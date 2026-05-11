@@ -4,8 +4,25 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
+function useTheme() {
+  const [theme, setTheme] = useState('dark');
+  useEffect(() => {
+    const saved = localStorage.getItem('theme') || 'dark';
+    setTheme(saved);
+    document.documentElement.setAttribute('data-theme', saved);
+  }, []);
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('theme', next);
+    document.documentElement.setAttribute('data-theme', next);
+  }
+  return { theme, toggleTheme };
+}
+
 export default function PosPage() {
   const router = useRouter();
+  const { theme, toggleTheme } = useTheme();
   const [me,        setMe]        = useState(null);
   const [orgId,     setOrgId]     = useState(null);
   const [sessionId, setSessionId] = useState(null);
@@ -198,6 +215,9 @@ export default function PosPage() {
               🛒 {cart.reduce((s,c)=>s+c.qty,0)} — S/{total.toFixed(2)}
             </button>
           )}
+          <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
         </div>
       </div>
 

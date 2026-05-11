@@ -4,11 +4,28 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
+function useTheme() {
+  const [theme, setTheme] = useState('dark');
+  useEffect(() => {
+    const saved = localStorage.getItem('theme') || 'dark';
+    setTheme(saved);
+    document.documentElement.setAttribute('data-theme', saved);
+  }, []);
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('theme', next);
+    document.documentElement.setAttribute('data-theme', next);
+  }
+  return { theme, toggleTheme };
+}
+
 const FX_URL  = 'https://api.frankfurter.app/latest?from=USD&to=PEN';
 const FX_BK   = 'https://open.er-api.com/v6/latest/USD';
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { theme, toggleTheme } = useTheme();
   const [profile,   setProfile]   = useState(null);
   const [role,      setRole]      = useState('');
   const [orgName,   setOrgName]   = useState('');
@@ -159,6 +176,9 @@ export default function DashboardPage() {
           <div className="top-bar-sub">{profile?.full_name}</div>
         </div>
         <div className="top-bar-actions">
+          <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <span className="badge" style={{ background: BADGE_COLOR[role], color: '#fff' }}>
             {role?.toUpperCase()}
           </span>

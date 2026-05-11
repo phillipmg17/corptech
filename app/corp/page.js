@@ -4,6 +4,22 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
+function useTheme() {
+  const [theme, setTheme] = useState('dark');
+  useEffect(() => {
+    const saved = localStorage.getItem('theme') || 'dark';
+    setTheme(saved);
+    document.documentElement.setAttribute('data-theme', saved);
+  }, []);
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('theme', next);
+    document.documentElement.setAttribute('data-theme', next);
+  }
+  return { theme, toggleTheme };
+}
+
 const STORES = [
   { id: '00000000-0000-0000-0000-000000000002', name: 'Futurteck',   ico: '🔵' },
   { id: '00000000-0000-0000-0000-000000000003', name: 'Innovatech',  ico: '🟣' },
@@ -12,6 +28,7 @@ const STORES = [
 
 export default function CorpPage() {
   const router = useRouter();
+  const { theme, toggleTheme } = useTheme();
   const [me,       setMe]       = useState(null);
   const [loading,  setLoading]  = useState(true);
   const [tab,      setTab]      = useState('global');
@@ -147,6 +164,9 @@ export default function CorpPage() {
           </div>
         </div>
         <div className="top-bar-actions">
+          <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <span className="badge" style={{ background: 'var(--purple)', color: '#fff' }}>CORP</span>
           <button className="top-btn-logout" onClick={doLogout}>Salir</button>
         </div>

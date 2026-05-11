@@ -3,6 +3,22 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
+function useTheme() {
+  const [theme, setTheme] = useState('dark');
+  useEffect(() => {
+    const saved = localStorage.getItem('theme') || 'dark';
+    setTheme(saved);
+    document.documentElement.setAttribute('data-theme', saved);
+  }, []);
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('theme', next);
+    document.documentElement.setAttribute('data-theme', next);
+  }
+  return { theme, toggleTheme };
+}
+
 const ORGS = [
   { id: '00000000-0000-0000-0000-000000000001', name: 'Corp Tech',     ico: '🏢', slug: 'corp' },
   { id: '00000000-0000-0000-0000-000000000002', name: 'Futurteck',     ico: '🔵', slug: 'store' },
@@ -19,6 +35,7 @@ const ROLE_OPTS = [
 
 export default function AuthPage() {
   const router = useRouter();
+  const { theme, toggleTheme } = useTheme();
   const [mode, setMode]         = useState('login');  // login | register | recover
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -105,6 +122,9 @@ export default function AuthPage() {
 
   return (
     <div className="auth-screen">
+      <button className="auth-theme-btn" onClick={toggleTheme} title="Cambiar tema">
+        {theme === 'dark' ? '☀️' : '🌙'}
+      </button>
       <div className="auth-card">
         <div className="auth-logo">🏢</div>
         <div className="auth-title">Corp Tech ERP</div>

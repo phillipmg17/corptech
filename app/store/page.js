@@ -4,8 +4,25 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
+function useTheme() {
+  const [theme, setTheme] = useState('dark');
+  useEffect(() => {
+    const saved = localStorage.getItem('theme') || 'dark';
+    setTheme(saved);
+    document.documentElement.setAttribute('data-theme', saved);
+  }, []);
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('theme', next);
+    document.documentElement.setAttribute('data-theme', next);
+  }
+  return { theme, toggleTheme };
+}
+
 export default function StorePage() {
   const router = useRouter();
+  const { theme, toggleTheme } = useTheme();
   const [me,       setMe]       = useState(null);
   const [orgId,    setOrgId]    = useState(null);
   const [orgName,  setOrgName]  = useState('');
@@ -157,6 +174,9 @@ export default function StorePage() {
           </div>
         </div>
         <div className="top-bar-actions">
+          <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <span className="badge badge-blue">{me?.role?.toUpperCase()}</span>
           <button className="top-btn-logout" onClick={doLogout}>Salir</button>
         </div>
