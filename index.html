@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>Corp Tech ERP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<!--
+╔══════════════════════════════════════════════════════════════╗
+║   CORP TECH ERP — BASE MULTI-TENANT                         ║
+║   Archivo: index.html                                        ║
+║   Supabase: jgreajitfugnqruvbavn                             ║
+║   Roles: superadmin | corp | store                           ║
+╚══════════════════════════════════════════════════════════════╝
+-->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+/* ══════════════════════════════════════════════
+   DESIGN SYSTEM — iOS Dark Mode
+   ══════════════════════════════════════════════ */
+:root {
+  /* Base */
+  --bg:        #000000;
+  --bg1:       #0A0A0A;
+  --card:      #1C1C1E;
+  --card2:     #2C2C2E;
+  --card3:     #3A3A3C;
+  --border:    #3A3A3C;
+  --border2:   #2C2C2E;
+  /* Text */
+  --t1:  #FFFFFF;
+  --t2:  rgba(235,235,245,.82);
+  --t3:  rgba(235,235,245,.50);
+  --t4:  rgba(235,235,245,.28);
+  /* Brand (sobrescrito por org) */
+  --accent:    #0A84FF;
+  --accent-d:  rgba(10,132,255,.15);
+  --accent-g:  rgba(10,132,255,.25);
+  /* Semáforo */
+  --green:     #30D158;  --green-d: rgba(48,209,88,.15);
+  --red:       #FF453A;  --red-d:   rgba(255,69,58,.15);
+  --orange:    #FF9F0A;  --ora-d:   rgba(255,159,10,.15);
+  --purple:    #BF5AF2;  --pur-d:   rgba(191,90,242,.15);
+  --teal:      #5AC8FA;
+  /* Gradientes */
+  --grad:   linear-gradient(135deg,#0A84FF,#BF5AF2);
+  --ggreen: linear-gradient(135deg,#30D158,#5AC8FA);
+  --gfire:  linear-gradient(135deg,#FF9F0A,#FF453A);
+  /* Radios */
+  --r:   14px; --rx:  20px; --r2x: 28px; --r3x: 36px; --rf: 9999px;
+  /* Layout */
+  --sb:  260px;
+  --tb:  58px;
+  --sat: env(safe-area-inset-top,    44px);
+  --sab: env(safe-area-inset-bottom, 34px);
+  /* Shadows */
+  --sh:  0 4px 24px rgba(0,0,0,.55);
+  --sh2: 0 8px 44px rgba(0,0,0,.65);
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+html { height: 100%; color-scheme: dark }
+body {
+  font-family:'Urbanist',-apple-system,'SF Pro Display',sans-serif;
+  background: var(--bg); color: var(--t1);
+  min-height: 100dvh; overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+input,select,textarea,button { font-family: inherit }
+::-webkit-scrollbar { width: 3px; height: 3px }
+::-webkit-scrollbar-thumb { background: var(--card3); border-radius: 2px }
+
+/* ══════════════════════════════════════════════
+   PANTALLA DE CARGA
+   ══════════════════════════════════════════════ */
+#splash {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+}
+.splash-logo {
+  width: 96px; height: 96px; border-radius: var(--r2x);
+  background: var(--grad); display: flex; align-items: center; justify-content: center;
+  font-size: 44px; box-shadow: 0 0 60px rgba(10,132,255,.35), var(--sh2);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{box-shadow:0 0 40px rgba(10,132,255,.3),var(--sh2)} 50%{box-shadow:0 0 70px rgba(10,132,255,.5),var(--sh2)} }
+.splash-name { font-size: 28px; font-weight: 900; letter-spacing: .3px }
+.splash-sub  { font-size: 14px; color: var(--t3); font-weight: 600 }
+.splash-dots { display: flex; gap: 8px }
+.splash-dot  {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  animation: bounce 1.2s ease-in-out infinite;
+}
+.splash-dot:nth-child(2) { animation-delay: .2s }
+.splash-dot:nth-child(3) { animation-delay: .4s }
+@keyframes bounce { 0%,100%{opacity:.3;transform:scale(.8)} 50%{opacity:1;transform:scale(1.2)} }
+
+/* ══════════════════════════════════════════════
+   AUTH
+   ══════════════════════════════════════════════ */
+#auth {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: var(--bg);
+  flex-direction: column; align-items: center; justify-content: center;
+  padding: calc(var(--sat) + 24px) 20px calc(var(--sab) + 24px); gap: 22px;
+}
+.auth-glow {
+  position: absolute; top: -60px; left: 50%; transform: translateX(-50%);
+  width: 380px; height: 380px;
+  background: radial-gradient(circle, rgba(10,132,255,.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+.auth-logo {
+  width: 84px; height: 84px; border-radius: var(--r2x);
+  background: var(--grad); display: flex; align-items: center; justify-content: center;
+  font-size: 38px; box-shadow: 0 0 44px rgba(10,132,255,.28), var(--sh2);
+}
+.auth-card {
+  background: var(--card); border: 1px solid var(--border2); border-radius: var(--r2x);
+  padding: 24px 20px; width: 100%; max-width: 390px;
+  display: flex; flex-direction: column; gap: 14px; box-shadow: var(--sh);
+}
+.f-label {
+  font-size: 11px; font-weight: 700; color: var(--t3);
+  letter-spacing: .6px; text-transform: uppercase; display: block; margin-bottom: 5px;
+}
+.f-input {
+  background: var(--card2); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 13px 14px; color: var(--t1); font-size: 16px; font-weight: 500;
+  outline: none; width: 100%; transition: border-color .2s;
+}
+.f-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-g) }
+.f-input::placeholder { color: var(--t4) }
+.f-select {
+  background: var(--card2); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 13px 14px; color: var(--t1); font-size: 15px; font-weight: 500;
+  outline: none; width: 100%; -webkit-appearance: none; transition: border-color .2s;
+}
+#auth-err {
+  color: var(--red); font-size: 13px; text-align: center; display: none;
+  font-weight: 700; padding: 6px 10px; background: var(--red-d); border-radius: var(--r);
+}
+.btn-auth {
+  background: var(--grad); color: #fff; border: none; border-radius: var(--r);
+  padding: 15px; font-size: 16px; font-weight: 800; cursor: pointer; width: 100%;
+  box-shadow: 0 4px 18px rgba(10,132,255,.35); transition: opacity .15s, transform .1s;
+  letter-spacing: .3px;
+}
+.btn-auth:active { opacity: .82; transform: scale(.98) }
+
+/* ══════════════════════════════════════════════
+   APP SHELL
+   ══════════════════════════════════════════════ */
+#app { display: none; min-height: 100dvh }
+@media(min-width:768px){ #app { padding-left: var(--sb) } }
+
+/* ── Sidebar ── */
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; width: var(--sb);
+  background: var(--bg1); border-right: 1px solid var(--border2);
+  display: none; flex-direction: column; z-index: 60;
+}
+@media(min-width:768px){ .sidebar { display: flex } }
+.sb-brand {
+  padding: calc(var(--sat) + 14px) 16px 14px;
+  display: flex; align-items: center; gap: 11px;
+  border-bottom: 1px solid var(--border2);
+}
+.sb-logo {
+  width: 38px; height: 38px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
+  background: var(--grad);
+}
+.sb-name  { font-size: 14px; font-weight: 900; line-height: 1.2 }
+.sb-store { font-size: 11px; font-weight: 700; color: var(--accent); margin-top: 1px }
+.sb-nav   { flex: 1; overflow-y: auto; padding: 8px 6px; display: flex; flex-direction: column; gap: 1px }
+.nav-sep  {
+  font-size: 10px; font-weight: 700; color: var(--t4);
+  letter-spacing: 1.1px; text-transform: uppercase; padding: 10px 10px 4px;
+}
+.si {
+  display: flex; align-items: center; gap: 9px; padding: 9px 12px;
+  border-radius: var(--r); cursor: pointer; color: var(--t3);
+  font-size: 14px; font-weight: 600; transition: all .15s; position: relative;
+}
+.si:hover { background: var(--card); color: var(--t2) }
+.si.on    { background: var(--accent-d); color: var(--accent) }
+.si.on::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 20px; background: var(--accent); border-radius: 0 3px 3px 0;
+}
+.si-ico { width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0 }
+.si-badge {
+  margin-left: auto; background: var(--red); color: #fff;
+  border-radius: var(--rf); font-size: 10px; font-weight: 700; padding: 1px 6px;
+}
+.sb-foot { padding: 10px 6px calc(var(--sab) + 8px); border-top: 1px solid var(--border2) }
+.sb-user {
+  display: flex; align-items: center; gap: 9px; padding: 9px 12px;
+  border-radius: var(--r); cursor: pointer; transition: background .15s;
+}
+.sb-user:hover { background: var(--card) }
+.sb-av { width: 30px; height: 30px; border-radius: 50%; background: var(--grad); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0 }
+.sb-un { font-size: 13px; font-weight: 700 }
+.sb-ur { font-size: 11px; color: var(--t3) }
+
+/* ── Topbar ── */
+.topbar {
+  position: sticky; top: 0; z-index: 40; height: var(--tb);
+  background: rgba(0,0,0,.88); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+  border-bottom: 1px solid var(--border2);
+  display: flex; align-items: center; padding: 0 16px; gap: 10px;
+  padding-top: env(safe-area-inset-top, 0);
+}
+.tb-title { font-size: 17px; font-weight: 800; flex: 1 }
+.tb-badge {
+  display: flex; align-items: center; gap: 7px; background: var(--card);
+  border: 1px solid var(--border); border-radius: var(--rf);
+  padding: 5px 11px; font-size: 12px; font-weight: 700;
+}
+.tb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0 }
+.tb-btn {
+  width: 36px; height: 36px; background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); display: flex; align-items: center; justify-content: center;
+  font-size: 15px; cursor: pointer; flex-shrink: 0; color: var(--t2);
+}
+
+/* ── Main Content ── */
+.content { padding: 16px 16px calc(var(--sab) + 76px) }
+@media(min-width:768px){ .content { padding: 20px 24px 32px; max-width: 1100px } }
+.pane { display: none }
+.pane.on { display: block }
+
+/* ── Bottom Nav ── */
+.bnav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: calc(54px + var(--sab));
+  background: rgba(0,0,0,.92); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+  border-top: 1px solid var(--border2);
+  display: flex; align-items: flex-start; padding-top: 6px; z-index: 50;
+}
+@media(min-width:768px){ .bnav { display: none } }
+.bn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  cursor: pointer; padding: 4px 0; position: relative;
+}
+.bn-i  { font-size: 20px; line-height: 1 }
+.bn-l  { font-size: 9px; font-weight: 700; color: var(--t3) }
+.bn.on .bn-l { color: var(--accent) }
+.bn.on .bn-i { filter: drop-shadow(0 0 5px var(--accent)) }
+.bn-b  {
+  position: absolute; top: 1px; right: calc(50% - 20px);
+  background: var(--red); color: #fff;
+  border-radius: var(--rf); font-size: 9px; font-weight: 700; padding: 0 4px; min-width: 14px; text-align: center;
+}
+
+/* ══════════════════════════════════════════════
+   COMPONENTES REUTILIZABLES
+   ══════════════════════════════════════════════ */
+/* Botones */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 11px 18px; border-radius: var(--r); border: none;
+  font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: opacity .15s, transform .1s;
+}
+.btn:active { opacity: .82; transform: scale(.97) }
+.btn-p  { background: var(--grad);      color: #fff;        box-shadow: 0 4px 14px rgba(10,132,255,.3) }
+.btn-g  { background: var(--green);     color: #000 }
+.btn-r  { background: var(--red);       color: #fff }
+.btn-o  { background: var(--orange);    color: #000 }
+.btn-gh { background: var(--card2);     color: var(--t2);   border: 1px solid var(--border) }
+.btn-w  { width: 100% }
+.btn-sm { padding: 7px 13px; font-size: 12px }
+.btn-lg { padding: 15px 24px; font-size: 16px }
+
+/* KPIs */
+.kpi-row { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-bottom: 18px }
+@media(min-width:480px){ .kpi-row { grid-template-columns: repeat(4,1fr) } }
+.kpi {
+  background: var(--card); border: 1px solid var(--border2); border-radius: var(--rx);
+  padding: 14px; display: flex; flex-direction: column; gap: 4px;
+}
+.kpi-ic  { font-size: 22px; margin-bottom: 2px }
+.kpi-v   { font-size: 24px; font-weight: 900 }
+.kpi-l   { font-size: 11px; font-weight: 600; color: var(--t3) }
+.kpi-sub { font-size: 11px; color: var(--t4) }
+
+/* Cards */
+.card  { background: var(--card); border: 1px solid var(--border2); border-radius: var(--rx); padding: 16px }
+.card2 { background: var(--card2); border: 1px solid var(--border); border-radius: var(--r); padding: 14px }
+.sec-title {
+  font-size: 18px; font-weight: 800; margin-bottom: 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.sec-title small { font-size: 12px; font-weight: 600; color: var(--t3) }
+
+/* List items */
+.li {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  background: var(--card); border: 1px solid var(--border2); border-radius: var(--r);
+  margin-bottom: 8px; cursor: pointer; transition: background .15s;
+}
+.li:hover { background: var(--card2) }
+.li-ic { width: 40px; height: 40px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0 }
+.li-m  { flex: 1; min-width: 0 }
+.li-t  { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.li-s  { font-size: 12px; color: var(--t3); margin-top: 2px }
+.li-r  { text-align: right; flex-shrink: 0 }
+.li-am { font-size: 15px; font-weight: 800 }
+
+/* Badges */
+.badge {
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: var(--rf); display: inline-block;
+}
+.bg-g { background: var(--green-d); color: var(--green) }
+.bg-r { background: var(--red-d);   color: var(--red) }
+.bg-o { background: var(--ora-d);   color: var(--orange) }
+.bg-b { background: var(--accent-d);color: var(--accent) }
+.bg-x { background: var(--card2);   color: var(--t3) }
+
+/* Formularios */
+.fg   { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px }
+.fg:last-child { margin-bottom: 0 }
+.frow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
+
+/* Photo capture */
+.photo-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 13px; background: var(--card2);
+  border: 2px dashed var(--border); border-radius: var(--r);
+  cursor: pointer; font-size: 14px; font-weight: 700; color: var(--t3);
+  transition: all .2s;
+}
+.photo-btn.ok { border-color: var(--green); color: var(--green); background: var(--green-d) }
+.photo-prev   { width: 100%; max-height: 150px; object-fit: cover; border-radius: var(--r); margin-top: 6px; display: none }
+.photo-prev.show { display: block }
+
+/* Modal */
+.ov {
+  position: fixed; inset: 0; background: rgba(0,0,0,.88);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px;
+}
+.ov.open { display: flex }
+.modal {
+  background: var(--card); border: 1px solid var(--border2);
+  border-radius: var(--r2x); width: 100%; max-width: 440px;
+  max-height: 88dvh; overflow-y: auto; padding: 22px; box-shadow: var(--sh2);
+}
+.modal-hdr {
+  font-size: 19px; font-weight: 900; margin-bottom: 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.mc { background: var(--card2); border: none; color: var(--t3); width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center }
+
+/* Toast */
+#toast {
+  position: fixed; top: calc(var(--sat) + 64px); left: 50%;
+  transform: translateX(-50%) translateY(-14px);
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--rf);
+  padding: 10px 20px; font-size: 14px; font-weight: 700; white-space: nowrap;
+  box-shadow: var(--sh2); opacity: 0; pointer-events: none;
+  transition: all .28s; z-index: 900;
+}
+#toast.on { opacity: 1; transform: translateX(-50%) translateY(0) }
+
+/* Photo Viewer */
+#pv {
+  position: fixed; inset: 0; background: rgba(0,0,0,.96);
+  z-index: 999; display: none; align-items: center; justify-content: center; padding: 16px;
+}
+#pv.open { display: flex }
+#pv img  { max-width: 100%; max-height: 90dvh; object-fit: contain; border-radius: var(--r) }
+#pv-close {
+  position: absolute; top: calc(var(--sat) + 12px); right: 14px;
+  background: var(--card); border: none; color: var(--t1);
+  width: 38px; height: 38px; border-radius: 50%; cursor: pointer; font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ══════════════════════════════════════════════
+   IMEI SCANNER
+   ══════════════════════════════════════════════ */
+.scanner-frame {
+  position: relative; border-radius: var(--rx); overflow: hidden;
+  background: #000; aspect-ratio: 16/9; max-height: 280px;
+  border: 2px solid var(--accent);
+}
+.scanner-frame video { width: 100%; height: 100%; object-fit: cover }
+.scanner-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.scanner-box {
+  width: 60%; max-width: 200px; aspect-ratio: 3/1;
+  border: 2px solid var(--accent); border-radius: 8px;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,.45);
+  animation: scanline 2s ease-in-out infinite;
+}
+@keyframes scanline { 0%,100%{border-color:var(--accent)} 50%{border-color:var(--green)} }
+.scanner-line {
+  position: absolute; top: 50%; left: 20%; right: 20%; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: scan 1.5s linear infinite;
+}
+@keyframes scan { 0%{top:30%} 100%{top:70%} }
+.scanner-placeholder {
+  width: 100%; aspect-ratio: 16/9; max-height: 280px;
+  background: var(--card2); border-radius: var(--rx); border: 2px dashed var(--border);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  color: var(--t3); font-size: 14px; font-weight: 600;
+}
+
+/* IMEI Result Card */
+.imei-result {
+  background: var(--card); border: 1px solid var(--border2); border-radius: var(--rx);
+  padding: 18px; display: none;
+}
+.imei-result.show { display: block }
+.imei-result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px }
+.imei-icon { font-size: 36px }
+.imei-num  { font-size: 14px; font-weight: 700; color: var(--t3); font-family: monospace }
+.imei-rows { display: flex; flex-direction: column; gap: 8px }
+.imei-row  { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--card2); border-radius: var(--r) }
+.imei-row-label { font-size: 12px; font-weight: 600; color: var(--t3) }
+.imei-row-val   { font-size: 13px; font-weight: 800 }
+.imei-sickw-note { font-size: 11px; color: var(--t4); margin-top: 10px; text-align: center }
+
+/* ══════════════════════════════════════════════
+   STOCK DASHBOARD
+   ══════════════════════════════════════════════ */
+.org-stock-cards { display: grid; gap: 12px; margin-bottom: 16px }
+@media(min-width:600px){ .org-stock-cards { grid-template-columns: repeat(2,1fr) } }
+@media(min-width:900px){ .org-stock-cards { grid-template-columns: repeat(4,1fr) } }
+.org-card {
+  background: var(--card); border: 1px solid var(--border2); border-radius: var(--rx);
+  padding: 16px; position: relative; overflow: hidden;
+}
+.org-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--org-color, var(--accent));
+}
+.org-emoji   { font-size: 28px; margin-bottom: 8px }
+.org-name    { font-size: 14px; font-weight: 800; margin-bottom: 4px }
+.org-val     { font-size: 28px; font-weight: 900 }
+.org-sub     { font-size: 11px; color: var(--t3); margin-top: 2px }
+.progress    { height: 5px; background: var(--card3); border-radius: 3px; margin-top: 10px; overflow: hidden }
+.progress-f  { height: 100%; border-radius: 3px; background: var(--org-color, var(--accent)); transition: width .5s }
+
+/* ══════════════════════════════════════════════
+   API STUBS — Sickw + Tipo de Cambio
+   ══════════════════════════════════════════════ */
+.api-stub {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--rx); padding: 14px 16px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 12px;
+}
+.api-status { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0 }
+.api-status.live    { background: var(--green); box-shadow: 0 0 8px var(--green) }
+.api-status.pending { background: var(--orange); animation: pulse-o 1.5s ease-in-out infinite }
+.api-status.error   { background: var(--red) }
+@keyframes pulse-o { 0%,100%{opacity:.5} 50%{opacity:1} }
+.api-name { font-size: 14px; font-weight: 800 }
+.api-url  { font-size: 11px; color: var(--t3); font-family: monospace }
+.api-val  { margin-left: auto; font-size: 16px; font-weight: 900 }
+
+/* Rate banner */
+.rate-banner {
+  background: linear-gradient(135deg,var(--card),var(--card2));
+  border: 1px solid var(--border); border-radius: var(--rx); padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px; margin-bottom: 14px;
+}
+.rate-flag { font-size: 28px }
+.rate-val  { font-size: 30px; font-weight: 900; color: var(--green) }
+.rate-label{ font-size: 12px; color: var(--t3) }
+.rate-date { font-size: 11px; color: var(--t4); margin-top: 2px }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════ SPLASH ══ -->
+<div id="splash">
+  <div class="splash-logo">🏢</div>
+  <div class="splash-name">Corp Tech ERP</div>
+  <div class="splash-sub">Sistema Multi-Tenant · Supabase</div>
+  <div class="splash-dots">
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════ AUTH ══ -->
+<div id="auth">
+  <div class="auth-glow"></div>
+  <div class="auth-logo">🏢</div>
+  <div style="text-align:center">
+    <div style="font-size:26px;font-weight:900">Corp Tech ERP</div>
+    <div style="font-size:14px;color:var(--t3);margin-top:4px">Inicia sesión para continuar</div>
+  </div>
+  <div class="auth-card">
+    <div>
+      <label class="f-label">Correo electrónico</label>
+      <input class="f-input" id="em" type="email" placeholder="usuario@corptech.pe" autocomplete="email">
+    </div>
+    <div>
+      <label class="f-label">Contraseña</label>
+      <input class="f-input" id="pw" type="password" placeholder="••••••••" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')login()">
+    </div>
+    <div id="auth-err"></div>
+    <button class="btn-auth" id="btn-login" onclick="login()">Entrar</button>
+  </div>
+  <p style="font-size:12px;color:var(--t4);text-align:center;max-width:300px">
+    El sistema detecta automáticamente tu empresa y te redirige al panel correspondiente.
+  </p>
+</div>
+
+<!-- ══════════════════════════════════ APP ══ -->
+<div id="app">
+
+  <!-- SIDEBAR (desktop) -->
+  <nav class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-logo" id="sb-logo">🏢</div>
+      <div>
+        <div class="sb-name">Corp Tech ERP</div>
+        <div class="sb-store" id="sb-store">Cargando...</div>
+      </div>
+    </div>
+    <div class="sb-nav" id="sb-nav">
+      <!-- Generado dinámicamente por rol -->
+    </div>
+    <div class="sb-foot">
+      <div class="sb-user" onclick="logout()">
+        <div class="sb-av" id="sb-av">?</div>
+        <div>
+          <div class="sb-un" id="sb-un">—</div>
+          <div class="sb-ur" id="sb-ur">—</div>
+        </div>
+        <div style="margin-left:auto;font-size:13px;color:var(--t4)">↩</div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="tb-title" id="tb-title">Dashboard</div>
+    <div class="tb-badge">
+      <div class="tb-dot" id="tb-dot"></div>
+      <span id="tb-org">—</span>
+    </div>
+  </div>
+
+  <!-- CONTENIDO -->
+  <div class="content">
+
+    <!-- ════════ DASHBOARD ════════ -->
+    <div class="pane on" id="p-dashboard">
+
+      <!-- Tipo de Cambio Banner -->
+      <div class="rate-banner" id="rate-banner">
+        <div class="rate-flag">🇺🇸</div>
+        <div>
+          <div class="rate-val" id="rate-val">S/ —</div>
+          <div class="rate-label">USD → PEN · Tipo de cambio</div>
+          <div class="rate-date" id="rate-date">Cargando...</div>
+        </div>
+        <div style="margin-left:auto">
+          <button class="btn btn-gh btn-sm" onclick="fetchExchangeRate()">↻</button>
+        </div>
+      </div>
+
+      <!-- KPIs Globales -->
+      <div class="kpi-row" id="kpi-row">
+        <div class="kpi"><div class="kpi-ic">📦</div><div class="kpi-v" id="k-stock">—</div><div class="kpi-l">Stock Total</div></div>
+        <div class="kpi"><div class="kpi-ic">💵</div><div class="kpi-v" id="k-ventas">—</div><div class="kpi-l">Ventas Hoy</div></div>
+        <div class="kpi"><div class="kpi-ic">👥</div><div class="kpi-v" id="k-users">—</div><div class="kpi-l">Usuarios</div></div>
+        <div class="kpi"><div class="kpi-ic">🏪</div><div class="kpi-v" id="k-orgs">—</div><div class="kpi-l">Tiendas</div></div>
+      </div>
+
+      <!-- Stock por Empresa (Corp ve todo, tienda ve solo la suya) -->
+      <div class="sec-title">📊 Stock por Empresa <small id="stock-sub"></small></div>
+      <div class="org-stock-cards" id="org-cards">
+        <div style="color:var(--t3);font-size:13px;padding:16px">Cargando datos...</div>
+      </div>
+
+      <!-- APIs Status -->
+      <div class="sec-title" style="margin-top:8px">🔌 Estado de Integraciones</div>
+      <div class="api-stub">
+        <div class="api-status" id="api-sickw-dot"></div>
+        <div>
+          <div class="api-name">Sickw IMEI Check</div>
+          <div class="api-url">https://sickw.com/api.php?format=JSON</div>
+        </div>
+        <div class="api-val" id="api-sickw-val" style="font-size:12px;color:var(--t3)">—</div>
+      </div>
+      <div class="api-stub">
+        <div class="api-status live" id="api-fx-dot"></div>
+        <div>
+          <div class="api-name">ExchangeRate API</div>
+          <div class="api-url">https://open.er-api.com/v6/latest/USD</div>
+        </div>
+        <div class="api-val" id="api-fx-val" style="color:var(--green)">—</div>
+      </div>
+
+      <!-- Ventas recientes -->
+      <div class="sec-title" style="margin-top:8px">🧾 Últimas Ventas</div>
+      <div id="recent-sales"><div style="color:var(--t3);font-size:13px;padding:8px">Cargando...</div></div>
+    </div>
+
+    <!-- ════════ IMEI SCANNER ════════ -->
+    <div class="pane" id="p-imei">
+      <div class="sec-title">📷 Escáner de IMEI</div>
+
+      <!-- Cámara -->
+      <div id="scanner-wrap">
+        <div class="scanner-placeholder" id="scanner-ph">
+          <div style="font-size:48px">📷</div>
+          <div>Cámara inactiva</div>
+          <button class="btn btn-p btn-sm" onclick="startCamera()">Activar Cámara</button>
+        </div>
+        <div class="scanner-frame" id="scanner-frame" style="display:none">
+          <video id="scanner-video" autoplay playsinline muted></video>
+          <div class="scanner-overlay">
+            <div class="scanner-box"></div>
+            <div class="scanner-line"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-g btn-sm" id="btn-cam-start" onclick="startCamera()" style="display:none">▶ Iniciar</button>
+          <button class="btn btn-r btn-sm" id="btn-cam-stop" onclick="stopCamera()" style="display:none">■ Detener</button>
+          <button class="btn btn-gh btn-sm" id="btn-cam-switch" onclick="switchCamera()" style="display:none">🔄 Cambiar</button>
+        </div>
+      </div>
+
+      <!-- Entrada manual (siempre visible) -->
+      <div class="card" style="margin-top:14px">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">📝 Ingreso Manual de IMEI</div>
+        <div class="fg">
+          <label class="f-label">Número IMEI (15 dígitos)</label>
+          <div style="display:flex;gap:8px">
+            <input class="f-input" id="imei-input" type="tel" maxlength="20"
+                   placeholder="357901234567890"
+                   oninput="this.value=this.value.replace(/\D/g,'')"
+                   onkeydown="if(event.key==='Enter')checkIMEI()">
+            <button class="btn btn-p" onclick="checkIMEI()" style="white-space:nowrap">Verificar</button>
+          </div>
+        </div>
+        <!-- Captura con cámara iOS (fallback) -->
+        <div class="fg" style="margin-top:4px">
+          <label class="f-label">O toma foto del IMEI</label>
+          <label class="photo-btn" id="imei-cam-btn" for="imei-cam-input">
+            📷 Capturar imagen del IMEI
+          </label>
+          <input type="file" id="imei-cam-input" accept="image/*" capture="environment"
+                 style="display:none" onchange="handleIMEIPhoto(this)">
+        </div>
+      </div>
+
+      <!-- Resultado IMEI -->
+      <div class="imei-result" id="imei-result">
+        <div class="imei-result-header">
+          <div class="imei-icon" id="imei-icon">📱</div>
+          <div>
+            <div style="font-size:17px;font-weight:900" id="imei-brand-model">—</div>
+            <div class="imei-num" id="imei-display">000000000000000</div>
+          </div>
+          <div id="imei-status-badge" class="badge" style="margin-left:auto"></div>
+        </div>
+        <div class="imei-rows" id="imei-rows"></div>
+        <div class="imei-sickw-note" id="imei-note"></div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-p btn-sm" onclick="registerIMEICheckin()" id="btn-imei-checkin">+ Registrar Check-in</button>
+          <button class="btn btn-gh btn-sm" onclick="clearIMEI()">✕ Limpiar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ STOCK ════════ -->
+    <div class="pane" id="p-stock">
+      <div class="sec-title">📦 Stock Central
+        <button class="btn btn-gh btn-sm" onclick="loadStock()">↻</button>
+      </div>
+      <div class="fg" style="margin-bottom:14px">
+        <input class="f-input" placeholder="🔍 Buscar producto, IMEI, marca..." id="stock-filter" oninput="filterStock(this.value)">
+      </div>
+      <div id="stock-list"><div style="color:var(--t3);padding:16px;font-size:13px">Cargando...</div></div>
+    </div>
+
+    <!-- ════════ AJUSTES ════════ -->
+    <div class="pane" id="p-settings">
+      <div class="sec-title">⚙️ Configuración</div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">🔌 Integraciones API</div>
+
+        <!-- Sickw -->
+        <div class="fg">
+          <label class="f-label">Sickw API Key</label>
+          <input class="f-input" id="sickw-key" type="password" placeholder="••••••••••••••••••">
+          <div style="font-size:11px;color:var(--t3);margin-top:4px">Obtén tu key en sickw.com · ~$0.10 por consulta de IMEI</div>
+        </div>
+        <button class="btn btn-gh btn-sm" onclick="saveSickwKey()">💾 Guardar Key</button>
+        <button class="btn btn-p btn-sm" style="margin-left:8px" onclick="testSickw()">🧪 Probar conexión</button>
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">💱 Tipo de Cambio</div>
+        <div style="font-size:13px;color:var(--t3);margin-bottom:10px">
+          Se actualiza automáticamente cada vez que abres el sistema usando <code style="color:var(--accent)">open.er-api.com</code> (gratis, sin API key).
+        </div>
+        <button class="btn btn-g btn-sm" onclick="fetchExchangeRate()">↻ Actualizar ahora</button>
+        <div id="fx-last" style="font-size:12px;color:var(--t3);margin-top:8px"></div>
+      </div>
+
+      <div class="card">
+        <div style="font-size:14px;font-weight:800;margin-bottom:12px">👤 Mi Cuenta</div>
+        <div class="fg">
+          <label class="f-label">Email</label>
+          <div class="f-input" style="cursor:default;color:var(--t3)" id="cfg-email">—</div>
+        </div>
+        <div class="fg">
+          <label class="f-label">Organización</label>
+          <div class="f-input" style="cursor:default;color:var(--t3)" id="cfg-org">—</div>
+        </div>
+        <div class="fg">
+          <label class="f-label">Rol</label>
+          <div class="f-input" style="cursor:default;color:var(--t3)" id="cfg-role">—</div>
+        </div>
+        <button class="btn btn-r btn-sm btn-w" style="margin-top:6px" onclick="logout()">↩ Cerrar Sesión</button>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+
+  <!-- BOTTOM NAV (mobile) -->
+  <nav class="bnav" id="bnav">
+    <!-- Generado dinámicamente -->
+  </nav>
+</div><!-- /app -->
+
+<!-- ════════ MODAL: Registrar Check-in ════════ -->
+<div class="ov" id="modal-checkin">
+  <div class="modal">
+    <div class="modal-hdr">📥 Registrar Check-in
+      <button class="mc" onclick="closeOv('modal-checkin')">✕</button>
+    </div>
+    <div class="fg"><label class="f-label">IMEI</label>
+      <input class="f-input" id="ci-imei" readonly style="color:var(--t3)"></div>
+    <div class="fg"><label class="f-label">Producto / Modelo</label>
+      <input class="f-input" id="ci-model" placeholder="iPhone 15 Pro 256GB"></div>
+    <div class="fg"><label class="f-label">Tienda de destino</label>
+      <select class="f-select" id="ci-store">
+        <option value="">Bodega Corp (sin asignar)</option>
+        <option value="00000000-0000-0000-0000-000000000002">⚡ Futurteck</option>
+        <option value="00000000-0000-0000-0000-000000000003">💡 Innovatech Store</option>
+        <option value="00000000-0000-0000-0000-000000000004">🌐 WeTech Peru</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="f-label">📷 Foto del producto *</label>
+      <label class="photo-btn" id="ci-photo-btn" for="ci-photo-input">📷 Foto de empaque/producto</label>
+      <input type="file" id="ci-photo-input" accept="image/*" capture="environment" style="display:none" onchange="handleCheckinPhoto(this)">
+      <img id="ci-photo-prev" class="photo-prev">
+    </div>
+    <button class="btn btn-g btn-w" onclick="saveCheckin()">💾 Confirmar Check-in</button>
+  </div>
+</div>
+
+<!-- Photo Viewer -->
+<div id="pv"><button id="pv-close" onclick="document.getElementById('pv').classList.remove('open')">✕</button><img id="pv-img" src="" alt="foto"></div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════════
+     JAVASCRIPT
+     ══════════════════════════════════════════════ -->
+<script>
+// ╔══════════════════════════════════════════════╗
+// ║  1. CONFIGURACIÓN — Supabase                 ║
+// ╚══════════════════════════════════════════════╝
+const SUPABASE_URL  = 'https://jgreajitfugnqruvbavn.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_YQe_65xuX2olBQDDdRm16g_rnskVFuD';
+
+// ╔══════════════════════════════════════════════╗
+// ║  2. CONFIGURACIÓN — APIs externas            ║
+// ╚══════════════════════════════════════════════╝
+
+// ── Sickw IMEI Validation ──────────────────────
+// Documentación: https://sickw.com/api-docs
+// Precio aprox:  $0.10 por consulta
+// Parámetros:    ?format=JSON&key=TU_API_KEY&imei=NUMERO
+const SICKW_API_URL  = 'https://sickw.com/api.php';
+const SICKW_SERVICE  = 19;    // Servicio básico de info IMEI (ajusta según tu plan)
+let   SICKW_API_KEY  = localStorage.getItem('sickw_key') || '';  // se guarda localmente
+
+// ── ExchangeRate API ───────────────────────────
+// Documentación: https://www.exchangerate-api.com/docs/free
+// Límite:        1,500 peticiones/mes (gratis, sin key)
+const FX_API_URL = 'https://open.er-api.com/v6/latest/USD';
+
+// ╔══════════════════════════════════════════════╗
+// ║  3. MULTI-TENANT — Colores y datos por org   ║
+// ╚══════════════════════════════════════════════╝
+const ORG_CONFIG = {
+  'corp': {
+    id:    '00000000-0000-0000-0000-000000000001',
+    name:  'Corp Tech',
+    emoji: '🏢',
+    color: '#BF5AF2',
+    grad:  'linear-gradient(135deg,#BF5AF2,#0A84FF)',
+    role:  'Administrador Corp',
+  },
+  '00000000-0000-0000-0000-000000000002': {
+    name: 'Futurteck',     emoji: '⚡', color: '#0A84FF',
+    grad: 'linear-gradient(135deg,#0A84FF,#5AC8FA)',  role: 'Gerente Tienda',
+  },
+  '00000000-0000-0000-0000-000000000003': {
+    name: 'Innovatech Store', emoji: '💡', color: '#30D158',
+    grad: 'linear-gradient(135deg,#30D158,#5AC8FA)',  role: 'Gerente Tienda',
+  },
+  '00000000-0000-0000-0000-000000000004': {
+    name: 'WeTech Peru',   emoji: '🌐', color: '#FF9F0A',
+    grad: 'linear-gradient(135deg,#FF9F0A,#FF453A)',  role: 'Gerente Tienda',
+  },
+};
+const SUPERADMIN_EMAIL = 'phillipmg17@gmail.com';
+
+// ╔══════════════════════════════════════════════╗
+// ║  4. ESTADO GLOBAL                            ║
+// ╚══════════════════════════════════════════════╝
+let db, me, myProfile, myOrg, myOrgId, myRole;
+let camStream = null, camFacingBack = true;
+let imeiData = null, checkinPhotoFile = null;
+let allStock = [];
+
+// ╔══════════════════════════════════════════════╗
+// ║  5. INICIALIZACIÓN                           ║
+// ╚══════════════════════════════════════════════╝
+window.addEventListener('DOMContentLoaded', () => {
+  db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  // Carga Sickw key de localStorage
+  const sk = localStorage.getItem('sickw_key') || '';
+  document.getElementById('sickw-key').value = sk;
+  SICKW_API_KEY = sk;
+  updateSickwStatus();
+
+  db.auth.onAuthStateChange((event, session) => {
+    if (session) {
+      me = session.user;
+      initApp();
+    } else {
+      hideSplash();
+      showAuth();
+    }
+  });
+});
+
+function hideSplash() {
+  const sp = document.getElementById('splash');
+  sp.style.opacity = '0'; sp.style.transition = 'opacity .4s';
+  setTimeout(() => sp.remove(), 420);
+}
+
+// ╔══════════════════════════════════════════════╗
+// ║  6. AUTH                                     ║
+// ╚══════════════════════════════════════════════╝
+function showAuth() {
+  document.getElementById('auth').style.display = 'flex';
+  document.getElementById('app').style.display  = 'none';
+}
+
+async function login() {
+  const em  = document.getElementById('em').value.trim();
+  const pw  = document.getElementById('pw').value;
+  const err = document.getElementById('auth-err');
+  const btn = document.getElementById('btn-login');
+  err.style.display = 'none';
+  if (!em || !pw) { showAuthErr('Completa todos los campos'); return; }
+  btn.textContent = 'Entrando...'; btn.disabled = true;
+  const { data, error } = await db.auth.signInWithPassword({ email: em, password: pw });
+  btn.textContent = 'Entrar'; btn.disabled = false;
+  if (error) { showAuthErr('Credenciales incorrectas. Verifica tu email y contraseña.'); return; }
+  me = data.user;
+  document.getElementById('auth').style.display = 'none';
+  document.getElementById('splash').style.display = 'flex';
+  initApp();
+}
+
+function showAuthErr(msg) {
+  const el = document.getElementById('auth-err');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+async function logout() {
+  if (!confirm('¿Cerrar sesión?')) return;
+  stopCamera();
+  await db.auth.signOut();
+  location.reload();
+}
+
+// ╔══════════════════════════════════════════════╗
+// ║  7. INICIALIZAR APP — DETECCIÓN DE ROL       ║
+// ╚══════════════════════════════════════════════╝
+async function initApp() {
+  // Detectar SuperAdmin
+  if (me.email === SUPERADMIN_EMAIL) {
+    myRole  = 'superadmin';
+    myOrgId = 'corp';
+    applyOrgTheme('corp');
+    buildNav('superadmin');
+    showApp();
+    await Promise.all([loadDashboard(), fetchExchangeRate()]);
+    return;
+  }
+
+  // Cargar perfil de Supabase
+  const { data: profile, error } = await db
+    .from('users')
+    .select('*, organizations(*), user_roles(*)')
+    .eq('auth_id', me.id)
+    .maybeSingle();
+
+  if (error || !profile) {
+    showAuthErr('Usuario no encontrado en el sistema. Contacta al administrador.');
+    showAuth(); return;
+  }
+
+  myProfile = profile;
+  myOrg     = profile.organizations;
+  myOrgId   = myOrg?.id || 'corp';
+  myRole    = myOrg?.type || 'store';
+
+  applyOrgTheme(myOrgId);
+  buildNav(myRole);
+
+  // Datos de UI
+  const cfg = ORG_CONFIG[myOrgId] || {};
+  document.getElementById('sb-un').textContent = profile.full_name || me.email;
+  document.getElementById('sb-ur').textContent = profile.role || cfg.role || 'Usuario';
+  const ini = (profile.full_name || me.email || '?')[0].toUpperCase();
+  document.getElementById('sb-av').textContent  = ini;
+  document.getElementById('cfg-email').textContent = me.email;
+  document.getElementById('cfg-org').textContent   = myOrg?.name || '—';
+  document.getElementById('cfg-role').textContent  = profile.role || '—';
+
+  showApp();
+  await Promise.all([loadDashboard(), fetchExchangeRate()]);
+}
+
+function showApp() {
+  hideSplash();
+  document.getElementById('auth').style.display = 'none';
+  document.getElementById('app').style.display  = 'block';
+}
+
+// ── Aplicar tema de org ──────────────────────
+function applyOrgTheme(orgKey) {
+  const cfg = ORG_CONFIG[orgKey] || ORG_CONFIG['corp'];
+  const r   = document.documentElement.style;
+  r.setProperty('--accent',   cfg.color);
+  r.setProperty('--accent-d', hexAlpha(cfg.color, .15));
+  r.setProperty('--accent-g', hexAlpha(cfg.color, .25));
+  r.setProperty('--grad',     cfg.grad);
+
+  document.getElementById('tb-dot').style.background  = cfg.color;
+  document.getElementById('tb-org').textContent       = cfg.name || orgKey;
+  document.getElementById('sb-store').textContent     = cfg.name || orgKey;
+  document.getElementById('sb-logo').textContent      = cfg.emoji || '🏢';
+  document.getElementById('sb-logo').style.background = cfg.grad || cfg.color;
+}
+
+function hexAlpha(hex, a) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ── Nav dinámico por rol ─────────────────────
+const NAVS = {
+  superadmin: [
+    { id:'dashboard', ico:'📊', label:'Dashboard', pane:'p-dashboard' },
+    { id:'imei',      ico:'📷', label:'IMEI Scan',  pane:'p-imei'    },
+    { id:'stock',     ico:'📦', label:'Stock',       pane:'p-stock'   },
+    { id:'settings',  ico:'⚙️', label:'Config',      pane:'p-settings'},
+  ],
+  corp: [
+    { id:'dashboard', ico:'📊', label:'Dashboard', pane:'p-dashboard' },
+    { id:'imei',      ico:'📷', label:'IMEI Scan',  pane:'p-imei'    },
+    { id:'stock',     ico:'📦', label:'Stock',       pane:'p-stock'   },
+    { id:'settings',  ico:'⚙️', label:'Config',      pane:'p-settings'},
+  ],
+  store: [
+    { id:'dashboard', ico:'📊', label:'Inicio',  pane:'p-dashboard' },
+    { id:'imei',      ico:'📷', label:'Escanear', pane:'p-imei'     },
+    { id:'stock',     ico:'📦', label:'Stock',    pane:'p-stock'    },
+    { id:'settings',  ico:'⚙️', label:'Cuenta',   pane:'p-settings' },
+  ],
+};
+
+function buildNav(role) {
+  const items = NAVS[role] || NAVS.store;
+  const sbHtml = items.map(n =>`
+    <div class="si ${n.id==='dashboard'?'on':''}" id="si-${n.id}" onclick="showPane('${n.pane}','${n.id}')">
+      <div class="si-ico">${n.ico}</div>${n.label}
+    </div>`).join('');
+  document.getElementById('sb-nav').innerHTML =
+    `<div class="nav-sep">Principal</div>` + sbHtml;
+
+  const bnHtml = items.map(n =>`
+    <div class="bn ${n.id==='dashboard'?'on':''}" id="bn-${n.id}" onclick="showPane('${n.pane}','${n.id}')">
+      <div class="bn-i">${n.ico}</div>
+      <div class="bn-l">${n.label}</div>
+    </div>`).join('');
+  document.getElementById('bnav').innerHTML = bnHtml;
+}
+
+function showPane(paneId, navId) {
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.si').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('.bn').forEach(b => b.classList.remove('on'));
+  document.getElementById(paneId)?.classList.add('on');
+  document.getElementById('si-'+navId)?.classList.add('on');
+  document.getElementById('bn-'+navId)?.classList.add('on');
+
+  const titles = { dashboard:'Dashboard', imei:'Escáner IMEI', stock:'Stock Central', settings:'Configuración' };
+  document.getElementById('tb-title').textContent = titles[navId] || navId;
+
+  if (paneId === 'p-stock')   loadStock();
+}
+
+// ╔══════════════════════════════════════════════╗
+// ║  8. DASHBOARD                                ║
+// ╚══════════════════════════════════════════════╝
+async function loadDashboard() {
+  const isCorp = (myRole === 'superadmin' || myRole === 'corp');
+  document.getElementById('stock-sub').textContent = isCorp ? 'vista global' : 'tu tienda';
+
+  // KPIs según rol
+  if (isCorp) await loadCorpKPIs();
+  else        await loadStoreKPIs();
+
+  // Stock por org
+  await loadOrgStockCards(isCorp);
+
+  // Ventas recientes
+  await loadRecentSales(isCorp);
+}
+
+async function loadCorpKPIs() {
+  const [stockRes, ventasRes, usersRes, orgsRes] = await Promise.all([
+    db.from('stock_items').select('*',{count:'exact',head:true}).eq('status','available'),
+    db.from('sales').select('total_amount').gte('created_at', todayISO()).neq('status','cancelled'),
+    db.from('users').select('*',{count:'exact',head:true}),
+    db.from('organizations').select('*',{count:'exact',head:true}).eq('type','store'),
+  ]);
+  const totalV = (ventasRes.data||[]).reduce((a,s)=>a+(s.total_amount||0),0);
+  document.getElementById('k-stock').textContent  = fmt(stockRes.count);
+  document.getElementById('k-ventas').textContent = money(totalV);
+  document.getElementById('k-users').textContent  = fmt(usersRes.count);
+  document.getElementById('k-orgs').textContent   = fmt(orgsRes.count);
+}
+
+async function loadStoreKPIs() {
+  const [stockRes, ventasRes, clientRes] = await Promise.all([
+    db.from('stock_items').select('*',{count:'exact',head:true}).eq('org_id',myOrgId).eq('status','available'),
+    db.from('sales').select('total_amount').eq('org_id',myOrgId).gte('created_at',todayISO()).neq('status','cancelled'),
+    db.from('customers').select('*',{count:'exact',head:true}).eq('org_id',myOrgId),
+  ]);
+  const totalV = (ventasRes.data||[]).reduce((a,s)=>a+(s.total_amount||0),0);
+  document.getElementById('k-stock').textContent  = fmt(stockRes.count);
+  document.getElementById('k-ventas').textContent = money(totalV);
+  document.getElementById('k-users').textContent  = fmt(clientRes.count);
+  document.getElementById('k-orgs').textContent   = 'Mi Tienda';
+  document.getElementById('kpi-row').children[3].querySelector('.kpi-l').textContent = 'Tienda';
+}
+
+async function loadOrgStockCards(isCorp) {
+  const orgs = isCorp
+    ? [
+        { id:'00000000-0000-0000-0000-000000000001', cfg:{ name:'Corp Tech',emoji:'🏢',color:'#BF5AF2' }},
+        { id:'00000000-0000-0000-0000-000000000002', cfg:ORG_CONFIG['00000000-0000-0000-0000-000000000002'] },
+        { id:'00000000-0000-0000-0000-000000000003', cfg:ORG_CONFIG['00000000-0000-0000-0000-000000000003'] },
+        { id:'00000000-0000-0000-0000-000000000004', cfg:ORG_CONFIG['00000000-0000-0000-0000-000000000004'] },
+      ]
+    : [{ id: myOrgId, cfg: ORG_CONFIG[myOrgId] || {} }];
+
+  const counts = await Promise.all(orgs.map(o =>
+    db.from('stock_items').select('*',{count:'exact',head:true}).eq('org_id',o.id).eq('status','available')
+  ));
+
+  const maxCount = Math.max(...counts.map(r => r.count || 0), 1);
+  const el = document.getElementById('org-cards');
+  el.innerHTML = orgs.map((o, i) => {
+    const cnt = counts[i]?.count || 0;
+    const pct = Math.round(cnt / maxCount * 100);
+    return `<div class="org-card" style="--org-color:${o.cfg.color}">
+      <div class="org-emoji">${o.cfg.emoji}</div>
+      <div class="org-name">${o.cfg.name}</div>
+      <div class="org-val">${fmt(cnt)}</div>
+      <div class="org-sub">unidades disponibles</div>
+      <div class="progress"><div class="progress-f" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+async function loadRecentSales(isCorp) {
+  let q = db.from('sales')
+    .select('id,total_amount,payment_method,status,created_at,customers(full_name),organizations(name)')
+    .gte('created_at', todayISO())
+    .order('created_at',{ascending:false}).limit(6);
+  if (!isCorp) q = q.eq('org_id', myOrgId);
+  const { data } = await q;
+  const el = document.getElementById('recent-sales');
+  if (!data || !data.length) {
+    el.innerHTML = '<div style="color:var(--t3);font-size:13px;padding:8px">Sin ventas hoy aún</div>'; return;
+  }
+  el.innerHTML = data.map(s => `
+    <div class="li">
+      <div class="li-ic" style="background:var(--green-d)">🧾</div>
+      <div class="li-m">
+        <div class="li-t">${s.customers?.full_name||'Cliente general'}</div>
+        <div class="li-s">${s.organizations?.name||''} · ${fmtTime(s.created_at)} · ${s.payment_method||'—'}</div>
+      </div>
+      <div class="li-r">
+        <div class="li-am" style="color:var(--green)">${money(s.total_amount)}</div>
+        <div class="badge ${s.status==='completed'?'bg-g':'bg-r'}">${s.status==='completed'?'OK':'Cancelada'}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ╔══════════════════════════════════════════════╗
+// ║  9. IMEI SCANNER                             ║
+// ╚══════════════════════════════════════════════╝
+async function startCamera() {
+  try {
+    const constraints = {
+      video: { facingMode: camFacingBack ? 'environment' : 'user', width:{ideal:1280}, height:{ideal:720} }
+    };
+    camStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const vid = document.getElementById('scanner-video');
+    vid.srcObject = camStream;
+    document.getElementById('scanner-ph').style.display   = 'none';
+    document.getElementById('scanner-frame').style.display = 'block';
+    document.getElementById('btn-cam-start').style.display  = 'none';
+    document.getElementById('btn-cam-stop').style.display   = 'inline-flex';
+    document.getElementById('btn-cam-switch').style.display = 'inline-flex';
+    showToast('📷 Cámara activa — ingresa el IMEI manualmente abajo');
+  } catch (err) {
+    showToast('⚠️ ' + (err.name === 'NotAllowedError' ? 'Permite acceso a la cámara en ajustes' : 'Cámara no disponible'));
+  }
+}
+
+function stopCamera() {
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  document.getElementById('scanner-ph').style.display    = 'flex';
+  document.getElementById('scanner-frame').style.display = 'none';
+  document.getElementById('btn-cam-stop').style.display  = 'none';
+  document.getElementById('btn-cam-switch').style.display = 'none';
+}
+
+async function switchCamera() {
+  camFacingBack = !camFacingBack;
+  stopCamera(); await startCamera();
+}
+
+function handleIMEIPhoto(input) {
+  const file = input.files[0]; if (!file) return;
+  document.getElementById('imei-cam-btn').textContent = '✅ Imagen capturada — ingresa el IMEI manualmente';
+  document.getElementById('imei-cam-btn').className   = 'photo-btn ok';
+  showToast('📷 Foto capturada — escribe el IMEI abajo y presiona Verificar');
+}
+
+// ── Verificación de IMEI ──────────────────────
+async function checkIMEI() {
+  const raw  = document.getElementById('imei-input').value.replace(/\D/g,'');
+  if (raw.length < 14) { showToast('⚠️ IMEI debe tener 14-15 dígitos'); return; }
+
+  showToast('🔍 Verificando IMEI...');
+  document.getElementById('imei-result').classList.remove('show');
+
+  // 1. Verificar en base de datos propia
+  const { data: localIMEI } = await db
+    .from('imei_registry')
+    .select('*, stock_items(status, org_id, products(name,brand), organizations(name))')
+    .eq('imei', raw).maybeSingle();
+
+  // 2. Verificar con Sickw (si hay API key)
+  let sickwData = null;
+  if (SICKW_API_KEY) {
+    sickwData = await callSickwAPI(raw);
+  }
+
+  // Mostrar resultado
+  displayIMEIResult(raw, localIMEI, sickwData);
+}
+
+// ── Sickw API Call ────────────────────────────
+// STUB: Conecta con la API real cuando tengas tu key
+// Precio: ~$0.10 USD por consulta
+// Más info: https://sickw.com/api-docs
+async function callSickwAPI(imei) {
+  if (!SICKW_API_KEY) return null;
+  try {
+    // URL DE PRODUCCIÓN — descomenta cuando tengas tu key:
+    // const url = `${SICKW_API_URL}?format=JSON&key=${SICKW_API_KEY}&service=${SICKW_SERVICE}&imei=${imei}`;
+    // const res  = await fetch(url);
+    // const data = await res.json();
+    // return data;
+
+    // SIMULACIÓN mientras configuras tu key:
+    await new Promise(r => setTimeout(r, 800));
+    return {
+      status: 'ok',
+      brand: 'Apple', model: 'iPhone 15 Pro',
+      storage: '256GB', color: 'Natural Titanium',
+      carrier_lock: 'Unlocked',
+      blacklist: 'Clean',
+      warranty: 'Active',
+      country: 'USA',
+    };
+  } catch (e) {
+    console.error('Sickw error:', e);
+    return null;
+  }
+}
+
+function displayIMEIResult(imei, localData, sickwData) {
+  const el      = document.getElementById('imei-result');
+  const statusEl = document.getElementById('imei-status-badge');
+  imeiData      = { imei, local: localData, sickw: sickwData };
+
+  // Estado en nuestro sistema
+  const localStatus = localData?.stock_items?.status;
+  const localOrg    = localData?.stock_items?.organizations?.name;
+  const productName = localData?.stock_items?.products?.name || sickwData?.model || 'Desconocido';
+  const brand       = localData?.stock_items?.products?.brand || sickwData?.brand || '';
+
+  document.getElementById('imei-brand-model').textContent = `${brand} ${productName}`.trim();
+  document.getElementById('imei-display').textContent     = imei;
+  document.getElementById('imei-icon').textContent        = brand==='Apple'?'📱':brand==='Samsung'?'📱':'📱';
+
+  let rows = [];
+
+  // Datos de nuestro sistema
+  if (localData) {
+    rows.push({ l: '📍 En nuestro sistema', v: localOrg || 'Corp Tech', ok: true });
+    rows.push({ l: '📦 Estado stock',       v: localStatus||'—', ok: localStatus==='available' });
+  } else {
+    rows.push({ l: '📍 En nuestro sistema', v: 'No registrado', ok: false });
+  }
+
+  // Datos de Sickw
+  if (sickwData) {
+    if (sickwData.carrier_lock) rows.push({ l: '🔒 Carrier Lock', v: sickwData.carrier_lock, ok: sickwData.carrier_lock==='Unlocked' });
+    if (sickwData.blacklist)    rows.push({ l: '🚫 Blacklist',    v: sickwData.blacklist,    ok: sickwData.blacklist==='Clean' });
+    if (sickwData.warranty)     rows.push({ l: '🛡️ Garantía',     v: sickwData.warranty,     ok: true });
+    if (sickwData.country)      rows.push({ l: '🌎 País origen',  v: sickwData.country,      ok: true });
+    if (sickwData.storage)      rows.push({ l: '💾 Almacenamiento',v: sickwData.storage,     ok: true });
+    if (sickwData.color)        rows.push({ l: '🎨 Color',        v: sickwData.color,        ok: true });
+  }
+
+  document.getElementById('imei-rows').innerHTML = rows.map(r => `
+    <div class="imei-row">
+      <span class="imei-row-label">${r.l}</span>
+      <span class="imei-row-val" style="color:${r.ok?'var(--green)':'var(--red)'}">${r.v}</span>
+    </div>`).join('');
+
+  // Badge de estado
+  const isClean = !localStatus || localStatus === 'available';
+  const isSafe  = sickwData?.blacklist === 'Clean' || !sickwData;
+  if (isClean && isSafe) {
+    statusEl.textContent = '✅ Limpio'; statusEl.className = 'badge bg-g';
+  } else if (localStatus === 'sold') {
+    statusEl.textContent = '⚠️ Ya vendido'; statusEl.className = 'badge bg-r';
+  } else {
+    statusEl.textContent = '⚠️ Revisar'; statusEl.className = 'badge bg-o';
+  }
+
+  document.getElementById('imei-note').textContent = sickwData
+    ? '✅ Datos verificados vía Sickw API'
+    : SICKW_API_KEY ? '⚠️ Sickw no respondió' : '⚙️ Configura tu Sickw API Key para verificación completa';
+
+  document.getElementById('btn-imei-checkin').style.display =
+    (myRole === 'superadmin' || myRole === 'corp') ? 'inline-flex' : 'none';
+
+  el.classList.add('show');
+  showToast('✅ IMEI analizado');
+}
+
+function clearIMEI() {
+  document.getElementById('imei-input').value = '';
+  document.getElementById('imei-result').classList.remove('show');
+  imeiData = null;
+}
+
+function registerIMEICheckin() {
+  if (!imeiData) return;
+  document.getElementById('ci-imei').value    = imeiData.imei;
+  document.getElementById('ci-model').value   = document.getElementById('imei-brand-model').textContent;
+  openOv('modal-checkin');
+}
+
+function handleCheckinPhoto(input) {
+  const file = input.files[0]; if (!file) return;
+  checkinPhotoFile = file;
+  document.getElementById('ci-photo-btn').textContent = '✅ Foto del producto lista';
+  document.getElementById('ci-photo-btn').className   = 'photo-btn ok';
+  const url = URL.createObjectURL(file);
+  document.getElementById('ci-photo-prev').src         = url;
+  document.getElementById('ci-photo-prev').className   = 'photo-prev show';
+}
+
+async function saveCheckin() {
+  const imei    = document.getElementById('ci-imei').value;
+  const model   = document.getElementById('ci-model').value.trim();
+  const storeId = document.getElementById('ci-store').value;
+  if (!model) { showToast('⚠️ Ingresa el modelo del producto'); return; }
+  if (!checkinPhotoFile) { showToast('📷 La foto del producto es obligatoria'); return; }
+  let photoUrl = await uploadPhoto(checkinPhotoFile, 'checkins');
+  const orgId  = storeId || '00000000-0000-0000-0000-000000000001';
+  const { data: si, error } = await db.from('stock_items').insert({
+    org_id: orgId, status: 'available',
+    checkin_photo_url: photoUrl
+  }).select().single();
+  if (error) { showToast('❌ Error: ' + error.message); return; }
+  if (imei && si) {
+    await db.from('imei_registry').insert({ imei, stock_item_id: si.id });
+  }
+  if (photoUrl && si) {
+    await db.from('media_attachments').insert({
+      entity_type:'stock_item', entity_id: si.id,
+      photo_url: photoUrl, photo_type:'checkin',
+      caption: `Check-in: ${model}`,
+      uploaded_by: me.id, org_id: orgId
+    });
+  }
+  showToast('✅ Check-in registrado correctamente');
+  checkinPhotoFile = null;
+  closeOv('modal-checkin');
+  clearIMEI();
+  loadDashboard();
+}
+
+// ╔══════════════════════════════════════════════╗
+// ║  10. STOCK                                   ║
+// ╚══════════════════════════════════════════════╝
+async function loadStock() {
+  const isCorp = (myRole === 'superadmin' || myRole === 'corp');
+  let q = db.from('stock_items')
+    .select('id,status,created_at,checkin_photo_url,products(name,brand,sku),imei_registry(imei),organizations(name),prices(price)')
+    .order('created_at',{ascending:false}).limit(60);
+  if (!isCorp) q = q.eq('org_id', myOrgId);
+  const { data } = await q;
+  allStock = data || [];
+  renderStock(allStock);
+}
+
+function renderStock(list) {
+  const el = document.getElementById('stock-list');
+  if (!list.length) { el.innerHTML='<div style="color:var(--t3);padding:16px;font-size:13px">Sin registros de stock</div>'; return; }
+  el.innerHTML = list.map(s => {
+    const bc = s.status==='available'?'bg-g':s.status==='sold'?'bg-x':'bg-o';
+    const bl = s.status==='available'?'Disponible':s.status==='sold'?'Vendido':'Reservado';
+    return `<div class="li">
+      ${s.checkin_photo_url?`<img src="${s.checkin_photo_url}" onclick="viewPhoto('${s.checkin_photo_url}')" style="width:42px;height:42px;object-fit:cover;border-radius:9px;cursor:pointer;flex-shrink:0;border:1px solid var(--border)">`:
+        `<div class="li-ic" style="background:var(--card2)">📱</div>`}
+      <div class="li-m">
+        <div class="li-t">${s.products?.name||'—'}</div>
+        <div class="li-s">${s.organizations?.name||''} ${s.imei_registry?.[0]?.imei?'· '+s.imei_registry[0].imei:''}</div>
+      </div>
+      <div class="li-r">
+        <div class="li-am" style="font-size:13px">${money(s.prices?.[0]?.price||0)}</div>
+        <div class="badge ${bc}">${bl}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterStock(q) {
+  if (!q) { renderStock(allStock); return; }
+  const f = q.toLowerCase();
+  renderStock(allStock.filter(s =>
+    (s.products?.name||'').toLowerCase().includes(f) ||
+    (s.products?.brand||'').toLowerCase().includes(f) ||
+    (s.imei_registry?.[0]?.imei||'').includes(f) ||
+    (s.organizations?.name||'').toLowerCase().includes(f)
+  ));
+}
+
+// ╔══════════════════════════════════════════════╗
+// ║  11. API INTEGRACIONES                       ║
+// ╚══════════════════════════════════════════════╝
+
+// ── ExchangeRate API (gratis, sin key) ────────
+// Documentación: https://www.exchangerate-api.com/docs/free
+async function fetchExchangeRate() {
+  try {
+    const res  = await fetch(FX_API_URL);
+    const data = await res.json();
+    if (data && data.rates && data.rates.PEN) {
+      const rate = data.rates.PEN;
+      const d    = new Date(data.time_last_update_utc).toLocaleDateString('es-PE');
+      // Actualizar UI
+      document.getElementById('rate-val').textContent   = `S/ ${rate.toFixed(3)}`;
+      document.getElementById('rate-date').textContent  = `Actualizado: ${d}`;
+      document.getElementById('api-fx-val').textContent = `S/ ${rate.toFixed(3)}`;
+      document.getElementById('api-fx-dot').className   = 'api-status live';
+      document.getElementById('fx-last').textContent    = `Última actualización: ${d}`;
+      // Guardar en Supabase para uso en costos de importación
+      await db.from('exchange_rates').upsert({
+        currency_from:'USD', currency_to:'PEN',
+        rate: rate, fetched_at: new Date().toISOString()
+      }, { onConflict: 'currency_from,currency_to' }).catch(()=>{});
+      return rate;
+    }
+  } catch (e) {
+    document.getElementById('api-fx-dot').className   = 'api-status error';
+    document.getElementById('rate-date').textContent  = 'Sin conexión';
+    console.warn('ExchangeRate API error:', e);
+  }
+  return null;
+}
+
+// ── Sickw API (IMEI Check) ────────────────────
+// Documentación: https://sickw.com/api-docs
+// INSTRUCCIONES:
+//   1. Regístrate en sickw.com
+//   2. Compra créditos (~$10 iniciales)
+//   3. Ve a Panel > API Keys > copia tu key
+//   4. Pégala en Configuración > Sickw API Key
+async function testSickw() {
+  const key = document.getElementById('sickw-key').value.trim();
+  if (!key) { showToast('⚠️ Ingresa tu Sickw API Key primero'); return; }
+  showToast('🧪 Probando conexión con Sickw...');
+  try {
+    // Test con IMEI de prueba (Apple)
+    const url = `${SICKW_API_URL}?format=JSON&key=${key}&service=${SICKW_SERVICE}&imei=359999069999990`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data && !data.error) {
+      showToast('✅ Sickw conectado correctamente');
+      updateSickwStatus(true, key);
+    } else {
+      showToast('❌ Sickw respondió con error: ' + (data.error||'desconocido'));
+      updateSickwStatus(false, null);
+    }
+  } catch (e) {
+    showToast('❌ No se pudo conectar a Sickw. Revisa tu API Key.');
+    updateSickwStatus(false, null);
+  }
+}
+
+function saveSickwKey() {
+  const key = document.getElementById('sickw-key').value.trim();
+  localStorage.setItem('sickw_key', key);
+  SICKW_API_KEY = key;
+  showToast(key ? '💾 Sickw API Key guardada' : '🗑️ Key eliminada');
+  updateSickwStatus(!!key, key);
+}
+
+function updateSickwStatus(live, key) {
+  const dot = document.getElementById('api-sickw-dot');
+  const val = document.getElementById('api-sickw-val');
+  if (!dot) return;
+  if (live) {
+    dot.className = 'api-status live';
+    val.textContent = 'Activo'; val.style.color = 'var(--green)';
+  } else if (SICKW_API_KEY) {
+    dot.className = 'api-status pending';
+    val.textContent = 'Sin probar'; val.style.color = 'var(--orange)';
+  } else {
+    dot.className = 'api-status error';
+    val.textContent = 'Sin key'; val.style.color = 'var(--red)';
+  }
+}
+
+// ╔══════════════════════════════════════════════╗
+// ║  12. UTILIDADES                              ║
+// ╚══════════════════════════════════════════════╝
+function money(n)   { return 'S/ ' + (Number(n)||0).toFixed(2) }
+function fmt(n)     { return (Number(n)||0).toLocaleString() }
+function todayISO() { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString() }
+function fmtTime(d) { return d ? new Date(d).toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'}) : '—' }
+
+function showToast(msg, dur=3200) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  setTimeout(() => t.classList.remove('on'), dur);
+}
+
+function openOv(id)  { document.getElementById(id).classList.add('open') }
+function closeOv(id) { document.getElementById(id).classList.remove('open') }
+
+function viewPhoto(url) {
+  document.getElementById('pv-img').src = url;
+  document.getElementById('pv').classList.add('open');
+}
+
+async function uploadPhoto(file, folder) {
+  if (!file) return null;
+  const ext  = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const path = `${folder}/${Date.now()}_${Math.random().toString(36).substr(2,6)}.${ext}`;
+  const { data, error } = await db.storage.from('corp-media')
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (error) { showToast('⚠️ Error subiendo foto'); return null; }
+  const { data: u } = db.storage.from('corp-media').getPublicUrl(data.path);
+  return u.publicUrl;
+}
+
+// Cerrar modales con ESC
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.ov.open').forEach(o => o.classList.remove('open'));
+    document.getElementById('pv').classList.remove('open');
+  }
+});
+
+// Cerrar cámara al salir
+window.addEventListener('beforeunload', stopCamera);
+</script>
+</body>
+</html>
