@@ -73,14 +73,14 @@ export default function PosPage() {
   async function loadProducts(oid) {
     const { data } = await supabase
       .from('stock_items')
-      .select('id, serial_number, imei, sale_price, emoji, products(id, name)')
+      .select('id, product_id, serial_number, imei, sale_price, emoji, products(id, name)')
       .eq('owner_org_id', oid)
       .eq('status', 'available')
       .limit(100);
     // Group by product
     const map = {};
     (data || []).forEach(item => {
-      const pid = item.products?.id || item.id;
+      const pid = item.product_id || item.products?.id || item.id;
       const pname = item.products?.name || 'Producto';
       if (!map[pid]) map[pid] = {
         product_id: pid,
