@@ -57,8 +57,16 @@ export default function DashboardPage() {
     setRole(r);
     setOrgId(oid);
     setOrgName(prof?.organizations?.name || 'Corp Tech');
-    setLoading(false);
 
+    // Si es gerente de tienda y no ha hecho onboarding → redirigir a setup
+    if (r === 'store_manager' || r === 'admin_corp') {
+      const { data: stSettings } = await supabase.from('org_settings').select('onboarding_done').eq('org_id', oid).single();
+      if (!stSettings || !stSettings.onboarding_done) {
+        router.replace('/setup'); return;
+      }
+    }
+
+    setLoading(false);
     loadFx();
     loadKpis(r, oid);
   }
