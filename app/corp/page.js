@@ -71,6 +71,13 @@ export default function CorpPage() {
   const [periodData,    setPeriodData]    = useState(null);
   const [liqFilter,     setLiqFilter]     = useState('all');
 
+  /* ── PLATAFORMAS ── */
+  const [liqSubTab,     setLiqSubTab]     = useState('corp');
+  const [plataformas,   setPlataformas]   = useState([]);
+  const [liqPlat,       setLiqPlat]       = useState([]);
+  const [liqPlatFilter, setLiqPlatFilter] = useState('all');
+  const [calendarioAll, setCalendarioAll] = useState([]);
+
   useEffect(() => { init(); }, []);
 
   async function init() {
@@ -480,6 +487,95 @@ export default function CorpPage() {
     loadLiquidaciones();
   }
 
+  /* ── PLATAFORMAS DE VENTA ── */
+  async function loadPlataformas() {
+    const { data } = await supabase.from('plataformas_venta').select('*').order('nombre');
+    setPlataformas(data || []);
+  }
+
+  async function savePlataforma(e) {
+    e.preventDefault();
+    const payload = {
+      nombre:          form.plat_nombre,
+      emoji:           form.plat_emoji || '🏪',
+      comision_pct:    parseFloat(form.plat_comision) || 0,
+      periodicidad:    form.plat_periodicidad || 'mensual',
+      dia_liquidacion: parseInt(form.plat_dia) || 1,
+      metodo_pago:     form.plat_metodo || 'transferencia',
+      instrucciones:   form.plat_instrucciones || '',
+      activo:          true,
+    };
+    const isEdit = !!form.plat_id;
+    const { error } = isEdit
+      ? await supabase.from('plataformas_venta').update(payload).eq('id', form.plat_id)
+      : await supabase.from('plataformas_venta').insert(payload);
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast(isEdit ? 'Plataforma actualizada ✓' : 'Plataforma creada ✓');
+    setModal(null); setForm({});
+    loadPlataformas();
+  }
+
+  async function deletePlataforma(id) {
+    if (!confirm('¿Eliminar esta plataforma?')) return;
+    await supabase.from('plataformas_venta').delete().eq('id', id);
+    showToast('Plataforma eliminada');
+    loadPlataformas();
+  }
+
+  async function loadLiqPlat() {
+    let q = supabase
+      .from('liquidaciones_plataforma')
+      .select('*, plataformas_venta(nombre, emoji, logo_url), organizations!store_org_id(name)')
+      .order('created_at', { ascending: false })
+      .limit(80);
+    if (liqPlatFilter !== 'all') q = q.eq('store_org_id', liqPlatFilter);
+    const { data } = await q;
+    setLiqPlat(data || []);
+  }
+
+  async function approveLiqPlat(id) {
+    await supabase.from('liquidaciones_plataforma').update({
+      estado: 'aprobado',
+      revisado_por: me?.id,
+      revisado_at:  new Date().toISOString(),
+    }).eq('id', id);
+    showToast('Reporte aprobado ✓');
+    loadLiqPlat();
+  }
+
+  async function rejectLiqPlat(id, motivo) {
+    await supabase.from('liquidaciones_plataforma').update({
+      estado:       'rechazado',
+      notas_corp:   motivo || 'Revisar diferencias',
+      revisado_por: me?.id,
+      revisado_at:  new Date().toISOString(),
+    }).eq('id', id);
+    showToast('Reporte rechazado');
+    loadLiqPlat();
+  }
+
+  async function loadCalendarioAll() {
+    const { data } = await supabase
+      .from('calendario_liquidaciones')
+      .select('*, plataformas_venta(nombre, emoji), organizations!store_org_id(name)')
+      .order('fecha_esperada', { ascending: true })
+      .limit(120);
+    setCalendarioAll(data || []);
+  }
+
+  async function generarCalendarioTienda(storeId, platId, fechaEsperada, titulo, tipo) {
+    await supabase.from('calendario_liquidaciones').insert({
+      store_org_id:  storeId,
+      plataforma_id: platId || null,
+      titulo,
+      fecha_esperada: fechaEsperada,
+      tipo:           tipo || 'plataforma',
+      estado:         'pendiente',
+    });
+    showToast('Evento de calendario creado ✓');
+    loadCalendarioAll();
+  }
+
   /* ── FINANZAS: load valorización + caja ── */
   async function loadFinanzas() {
     setFinLoading(true);
@@ -617,7 +713,7 @@ export default function CorpPage() {
     if (t === 'traslados')  { loadTransfers(); loadCorpStock(); }
     if (t === 'importacion')  loadBatches();
     if (t === 'finanzas')       loadFinanzas();
-    if (t === 'liquidaciones')  loadLiquidaciones();
+    if (t === 'liquidaciones') { loadLiquidaciones(); loadPlataformas(); loadLiqPlat(); loadCalendarioAll(); }
   }
 
   useEffect(() => {
@@ -1086,126 +1182,332 @@ export default function CorpPage() {
             aprobada:      { lbl: '✅ Aprobada',     color: '#30D158' },
             rechazada:     { lbl: '❌ Rechazada',    color: '#FF453A' },
           };
+          const PLAT_ESTADO = {
+            pendiente:      { lbl: 'Pendiente',      color: '#888'    },
+            subido:         { lbl: '📎 Subido',       color: '#FF9F0A' },
+            verificando:    { lbl: '🔍 Verificando',  color: '#5E5CE6' },
+            aprobado:       { lbl: '✅ Aprobado',     color: '#30D158' },
+            rechazado:      { lbl: '❌ Rechazado',    color: '#FF453A' },
+            con_diferencia: { lbl: '⚠️ Diferencia',   color: '#FF6B00' },
+          };
           const totalPendiente = liquidaciones
             .filter(l => l.estado === 'enviada' || l.estado === 'pagada_parcial')
             .reduce((s, l) => s + (l.monto_neto_pen || 0), 0);
           const totalAprobado  = liquidaciones
             .filter(l => l.estado === 'aprobada')
             .reduce((s, l) => s + (l.monto_neto_pen || 0), 0);
-
           const liqFiltradas = liqFilter === 'all'
             ? liquidaciones
             : liquidaciones.filter(l => l.store_org_id === liqFilter);
+          const liqPlatFiltradas = liqPlatFilter === 'all'
+            ? liqPlat
+            : liqPlat.filter(l => l.store_org_id === liqPlatFilter);
+          const hoy = new Date();
+          const cal7 = calendarioAll.filter(c => {
+            const d = new Date(c.fecha_esperada);
+            const diff = Math.ceil((d - hoy) / (1000*60*60*24));
+            return diff >= 0 && diff <= 30;
+          });
 
           return (
             <div style={{ padding: '16px' }}>
 
-              {/* KPIs */}
-              <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 16 }}>
-                <div className="kpi">
-                  <div className="kpi-ico">⏳</div>
-                  <div className="kpi-val" style={{ fontSize: 14 }}>S/{totalPendiente.toFixed(0)}</div>
-                  <div className="kpi-lbl">Por cobrar</div>
-                </div>
-                <div className="kpi">
-                  <div className="kpi-ico">✅</div>
-                  <div className="kpi-val" style={{ fontSize: 14 }}>S/{totalAprobado.toFixed(0)}</div>
-                  <div className="kpi-lbl">Cobrado</div>
-                </div>
-                <div className="kpi">
-                  <div className="kpi-ico">📋</div>
-                  <div className="kpi-val">{liquidaciones.length}</div>
-                  <div className="kpi-lbl">Total liq.</div>
-                </div>
-              </div>
-
-              {/* Filtro por tienda + botón nueva */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
-                {[{ id: 'all', name: 'Todas', ico: '🌐' }, ...STORES].map(s => (
-                  <button key={s.id}
-                    onClick={() => { setLiqFilter(s.id); }}
-                    className={`btn btn-sm${liqFilter === s.id ? ' btn-primary' : ' btn-outline'}`}>
-                    {s.ico} {s.name}
+              {/* Sub-tabs */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 16, background: 'var(--surface)', borderRadius: 12, padding: 4 }}>
+                {[
+                  { id: 'corp',       lbl: '🏢 Corp→Tienda'  },
+                  { id: 'plataformas',lbl: '🏪 Plataformas'  },
+                  { id: 'calendario', lbl: '📅 Calendario'   },
+                ].map(st => (
+                  <button key={st.id}
+                    onClick={() => setLiqSubTab(st.id)}
+                    style={{
+                      flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none',
+                      background: liqSubTab === st.id ? 'var(--blue, #0A84FF)' : 'transparent',
+                      color: liqSubTab === st.id ? '#fff' : 'var(--text-muted)',
+                      fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all .2s',
+                    }}>
+                    {st.lbl}
                   </button>
                 ))}
-                <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto', flexShrink: 0 }}
-                  onClick={() => { setModal('create-liquidacion'); setForm({ liq_store: STORES[0].id }); setPeriodData(null); }}>
-                  + Nueva
-                </button>
               </div>
 
-              {/* Lista */}
-              {liqLoading ? (
-                <div className="empty-msg">Cargando…</div>
-              ) : liqFiltradas.length === 0 ? (
-                <div className="empty-msg">Sin liquidaciones. Crea la primera.</div>
-              ) : (
-                liqFiltradas.map(liq => {
-                  const store   = STORES.find(s => s.id === liq.store_org_id);
-                  const badge   = LIQ_ESTADO[liq.estado] || { lbl: liq.estado, color: '#888' };
-                  const pagPend = liq.estado === 'pagada' || liq.estado === 'pagada_parcial';
-                  return (
-                    <div className="card" key={liq.id} style={{ padding: '14px', marginBottom: 12 }}>
-                      {/* Header */}
-                      <div className="flex-between" style={{ marginBottom: 8 }}>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 14 }}>
-                            {store?.ico} {store?.name || 'Tienda'}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                            {liq.periodo_inicio} → {liq.periodo_fin}
-                            {liq.descripcion && <span> · {liq.descripcion}</span>}
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: badge.color }}>{badge.lbl}</span>
-                      </div>
-
-                      {/* Montos */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
-                        <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
-                          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Ventas</div>
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>S/{(liq.total_ventas_pen || 0).toFixed(0)}</div>
-                        </div>
-                        <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
-                          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Productos</div>
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>S/{(liq.valor_productos_pen || 0).toFixed(0)}</div>
-                        </div>
-                        <div style={{ background: 'rgba(10,132,255,0.1)', border: '1px solid rgba(10,132,255,0.25)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
-                          <div style={{ fontSize: 9, color: '#4DA8FF', fontWeight: 700, textTransform: 'uppercase' }}>A COBRAR</div>
-                          <div style={{ fontSize: 14, fontWeight: 900, color: '#4DA8FF' }}>S/{(liq.monto_neto_pen || 0).toFixed(0)}</div>
-                        </div>
-                      </div>
-
-                      {/* Comprobante si existe */}
-                      {liq.comprobante_url && (
-                        <a href={liq.comprobante_url} target="_blank" rel="noopener noreferrer"
-                          style={{ display: 'block', padding: '8px 12px', background: 'rgba(48,209,88,0.1)', border: '1px solid rgba(48,209,88,0.25)', borderRadius: 10, fontSize: 12, color: '#30D158', fontWeight: 600, marginBottom: 10, textDecoration: 'none' }}>
-                          🧾 Ver comprobante de pago
-                        </a>
-                      )}
-
-                      {/* Acciones Corp */}
-                      {pagPend && (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button className="btn btn-primary btn-sm" style={{ flex: 1, background: '#30D158' }}
-                            onClick={() => approveLiquidacion(liq.id)}>
-                            ✅ Aprobar pago
-                          </button>
-                          <button className="btn btn-sm btn-outline" style={{ color: '#FF453A', borderColor: '#FF453A33' }}
-                            onClick={() => {
-                              const motivo = prompt('Motivo del rechazo:');
-                              if (motivo !== null) rejectLiquidacion(liq.id, motivo);
-                            }}>
-                            ❌ Rechazar
-                          </button>
-                        </div>
-                      )}
-                      {liq.notas_corp && (
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Nota Corp: {liq.notas_corp}</div>
-                      )}
+              {/* ── SUB-TAB: Corp → Tienda ── */}
+              {liqSubTab === 'corp' && (
+                <>
+                  <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 16 }}>
+                    <div className="kpi">
+                      <div className="kpi-ico">⏳</div>
+                      <div className="kpi-val" style={{ fontSize: 14 }}>S/{totalPendiente.toFixed(0)}</div>
+                      <div className="kpi-lbl">Por cobrar</div>
                     </div>
-                  );
-                })
+                    <div className="kpi">
+                      <div className="kpi-ico">✅</div>
+                      <div className="kpi-val" style={{ fontSize: 14 }}>S/{totalAprobado.toFixed(0)}</div>
+                      <div className="kpi-lbl">Cobrado</div>
+                    </div>
+                    <div className="kpi">
+                      <div className="kpi-ico">📋</div>
+                      <div className="kpi-val">{liquidaciones.length}</div>
+                      <div className="kpi-lbl">Total</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
+                    {[{ id: 'all', name: 'Todas', ico: '🌐' }, ...STORES].map(s => (
+                      <button key={s.id} onClick={() => setLiqFilter(s.id)}
+                        className={`btn btn-sm${liqFilter === s.id ? ' btn-primary' : ' btn-outline'}`}>
+                        {s.ico} {s.name}
+                      </button>
+                    ))}
+                    <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto', flexShrink: 0 }}
+                      onClick={() => { setModal('create-liquidacion'); setForm({ liq_store: STORES[0].id }); setPeriodData(null); }}>
+                      + Nueva
+                    </button>
+                  </div>
+                  {liqLoading ? <div className="empty-msg">Cargando…</div>
+                  : liqFiltradas.length === 0 ? <div className="empty-msg">Sin liquidaciones. Crea la primera.</div>
+                  : liqFiltradas.map(liq => {
+                    const store  = STORES.find(s => s.id === liq.store_org_id);
+                    const badge  = LIQ_ESTADO[liq.estado] || { lbl: liq.estado, color: '#888' };
+                    const pagPend= liq.estado === 'pagada' || liq.estado === 'pagada_parcial';
+                    return (
+                      <div className="card" key={liq.id} style={{ padding: '14px', marginBottom: 12 }}>
+                        <div className="flex-between" style={{ marginBottom: 8 }}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 14 }}>{store?.ico} {store?.name || 'Tienda'}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                              {liq.periodo_inicio} → {liq.periodo_fin}
+                              {liq.descripcion && <span> · {liq.descripcion}</span>}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: badge.color }}>{badge.lbl}</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+                          <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                            <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Ventas</div>
+                            <div style={{ fontSize: 13, fontWeight: 700 }}>S/{(liq.total_ventas_pen||0).toFixed(0)}</div>
+                          </div>
+                          <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                            <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Productos</div>
+                            <div style={{ fontSize: 13, fontWeight: 700 }}>S/{(liq.valor_productos_pen||0).toFixed(0)}</div>
+                          </div>
+                          <div style={{ background: 'rgba(10,132,255,0.1)', border: '1px solid rgba(10,132,255,0.25)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                            <div style={{ fontSize: 9, color: '#4DA8FF', fontWeight: 700, textTransform: 'uppercase' }}>A COBRAR</div>
+                            <div style={{ fontSize: 14, fontWeight: 900, color: '#4DA8FF' }}>S/{(liq.monto_neto_pen||0).toFixed(0)}</div>
+                          </div>
+                        </div>
+                        {liq.comprobante_url && (
+                          <a href={liq.comprobante_url} target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'block', padding: '8px 12px', background: 'rgba(48,209,88,0.1)', border: '1px solid rgba(48,209,88,0.25)', borderRadius: 10, fontSize: 12, color: '#30D158', fontWeight: 600, marginBottom: 10, textDecoration: 'none' }}>
+                            🧾 Ver comprobante de pago
+                          </a>
+                        )}
+                        {pagPend && (
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button className="btn btn-primary btn-sm" style={{ flex: 1, background: '#30D158' }}
+                              onClick={() => approveLiquidacion(liq.id)}>✅ Aprobar pago</button>
+                            <button className="btn btn-sm btn-outline" style={{ color: '#FF453A', borderColor: '#FF453A33' }}
+                              onClick={() => { const m = prompt('Motivo del rechazo:'); if (m !== null) rejectLiquidacion(liq.id, m); }}>
+                              ❌ Rechazar
+                            </button>
+                          </div>
+                        )}
+                        {liq.notas_corp && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Nota Corp: {liq.notas_corp}</div>}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* ── SUB-TAB: Plataformas ── */}
+              {liqSubTab === 'plataformas' && (
+                <>
+                  {/* Catálogo de plataformas */}
+                  <div className="section-header" style={{ marginBottom: 12 }}>
+                    <div className="section-title">🏪 Catálogo de Plataformas</div>
+                    <button className="section-action"
+                      onClick={() => { setModal('add-plataforma'); setForm({ plat_periodicidad: 'mensual', plat_metodo: 'transferencia', plat_emoji: '🏪' }); }}>
+                      + Nueva
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+                    {plataformas.map(p => (
+                      <div key={p.id} className="card" style={{ padding: '12px', cursor: 'pointer' }}
+                        onClick={() => { setModal('add-plataforma'); setForm({ plat_id: p.id, plat_nombre: p.nombre, plat_emoji: p.emoji, plat_comision: p.comision_pct, plat_periodicidad: p.periodicidad, plat_dia: p.dia_liquidacion, plat_metodo: p.metodo_pago, plat_instrucciones: p.instrucciones }); }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          {p.logo_url
+                            ? <img src={p.logo_url} alt={p.nombre} style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'contain' }} />
+                            : <span style={{ fontSize: 24 }}>{p.emoji || '🏪'}</span>}
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{p.nombre}</div>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                          Comisión: <b style={{ color: '#FF9F0A' }}>{p.comision_pct}%</b>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                          Liq. día {p.dia_liquidacion} · {p.periodicidad}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {p.metodo_pago === 'deposito' ? '🏦 Depósito' : p.metodo_pago === 'transferencia' ? '💸 Transferencia' : p.metodo_pago}
+                        </div>
+                      </div>
+                    ))}
+                    {plataformas.length === 0 && <div className="empty-msg" style={{ gridColumn: '1/-1' }}>Sin plataformas configuradas</div>}
+                  </div>
+
+                  {/* Reportes subidos por tiendas */}
+                  <div className="section-header" style={{ marginBottom: 12 }}>
+                    <div className="section-title">📄 Reportes de plataformas</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 }}>
+                    {[{ id: 'all', name: 'Todas', ico: '🌐' }, ...STORES].map(s => (
+                      <button key={s.id} onClick={() => { setLiqPlatFilter(s.id); loadLiqPlat(); }}
+                        className={`btn btn-sm${liqPlatFilter === s.id ? ' btn-primary' : ' btn-outline'}`}>
+                        {s.ico} {s.name}
+                      </button>
+                    ))}
+                  </div>
+                  {liqPlatFiltradas.length === 0 ? (
+                    <div className="empty-msg">Las tiendas aún no han subido reportes</div>
+                  ) : (
+                    liqPlatFiltradas.map(lp => {
+                      const badge = PLAT_ESTADO[lp.estado] || { lbl: lp.estado, color: '#888' };
+                      const puedRevisar = lp.estado === 'subido' || lp.estado === 'verificando';
+                      return (
+                        <div className="card" key={lp.id} style={{ padding: '14px', marginBottom: 12 }}>
+                          <div className="flex-between" style={{ marginBottom: 8 }}>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 14 }}>
+                                {lp.plataformas_venta?.emoji} {lp.plataformas_venta?.nombre || 'Plataforma'}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {lp.organizations?.name} · {lp.periodo_inicio} → {lp.periodo_fin}
+                              </div>
+                            </div>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: badge.color }}>{badge.lbl}</span>
+                          </div>
+                          {/* Reconciliación */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
+                            <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px', textAlign: 'center' }}>
+                              <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Ventas brutas</div>
+                              <div style={{ fontSize: 12, fontWeight: 700 }}>S/{(lp.ventas_brutas_pen||0).toFixed(0)}</div>
+                            </div>
+                            <div style={{ background: 'rgba(255,159,10,0.1)', borderRadius: 10, padding: '8px', textAlign: 'center' }}>
+                              <div style={{ fontSize: 9, color: '#FF9F0A', fontWeight: 700, textTransform: 'uppercase' }}>Comisiones</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#FF9F0A' }}>–S/{(lp.comisiones_pen||0).toFixed(0)}</div>
+                            </div>
+                            <div style={{ background: 'rgba(10,132,255,0.1)', borderRadius: 10, padding: '8px', textAlign: 'center' }}>
+                              <div style={{ fontSize: 9, color: '#4DA8FF', fontWeight: 700, textTransform: 'uppercase' }}>Depositado</div>
+                              <div style={{ fontSize: 12, fontWeight: 800, color: '#4DA8FF' }}>S/{(lp.monto_depositado_pen||0).toFixed(0)}</div>
+                            </div>
+                          </div>
+                          {lp.diferencia_pen !== 0 && (
+                            <div style={{ background: 'rgba(255,107,0,0.1)', border: '1px solid rgba(255,107,0,0.3)', borderRadius: 10, padding: '8px 12px', fontSize: 12, color: '#FF6B00', marginBottom: 10 }}>
+                              ⚠️ Diferencia: S/{(lp.diferencia_pen||0).toFixed(2)} — {lp.notas_tienda || 'Verificar con tienda'}
+                            </div>
+                          )}
+                          {lp.archivo_url && (
+                            <a href={lp.archivo_url} target="_blank" rel="noopener noreferrer"
+                              style={{ display: 'block', padding: '8px 12px', background: 'rgba(48,209,88,0.1)', border: '1px solid rgba(48,209,88,0.25)', borderRadius: 10, fontSize: 12, color: '#30D158', fontWeight: 600, marginBottom: 10, textDecoration: 'none' }}>
+                              📎 Ver reporte: {lp.archivo_nombre || 'archivo'}
+                            </a>
+                          )}
+                          {puedRevisar && (
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button className="btn btn-primary btn-sm" style={{ flex: 1, background: '#30D158' }}
+                                onClick={() => approveLiqPlat(lp.id)}>✅ Aprobar reporte</button>
+                              <button className="btn btn-sm btn-outline" style={{ color: '#FF453A', borderColor: '#FF453A33' }}
+                                onClick={() => { const m = prompt('Motivo del rechazo:'); if (m !== null) rejectLiqPlat(lp.id, m); }}>
+                                ❌
+                              </button>
+                            </div>
+                          )}
+                          {lp.notas_corp && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Corp: {lp.notas_corp}</div>}
+                        </div>
+                      );
+                    })
+                  )}
+                </>
+              )}
+
+              {/* ── SUB-TAB: Calendario ── */}
+              {liqSubTab === 'calendario' && (
+                <>
+                  <div className="section-header" style={{ marginBottom: 12 }}>
+                    <div className="section-title">📅 Próximas liquidaciones (30 días)</div>
+                    <button className="section-action"
+                      onClick={() => { setModal('add-calendario'); setForm({ cal_tipo: 'plataforma' }); }}>
+                      + Evento
+                    </button>
+                  </div>
+                  {cal7.length === 0 ? (
+                    <div className="empty-msg">Sin eventos en los próximos 30 días</div>
+                  ) : (
+                    cal7.map(ev => {
+                      const fecha = new Date(ev.fecha_esperada);
+                      const diff  = Math.ceil((fecha - hoy) / (1000*60*60*24));
+                      const store = ALL_ORGS.find(o => o.id === ev.store_org_id);
+                      const urgente = diff <= 3;
+                      const proximo = diff <= 7;
+                      return (
+                        <div key={ev.id} className="card" style={{
+                          padding: '14px', marginBottom: 10,
+                          borderLeft: `3px solid ${urgente ? '#FF453A' : proximo ? '#FF9F0A' : '#30D158'}`,
+                        }}>
+                          <div className="flex-between">
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 14 }}>
+                                {ev.plataformas_venta?.emoji || (ev.tipo === 'corp' ? '🏢' : '🏪')} {ev.titulo}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                                {store?.ico} {ev.organizations?.name || store?.name || 'Tienda'}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{
+                                fontSize: 13, fontWeight: 800,
+                                color: urgente ? '#FF453A' : proximo ? '#FF9F0A' : '#30D158',
+                              }}>
+                                {diff === 0 ? '¡HOY!' : diff === 1 ? 'Mañana' : `${diff} días`}
+                              </div>
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                                {fecha.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {/* Todos los eventos futuros */}
+                  <div className="section-title" style={{ marginTop: 20, marginBottom: 12 }}>📋 Todos los eventos</div>
+                  {calendarioAll.length === 0 ? (
+                    <div className="empty-msg">Sin eventos de calendario. Crea el primero.</div>
+                  ) : (
+                    calendarioAll.map(ev => {
+                      const fecha = new Date(ev.fecha_esperada);
+                      const store = ALL_ORGS.find(o => o.id === ev.store_org_id);
+                      const ESTADO_COLOR = { pendiente: '#FF9F0A', completado: '#30D158', vencido: '#FF453A' };
+                      return (
+                        <div key={ev.id} className="card" style={{ padding: '12px 14px', marginBottom: 8 }}>
+                          <div className="flex-between">
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: 13 }}>
+                                {ev.plataformas_venta?.emoji || (ev.tipo === 'corp' ? '🏢' : '🏪')} {ev.titulo}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {store?.ico} {ev.organizations?.name || store?.name} · {fecha.toLocaleDateString('es-PE')}
+                              </div>
+                            </div>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: ESTADO_COLOR[ev.estado] || '#888' }}>
+                              {ev.estado}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </>
               )}
             </div>
           );
@@ -1820,6 +2122,107 @@ export default function CorpPage() {
                       🗑 Eliminar cuenta
                     </button>
                   )}
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Nueva / Editar Plataforma ── */}
+            {modal === 'add-plataforma' && (
+              <>
+                <div className="modal-title">{form.plat_id ? '✏️ Editar Plataforma' : '🏪 Nueva Plataforma'}</div>
+                <form onSubmit={savePlataforma}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: 8, marginBottom: 4 }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Emoji</label>
+                      <input className="form-input" style={{ textAlign: 'center', fontSize: 20 }} maxLength={2} value={form.plat_emoji || '🏪'} onChange={e => setForm({ ...form, plat_emoji: e.target.value })} />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Nombre de la plataforma</label>
+                      <input className="form-input" required placeholder="MercadoLibre, Saga..." value={form.plat_nombre || ''} onChange={e => setForm({ ...form, plat_nombre: e.target.value })} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 4 }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Comisión (%)</label>
+                      <input className="form-input" type="number" step="0.01" placeholder="12.00" value={form.plat_comision || ''} onChange={e => setForm({ ...form, plat_comision: e.target.value })} />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Día de liquidación</label>
+                      <input className="form-input" type="number" min="1" max="31" placeholder="20" value={form.plat_dia || ''} onChange={e => setForm({ ...form, plat_dia: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Periodicidad</label>
+                    <select className="form-select" value={form.plat_periodicidad || 'mensual'} onChange={e => setForm({ ...form, plat_periodicidad: e.target.value })}>
+                      <option value="semanal">Semanal</option>
+                      <option value="quincenal">Quincenal</option>
+                      <option value="mensual">Mensual</option>
+                      <option value="bimestral">Bimestral</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Método de pago</label>
+                    <select className="form-select" value={form.plat_metodo || 'transferencia'} onChange={e => setForm({ ...form, plat_metodo: e.target.value })}>
+                      <option value="deposito">🏦 Depósito bancario</option>
+                      <option value="transferencia">💸 Transferencia</option>
+                      <option value="plataforma">📱 Pago en plataforma</option>
+                      <option value="cheque">🗒 Cheque</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Instrucciones (cómo interpretar el reporte)</label>
+                    <textarea className="form-input" rows={3} placeholder="El reporte viene en PDF con columnas: fecha, producto, comisión..." style={{ resize: 'vertical' }} value={form.plat_instrucciones || ''} onChange={e => setForm({ ...form, plat_instrucciones: e.target.value })} />
+                  </div>
+                  <button className="btn btn-primary" type="submit">💾 Guardar plataforma</button>
+                  {form.plat_id && (
+                    <button type="button" className="btn btn-red btn-block" style={{ marginTop: 8 }} onClick={() => deletePlataforma(form.plat_id)}>
+                      🗑 Eliminar plataforma
+                    </button>
+                  )}
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Crear evento de calendario ── */}
+            {modal === 'add-calendario' && (
+              <>
+                <div className="modal-title">📅 Nuevo Evento de Calendario</div>
+                <form onSubmit={async e => {
+                  e.preventDefault();
+                  await generarCalendarioTienda(form.cal_store, form.cal_plat || null, form.cal_fecha, form.cal_titulo, form.cal_tipo);
+                  setModal(null); setForm({});
+                }}>
+                  <div className="form-group">
+                    <label className="form-label">Tienda</label>
+                    <select className="form-select" required value={form.cal_store || ''} onChange={e => setForm({ ...form, cal_store: e.target.value })}>
+                      <option value="">Seleccionar…</option>
+                      {STORES.map(s => <option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Plataforma (opcional)</label>
+                    <select className="form-select" value={form.cal_plat || ''} onChange={e => setForm({ ...form, cal_plat: e.target.value })}>
+                      <option value="">— Sin plataforma (Corp directo) —</option>
+                      {plataformas.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Título</label>
+                    <input className="form-input" required placeholder="Liquidación mensual MercadoLibre" value={form.cal_titulo || ''} onChange={e => setForm({ ...form, cal_titulo: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Fecha esperada</label>
+                    <input className="form-input" type="date" required value={form.cal_fecha || ''} onChange={e => setForm({ ...form, cal_fecha: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Tipo</label>
+                    <select className="form-select" value={form.cal_tipo || 'plataforma'} onChange={e => setForm({ ...form, cal_tipo: e.target.value })}>
+                      <option value="plataforma">🏪 Plataforma externa</option>
+                      <option value="corp">🏢 Corp Tech directo</option>
+                    </select>
+                  </div>
+                  <button className="btn btn-primary" type="submit">📅 Crear evento</button>
                 </form>
               </>
             )}
