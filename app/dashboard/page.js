@@ -151,15 +151,18 @@ export default function DashboardPage() {
       { href: '/pos',        ico: '🛒', lbl: 'Punto de Venta' },
       { href: '/store',      ico: '🏪', lbl: 'Panel Tienda' },
       { href: '/corp',       ico: '🏢', lbl: 'Panel Corp' },
+      { href: '/chat',       ico: '💬', lbl: 'Chat Interno' },
       { href: '/superadmin', ico: '⚡', lbl: 'SuperAdmin' },
     ],
     corp: [
       { href: '/pos',  ico: '🛒', lbl: 'Punto de Venta' },
       { href: '/corp', ico: '🏢', lbl: 'Panel Corp' },
+      { href: '/chat', ico: '💬', lbl: 'Chat Interno' },
     ],
     gerente: [
       { href: '/pos',   ico: '🛒', lbl: 'Punto de Venta' },
       { href: '/store', ico: '🏪', lbl: 'Panel Tienda' },
+      { href: '/chat',  ico: '💬', lbl: 'Chat con Corp' },
     ],
     vendedor: [
       { href: '/pos', ico: '🛒', lbl: 'Punto de Venta' },
