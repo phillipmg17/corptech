@@ -681,19 +681,40 @@ export default function CorpPage() {
     loadFinanzas();
   }
 
-  /* ── ADD PRODUCT ── */
+  /* ── ADD / EDIT / DELETE PRODUCT ── */
   async function addProduct(e) {
     e.preventDefault();
-    const { error } = await supabase.from('products').insert({
-      name:        form.name,
-      description: form.description || '',
-      emoji:       form.emoji || '📦',
-      sale_price:  parseFloat(form.sale_price) || 0,
-      corp_id:     CORP_ID,
-    });
-    if (error) { showToast('Error: ' + error.message, 'err'); return; }
-    showToast('Producto creado ✓');
+    if (form._edit_id) {
+      // EDITAR
+      const { error } = await supabase.from('products').update({
+        name:        form.name,
+        description: form.description || '',
+        emoji:       form.emoji || '📦',
+        sale_price:  parseFloat(form.sale_price) || 0,
+      }).eq('id', form._edit_id);
+      if (error) { showToast('Error: ' + error.message, 'err'); return; }
+      showToast('Producto actualizado ✓');
+    } else {
+      // CREAR
+      const { error } = await supabase.from('products').insert({
+        name:        form.name,
+        description: form.description || '',
+        emoji:       form.emoji || '📦',
+        sale_price:  parseFloat(form.sale_price) || 0,
+        corp_id:     CORP_ID,
+      });
+      if (error) { showToast('Error: ' + error.message, 'err'); return; }
+      showToast('Producto creado ✓');
+    }
     setModal(null); setForm({});
+    loadProducts();
+  }
+
+  async function deleteProduct(id, name) {
+    if (!confirm(`¿Eliminar "${name}"? Esta acción no se puede deshacer.`)) return;
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) { showToast('Error al eliminar: ' + error.message, 'err'); return; }
+    showToast('Producto eliminado ✓');
     loadProducts();
   }
 
@@ -1273,15 +1294,87 @@ export default function CorpPage() {
         {tab === 'productos' && (
           <div style={{ padding: '16px' }}>
             <div className="section-header">
-              <div className="section-title">🗂️ Catálogo</div>
-              <button className="section-action" onClick={() => { setModal('add-product'); setForm({ emoji: '📦' }); }}>+ Producto</button>
+              <div className="section-title">🗂️ Catálogo de Productos</div>
+              <button className="section-action" onClick={() => { setModal('add-product'); setForm({ emoji: '📱' }); }}>+ Nuevo</button>
             </div>
-            {products.length === 0 ? <div className="empty-msg">Sin productos</div> : (
-              <div className="product-grid">
+
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14, padding: '10px 14px', background: 'rgba(10,132,255,0.07)', borderRadius: 12, border: '1px solid rgba(10,132,255,0.18)' }}>
+              💡 Estos son los <b>modelos base</b> del catálogo. Al registrar un equipo solo cambias color, GB, IMEI y condición.
+            </div>
+
+            {products.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>📦</div>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Sin productos aún</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>Agrega el primer modelo al catálogo</div>
+                <button className="section-action" onClick={() => { setModal('add-product'); setForm({ emoji: '📱' }); }}>+ Agregar primer producto</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {products.map(p => (
-                  <div className="product-card" key={p.id}>
-                    <span className="product-emoji">{p.emoji || '📦'}</span>
-                    <div className="product-name">{p.name}</div>
+                  <div key={p.id} style={{
+                    background: 'var(--card, rgba(255,255,255,0.04))',
+                    border: '1px solid var(--border)',
+                    borderRadius: 16, padding: '14px 16px',
+                    display: 'flex', alignItems: 'center', gap: 14,
+                  }}>
+                    {/* Emoji grande */}
+                    <div style={{
+                      fontSize: 36, lineHeight: 1, flexShrink: 0,
+                      width: 54, height: 54, borderRadius: 14,
+                      background: 'rgba(255,255,255,0.06)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {p.emoji || '📦'}
+                    </div>
+
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {p.name}
+                      </div>
+                      {p.description && (
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {p.description}
+                        </div>
+                      )}
+                      {p.sale_price > 0 && (
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#30D158', marginTop: 2 }}>
+                          S/ {parseFloat(p.sale_price).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Acciones */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                      <button
+                        onClick={() => {
+                          setForm({
+                            _edit_id:    p.id,
+                            name:        p.name,
+                            description: p.description || '',
+                            emoji:       p.emoji || '📦',
+                            sale_price:  p.sale_price || '',
+                          });
+                          setModal('add-product');
+                        }}
+                        style={{
+                          padding: '7px 14px', borderRadius: 10, border: 'none',
+                          background: 'rgba(10,132,255,0.15)', color: '#4DA8FF',
+                          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        }}>
+                        ✏️ Editar
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(p.id, p.name)}
+                        style={{
+                          padding: '7px 14px', borderRadius: 10, border: 'none',
+                          background: 'rgba(255,69,58,0.12)', color: '#FF453A',
+                          fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        }}>
+                        🗑 Borrar
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2761,28 +2854,88 @@ export default function CorpPage() {
           <div className="modal-sheet" onClick={e => e.stopPropagation()}>
             <div className="modal-drag" />
 
-            {/* ── MODAL: Nuevo Producto ── */}
+            {/* ── MODAL: Nuevo / Editar Producto ── */}
             {modal === 'add-product' && (
               <>
-                <div className="modal-title">🗂️ Nuevo producto</div>
+                <div className="modal-title">{form._edit_id ? '✏️ Editar producto' : '🗂️ Nuevo producto'}</div>
+
+                {/* Selector rápido de emoji */}
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>Ícono del producto</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {['📱','📲','💻','🖥','⌚','🎧','📟','🔋','🔌','📡','🖱','⌨️','🎮','📷','🎙','📦'].map(ico => (
+                      <button key={ico} type="button"
+                        onClick={() => setForm({ ...form, emoji: ico })}
+                        style={{
+                          fontSize: 24, width: 46, height: 46, borderRadius: 12,
+                          border: `2px solid ${form.emoji === ico ? '#0A84FF' : 'var(--border)'}`,
+                          background: form.emoji === ico ? 'rgba(10,132,255,0.15)' : 'transparent',
+                          cursor: 'pointer',
+                        }}>
+                        {ico}
+                      </button>
+                    ))}
+                    {/* Campo libre para emoji personalizado */}
+                    <input
+                      className="form-input"
+                      placeholder="✍️"
+                      value={['📱','📲','💻','🖥','⌚','🎧','📟','🔋','🔌','📡','🖱','⌨️','🎮','📷','🎙','📦'].includes(form.emoji) ? '' : (form.emoji || '')}
+                      onChange={e => setForm({ ...form, emoji: e.target.value })}
+                      style={{ width: 52, height: 46, fontSize: 22, textAlign: 'center', padding: '0 4px', borderRadius: 12, flexShrink: 0 }}
+                    />
+                  </div>
+                  {/* Preview */}
+                  {form.emoji && (
+                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 12 }}>
+                      <span style={{ fontSize: 36 }}>{form.emoji}</span>
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>{form.name || 'Nombre del producto'}</span>
+                    </div>
+                  )}
+                </div>
+
                 <form onSubmit={addProduct}>
                   <div className="form-group">
-                    <label className="form-label">Nombre</label>
-                    <input className="form-input" required placeholder="iPhone 15 Pro Max" value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} />
+                    <label className="form-label">Nombre del modelo *</label>
+                    <input
+                      className="form-input" required
+                      placeholder="ej: iPhone 15 Pro Max · Samsung Galaxy S24 · AirPods Pro"
+                      value={form.name || ''}
+                      onChange={e => setForm({ ...form, name: e.target.value })}
+                      style={{ fontWeight: 700 }}
+                    />
                   </div>
+
                   <div className="form-group">
-                    <label className="form-label">Emoji</label>
-                    <input className="form-input" placeholder="📱" value={form.emoji || ''} onChange={e => setForm({ ...form, emoji: e.target.value })} style={{ fontSize: 24 }} />
+                    <label className="form-label">Descripción / Características base</label>
+                    <textarea
+                      className="form-input"
+                      rows={3}
+                      placeholder="ej: Chip A17 Pro · Cámara 48MP · Face ID · 5G · disponible en 128GB/256GB/512GB"
+                      value={form.description || ''}
+                      onChange={e => setForm({ ...form, description: e.target.value })}
+                      style={{ resize: 'vertical', fontSize: 13 }}
+                    />
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      Esto aparece en el POS y en la tienda online como referencia del modelo.
+                    </div>
                   </div>
+
                   <div className="form-group">
-                    <label className="form-label">Descripción</label>
-                    <input className="form-input" placeholder="Descripción..." value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
+                    <label className="form-label">Precio de referencia (S/) — opcional</label>
+                    <input
+                      className="form-input" type="number" step="0.01" min="0"
+                      placeholder="0.00"
+                      value={form.sale_price || ''}
+                      onChange={e => setForm({ ...form, sale_price: e.target.value })}
+                    />
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      Precio base sugerido. Cada equipo registrado puede tener su propio precio.
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Precio base (S/)</label>
-                    <input className="form-input" type="number" placeholder="0.00" value={form.sale_price || ''} onChange={e => setForm({ ...form, sale_price: e.target.value })} />
-                  </div>
-                  <button className="btn btn-primary" type="submit">Crear producto</button>
+
+                  <button className="btn btn-primary" type="submit">
+                    {form._edit_id ? '💾 Guardar cambios' : '✅ Crear producto'}
+                  </button>
                 </form>
               </>
             )}
