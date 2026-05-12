@@ -708,6 +708,9 @@ export default function CorpPage() {
   }
 
   /* ── IMEI CHECKER ── */
+  // imeiProvider: 'auto' | 'sickw' | 'imeicheck'
+  const [imeiProvider, setImeiProvider] = useState('auto');
+
   async function checkImei() {
     if (!imeiInput.trim()) { showToast('Ingresa un IMEI', 'err'); return; }
     const clean = imeiInput.trim().replace(/\D/g, '');
@@ -718,16 +721,25 @@ export default function CorpPage() {
       const res  = await fetch('/api/check-imei', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imei: clean, service_id: imeiService, user_id: me?.id, org_id: CORP_ID }),
+        body: JSON.stringify({ imei: clean, service_id: imeiService, user_id: me?.id, org_id: CORP_ID, provider: imeiProvider }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
         showToast(data.error || 'Error al consultar la API', 'err');
         setImeiResult({ error: data.error });
       } else {
-        setImeiResult(data.result);
-        if (data.tokens_used != null) setImeiConfig(c => c ? { ...c, used: data.tokens_used } : c);
-        showToast('✅ Consulta exitosa');
+        // Guardar el resultado junto con qué proveedor se usó
+        setImeiResult({ ...data.result, _provider: data.provider });
+        // Actualizar tokens del proveedor usado
+        if (data.provider) {
+          setImeiConfig(c => c ? {
+            ...c,
+            providers: (c.providers || []).map(p =>
+              p.provider === data.provider ? { ...p, used: data.tokens_used, remaining: data.tokens_limit - data.tokens_used } : p
+            ),
+          } : c);
+        }
+        showToast(`✅ Consulta exitosa vía ${data.provider === 'imeicheck' ? 'IMEICheck' : 'Sickw'}`);
         loadImeiHistory();
       }
     } catch (err) {
@@ -748,24 +760,45 @@ export default function CorpPage() {
   }
 
   async function loadImeiCredits() {
+    // Cargar TODOS los proveedores activos para esta org
     const { data } = await supabase
       .from('api_settings')
-      .select('tokens_used, tokens_limit, is_active, api_key, provider_name, allowed_services')
+      .select('id, tokens_used, tokens_limit, is_active, api_key, provider_name, provider, allowed_services')
       .eq('org_id', CORP_ID)
       .eq('service', 'imei')
-      .single();
-    if (data) {
-      const cfg = {
-        used:          data.tokens_used      || 0,
-        limit:         data.tokens_limit     || 0,
-        active:        data.is_active,
-        hasKey:        !!data.api_key,
-        provider_name: data.provider_name    || 'IMEI API',
-        services:      data.allowed_services || [],
+      .eq('is_active', true);
+
+    if (data && data.length > 0) {
+      // Combinar servicios de todos los proveedores para el selector
+      const allServices = [];
+      data.forEach(cfg => {
+        const pKey = cfg.provider || 'sickw';
+        (cfg.allowed_services || []).forEach(svc => {
+          // Agregar si no está ya (por id+provider)
+          if (!allServices.find(s => s.id === svc.id && s.providerKey === pKey)) {
+            allServices.push({ ...svc, providerKey: pKey, providerName: cfg.provider_name || pKey });
+          }
+        });
+      });
+
+      // Ordenar por precio ascendente (más barato primero)
+      allServices.sort((a, b) => parseFloat(a.price || '999') - parseFloat(b.price || '999'));
+
+      const combined = {
+        providers:    data.map(d => ({
+          provider:      d.provider || 'sickw',
+          provider_name: d.provider_name || 'IMEI API',
+          used:          d.tokens_used  || 0,
+          limit:         d.tokens_limit || 0,
+          remaining:     (d.tokens_limit || 0) - (d.tokens_used || 0),
+          hasKey:        !!d.api_key,
+        })),
+        services:     allServices,
+        totalRemaining: data.reduce((s, d) => s + Math.max(0, (d.tokens_limit || 0) - (d.tokens_used || 0)), 0),
       };
-      setImeiConfig(cfg);
-      // auto-seleccionar primer servicio si no hay uno elegido
-      if (!imeiService && cfg.services.length > 0) setImeiService(cfg.services[0].id);
+      setImeiConfig(combined);
+      // Auto-seleccionar el servicio más barato disponible
+      if (!imeiService && allServices.length > 0) setImeiService(allServices[0].id);
     } else {
       setImeiConfig(null);
     }
@@ -1763,56 +1796,46 @@ export default function CorpPage() {
           <div style={{ padding: '16px' }}>
             <div className="section-title">🔍 IMEI Checker</div>
 
-            {/* Estado de tokens */}
-            {imeiConfig === null ? (
-              <div style={{
-                background: 'rgba(255,69,58,0.1)', border: '1px solid rgba(255,69,58,0.3)',
-                borderRadius: 14, padding: '14px 16px', marginBottom: 16,
-              }}>
+            {/* Sin acceso */}
+            {imeiConfig === null && (
+              <div style={{ background: 'rgba(255,69,58,0.1)', border: '1px solid rgba(255,69,58,0.3)', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
                 <div style={{ fontWeight: 700, color: '#FF453A', marginBottom: 4 }}>⚠️ Sin acceso habilitado</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Pídele al SuperAdmin que configure tu acceso IMEI en su panel (🔑 APIs).
-                </div>
-              </div>
-            ) : (
-              <div style={{
-                background: imeiConfig.active ? 'rgba(48,209,88,0.08)' : 'rgba(255,69,58,0.08)',
-                border: `1px solid ${imeiConfig.active ? 'rgba(48,209,88,0.25)' : 'rgba(255,69,58,0.25)'}`,
-                borderRadius: 14, padding: '12px 16px', marginBottom: 16,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: imeiConfig.active ? '#30D158' : '#FF453A' }}>
-                    {imeiConfig.active ? `✅ ${imeiConfig.provider_name} activo` : `🔴 ${imeiConfig.provider_name} desactivado`}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                    Tokens usados: {imeiConfig.used} / {imeiConfig.limit}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 26, fontWeight: 900, color: imeiConfig.used >= imeiConfig.limit ? '#FF453A' : '#30D158' }}>
-                    {imeiConfig.limit - imeiConfig.used}
-                  </div>
-                  <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
-                    🪙 tokens
-                  </div>
-                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Pídele al SuperAdmin que configure tu acceso IMEI en su panel (🔑 APIs).</div>
               </div>
             )}
 
-            {/* Formulario de consulta */}
-            <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Consultar IMEI</div>
+            {/* Tokens por proveedor */}
+            {imeiConfig && (
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${imeiConfig.providers.length}, 1fr)`, gap: 8, marginBottom: 16 }}>
+                {imeiConfig.providers.map(p => (
+                  <div key={p.provider} style={{
+                    background: p.remaining > 0 ? (p.provider === 'imeicheck' ? 'rgba(48,209,88,0.08)' : 'rgba(10,132,255,0.08)') : 'rgba(255,69,58,0.08)',
+                    border: `1px solid ${p.remaining > 0 ? (p.provider === 'imeicheck' ? 'rgba(48,209,88,0.25)' : 'rgba(10,132,255,0.25)') : 'rgba(255,69,58,0.25)'}`,
+                    borderRadius: 12, padding: '10px 12px',
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
+                      {p.provider === 'imeicheck' ? '🟢 IMEICheck' : '🔵 Sickw'}
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: p.remaining > 0 ? (p.provider === 'imeicheck' ? '#30D158' : '#4DA8FF') : '#FF453A' }}>
+                      {p.remaining}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>🪙 tokens · {p.used}/{p.limit}</div>
+                  </div>
+                ))}
+              </div>
+            )}
 
+            {/* Formulario */}
+            <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+              {/* IMEI input */}
               <div className="form-group">
-                <label className="form-label">📱 IMEI (15 dígitos)</label>
+                <label className="form-label">📱 IMEI / Serial Number</label>
                 <input
                   className="form-input"
                   placeholder="352999111111111"
                   value={imeiInput}
                   onChange={e => setImeiInput(e.target.value.replace(/\D/g, '').substring(0, 16))}
-                  maxLength={16}
-                  inputMode="numeric"
+                  maxLength={16} inputMode="numeric"
                   style={{ fontFamily: 'monospace', fontSize: 18, letterSpacing: 2, fontWeight: 700 }}
                 />
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
@@ -1820,80 +1843,127 @@ export default function CorpPage() {
                 </div>
               </div>
 
-              {/* Servicios habilitados por superadmin */}
+              {/* Tipo de consulta — servicios de todos los proveedores, precio visible */}
               {imeiConfig && imeiConfig.services.length > 0 && (
                 <div className="form-group">
                   <label className="form-label">🛠 Tipo de consulta</label>
-                  <select className="form-select" value={imeiService} onChange={e => setImeiService(e.target.value)}>
+                  <select className="form-select" value={imeiService} onChange={e => {
+                    setImeiService(e.target.value);
+                    // Si hay un único proveedor para este servicio, seleccionarlo automáticamente
+                    const svc = imeiConfig.services.find(s => s.id === e.target.value);
+                    if (svc && svc.providerKey) setImeiProvider(svc.providerKey);
+                  }}>
                     {imeiConfig.services.map(s => (
-                      <option key={s.id} value={s.id}>{s.id} — {s.label}</option>
+                      <option key={`${s.providerKey}-${s.id}`} value={s.id}>
+                        [{s.providerKey === 'imeicheck' ? 'IC' : 'SW'}] {s.label}{s.price ? ` · $${s.price}` : ''}
+                      </option>
                     ))}
                   </select>
+                  {imeiConfig.services.length === 0 && (
+                    <div style={{ fontSize: 11, color: '#FF9F0A', marginTop: 4 }}>
+                      ⚠️ El SuperAdmin no ha configurado servicios.
+                    </div>
+                  )}
                 </div>
               )}
-              {imeiConfig && imeiConfig.services.length === 0 && (
-                <div style={{ fontSize: 12, color: '#FF9F0A', marginBottom: 12 }}>
-                  ⚠️ El SuperAdmin no ha configurado servicios aún. Pídele que los agregue en 🔑 APIs.
+
+              {/* Selector de proveedor — auto o manual */}
+              {imeiConfig && imeiConfig.providers.length > 1 && (
+                <div className="form-group">
+                  <label className="form-label">⚡ Proveedor</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[
+                      { key: 'auto', label: '🤖 Auto (más barato)', color: '#FF9F0A' },
+                      ...imeiConfig.providers.map(p => ({
+                        key: p.provider,
+                        label: p.provider === 'imeicheck' ? '🟢 IMEICheck' : '🔵 Sickw',
+                        color: p.provider === 'imeicheck' ? '#30D158' : '#4DA8FF',
+                        disabled: p.remaining <= 0,
+                      })),
+                    ].map(opt => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => !opt.disabled && setImeiProvider(opt.key)}
+                        style={{
+                          padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${imeiProvider === opt.key ? opt.color : 'var(--border)'}`,
+                          background: imeiProvider === opt.key ? `${opt.color}22` : 'transparent',
+                          color: opt.disabled ? 'var(--text-muted)' : (imeiProvider === opt.key ? opt.color : 'var(--text)'),
+                          fontSize: 12, fontWeight: 700, cursor: opt.disabled ? 'not-allowed' : 'pointer',
+                        }}>
+                        {opt.label}{opt.disabled ? ' (sin tokens)' : ''}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
               <button
                 onClick={checkImei}
-                disabled={imeiLoading || !imeiConfig?.active || (imeiConfig?.limit - imeiConfig?.used) <= 0}
+                disabled={imeiLoading || !imeiConfig || (imeiConfig?.totalRemaining || 0) <= 0}
                 style={{
                   width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-                  background: (imeiLoading || !imeiConfig?.active)
+                  background: (imeiLoading || !imeiConfig || (imeiConfig?.totalRemaining || 0) <= 0)
                     ? 'var(--surface)'
                     : 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
                   color: '#fff', fontSize: 16, fontWeight: 700,
-                  cursor: (imeiLoading || !imeiConfig?.active) ? 'not-allowed' : 'pointer',
-                  boxShadow: (imeiLoading || !imeiConfig?.active) ? 'none' : '0 4px 20px rgba(10,132,255,0.35)',
+                  cursor: (imeiLoading || !imeiConfig || (imeiConfig?.totalRemaining || 0) <= 0) ? 'not-allowed' : 'pointer',
+                  boxShadow: (imeiLoading || !imeiConfig) ? 'none' : '0 4px 20px rgba(10,132,255,0.35)',
+                  opacity: (imeiConfig?.totalRemaining || 0) <= 0 ? 0.5 : 1,
                 }}>
-                {imeiLoading ? '⏳ Consultando...' : '🔍 Verificar IMEI (-1 🪙)'}
+                {imeiLoading ? '⏳ Consultando...' : (imeiConfig?.totalRemaining || 0) <= 0 ? '🚫 Sin tokens' : '🔍 Verificar IMEI (-1 🪙)'}
               </button>
             </div>
 
             {/* Resultado */}
             {imeiResult && (() => {
               const isErr = !!imeiResult.error;
+              const usedProvider = imeiResult._provider;
 
-              // Parsear el string "Key: Value\nKey: Value\n..." de Sickw
+              // Parsear texto "Key: Value\n..." (Sickw)
               function parseResultLines(txt) {
                 if (!txt || typeof txt !== 'string') return [];
-                return txt.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+                // Limpiar tags HTML si los hay (IMEICheck puede devolver HTML en el result)
+                const clean = txt.replace(/<[^>]*>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
+                return clean.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
                   const idx = line.indexOf(':');
                   if (idx > 0) return { k: line.substring(0, idx).trim(), v: line.substring(idx + 1).trim() };
                   return { k: '', v: line };
                 });
               }
 
-              // Colorear valores clave
+              // Color por tipo de campo
               function valColor(k, v) {
-                const kl = k.toLowerCase(); const vl = (v || '').toLowerCase();
-                if (kl.includes('blacklist') || kl.includes('lost') || kl.includes('stolen')) {
-                  return vl.includes('clean') || vl.includes('no') ? '#30D158' : '#FF453A';
-                }
-                if (kl.includes('find my') || kl.includes('fmi') || kl.includes('activation lock')) {
-                  return vl === 'off' || vl === 'no' ? '#30D158' : vl === 'on' || vl === 'yes' ? '#FF453A' : 'var(--text)';
-                }
-                if (kl.includes('status') || kl.includes('state')) {
-                  return vl.includes('activ') ? '#30D158' : vl.includes('block') || vl.includes('lost') ? '#FF453A' : 'var(--text)';
-                }
+                const kl = (k || '').toLowerCase(); const vl = (v || '').toLowerCase();
+                if (kl.includes('blacklist') || kl.includes('lost') || kl.includes('stolen') || kl.includes('block'))
+                  return vl.includes('clean') || vl === 'no' || vl === 'false' ? '#30D158' : '#FF453A';
+                if (kl.includes('find my') || kl.includes('fmi') || kl.includes('fmion') || kl.includes('activation lock') || kl.includes('icloud'))
+                  return (vl === 'off' || vl === 'no' || vl === 'false') ? '#30D158' : (vl === 'on' || vl === 'yes' || vl === 'true') ? '#FF453A' : 'var(--text)';
+                if (kl.includes('mdm'))
+                  return (vl === 'off' || vl === 'no' || vl === 'false') ? '#30D158' : '#FF9F0A';
                 return 'var(--text)';
               }
 
-              const lines = parseResultLines(imeiResult.result);
+              // IMEICheck devuelve `object` con datos estructurados cuando OBJECT=yes
+              const objData = imeiResult.object;
+              const hasObject = objData && typeof objData === 'object' && Object.keys(objData).length > 0;
+
+              // Sickw devuelve result como string de texto
+              const resultTxt = typeof imeiResult.result === 'string' ? imeiResult.result : null;
+              const lines = parseResultLines(resultTxt);
 
               return (
                 <div className="card" style={{ padding: 16, marginBottom: 16 }}>
                   {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>
-                      {isErr ? '❌ Error' : '✅ Resultado'}
-                    </div>
-                    {!isErr && imeiResult.service && (
-                      <span style={{ padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, background: 'rgba(10,132,255,0.15)', color: '#4DA8FF' }}>
-                        {imeiResult.service}
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{isErr ? '❌ Error' : '✅ Resultado'}</div>
+                    {usedProvider && (
+                      <span style={{
+                        padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+                        background: usedProvider === 'imeicheck' ? 'rgba(48,209,88,0.15)' : 'rgba(10,132,255,0.15)',
+                        color: usedProvider === 'imeicheck' ? '#30D158' : '#4DA8FF',
+                      }}>
+                        {usedProvider === 'imeicheck' ? '🟢 IMEICheck' : '🔵 Sickw'}
                       </span>
                     )}
                   </div>
@@ -1902,27 +1972,47 @@ export default function CorpPage() {
                     <div style={{ background: 'rgba(255,69,58,0.08)', border: '1px solid rgba(255,69,58,0.2)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#FF6B6B', lineHeight: 1.6 }}>
                       {imeiResult.error}
                     </div>
+                  ) : hasObject ? (
+                    /* IMEICheck: datos estructurados del campo object{} */
+                    <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                      {Object.entries(objData).filter(([k]) => k !== '__v').map(([k, v], i) => {
+                        const vStr = String(v ?? '');
+                        return (
+                          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '9px 12px', background: i % 2 === 0 ? 'var(--surface)' : 'transparent' }}>
+                            <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, minWidth: 110, paddingRight: 8, textTransform: 'capitalize' }}>
+                              {k.replace(/([A-Z])/g, ' $1').trim()}
+                            </span>
+                            <span style={{ fontWeight: 700, fontSize: 13, textAlign: 'right', color: valColor(k, vStr), wordBreak: 'break-word', maxWidth: '60%' }}>
+                              {vStr}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {/* También mostrar el result text si hay */}
+                      {resultTxt && lines.length > 0 && (
+                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)' }}>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, marginBottom: 4 }}>DETALLE COMPLETO</div>
+                          {lines.map((row, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
+                              <span style={{ color: 'var(--text-muted)' }}>{row.k || '—'}</span>
+                              <span style={{ fontWeight: 600, color: valColor(row.k, row.v) }}>{row.v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   ) : lines.length > 0 ? (
-                    /* Tabla key-value parseada */
+                    /* Sickw: texto Key: Value */
                     <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
                       {lines.map((row, i) => (
-                        <div key={i} style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                          padding: '9px 12px',
-                          background: i % 2 === 0 ? 'var(--surface)' : 'transparent',
-                        }}>
-                          <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, minWidth: 110, paddingRight: 8 }}>
-                            {row.k || '—'}
-                          </span>
-                          <span style={{ fontWeight: 700, fontSize: 13, textAlign: 'right', color: valColor(row.k, row.v), wordBreak: 'break-word', maxWidth: '60%' }}>
-                            {row.v}
-                          </span>
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '9px 12px', background: i % 2 === 0 ? 'var(--surface)' : 'transparent' }}>
+                          <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, minWidth: 110, paddingRight: 8 }}>{row.k || '—'}</span>
+                          <span style={{ fontWeight: 700, fontSize: 13, textAlign: 'right', color: valColor(row.k, row.v), wordBreak: 'break-word', maxWidth: '60%' }}>{row.v}</span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    /* Fallback: raw text */
-                    <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '12px 14px', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--text)' }}>
+                    <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '12px 14px', fontFamily: 'monospace', fontSize: 11, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--text)' }}>
                       {JSON.stringify(imeiResult, null, 2)}
                     </div>
                   )}
@@ -1933,39 +2023,41 @@ export default function CorpPage() {
             {/* Historial */}
             {imeiHistory.length > 0 && (
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: 'var(--text-muted)' }}>
-                  📋 Últimas consultas
-                </div>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: 'var(--text-muted)' }}>📋 Últimas consultas</div>
                 {imeiHistory.map(h => (
                   <div key={h.id} className="card" style={{ padding: '12px 14px', marginBottom: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>
-                          {h.imei}
-                        </div>
+                        <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>{h.imei}</div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                           {h.service_name} · {new Date(h.created_at).toLocaleDateString('es-PE')} {new Date(h.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
-                      <span style={{
-                        fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
-                        background: h.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)',
-                        color: h.status === 'success' ? '#30D158' : '#FF453A',
-                      }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: h.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)', color: h.status === 'success' ? '#30D158' : '#FF453A' }}>
                         {h.status === 'success' ? '✅' : '❌'}
                       </span>
                     </div>
-                    {/* Snippet del resultado — primeras 3 líneas */}
+                    {/* Snippet resultado */}
                     {(() => {
                       const raw = h.result?.result || h.raw_response || '';
                       const isHtml = typeof raw === 'string' && (raw.trim().startsWith('<!') || raw.trim().toLowerCase().startsWith('<html'));
-                      if (isHtml) {
+                      if (isHtml) return <div style={{ marginTop: 6, fontSize: 11, color: '#FF9F0A' }}>⚠️ API devolvió HTML — key inválida en esa consulta</div>;
+                      // IMEICheck object
+                      const obj = h.result?.object;
+                      if (obj && typeof obj === 'object') {
+                        const entries = Object.entries(obj).filter(([k]) => k !== '__v').slice(0, 3);
                         return (
-                          <div style={{ marginTop: 6, fontSize: 11, color: '#FF9F0A' }}>
-                            ⚠️ API devolvió HTML — key inválida en esa consulta
+                          <div style={{ marginTop: 8 }}>
+                            {entries.map(([k, v], i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
+                                <span style={{ color: 'var(--text-muted)', textTransform: 'capitalize' }}>{k.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                <span style={{ fontWeight: 600 }}>{String(v)}</span>
+                              </div>
+                            ))}
                           </div>
                         );
                       }
+                      // Sickw text
                       if (h.result?.result && typeof h.result.result === 'string') {
                         return (
                           <div style={{ marginTop: 8 }}>

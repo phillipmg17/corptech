@@ -152,23 +152,37 @@ export default function SuperadminPage() {
     setApiSettings(data || []);
   }
 
-  // Parsea el textarea de servicios "id: label" línea por línea
+  // Parsea "ID: Nombre :precio_usd" por línea → [{id, label, price}]
   function parseServicesText(txt) {
     return (txt || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
-      const [id, ...rest] = l.split(':');
-      return { id: id.trim(), label: rest.join(':').trim() || `Servicio ${id.trim()}` };
+      const parts = l.split(':');
+      const id    = (parts[0] || '').trim();
+      // Último segmento: si es número, es el precio
+      const lastPart = (parts[parts.length - 1] || '').trim();
+      const isPrice  = parts.length >= 3 && !isNaN(parseFloat(lastPart));
+      const label    = isPrice
+        ? parts.slice(1, parts.length - 1).join(':').trim()
+        : parts.slice(1).join(':').trim();
+      const price    = isPrice ? lastPart : undefined;
+      return { id, label: label || `Servicio ${id}`, ...(price ? { price } : {}) };
     });
   }
 
   async function saveApiSetting(e) {
     e.preventDefault();
-    const services = parseServicesText(form.api_services_txt);
+    const services    = parseServicesText(form.api_services_txt);
+    const providerKey = form.api_provider_key || 'sickw';
+    // Endpoint por defecto según proveedor
+    const defaultEndpoint = providerKey === 'imeicheck'
+      ? 'https://alpha.imeicheck.com/api/php-api/create'
+      : 'https://sickw.com/api.php';
     const payload = {
       org_id:           form.api_org_id,
       service:          'imei',
-      provider_name:    form.api_provider_name || 'IMEI API',
+      provider:         providerKey,
+      provider_name:    form.api_provider_name || (providerKey === 'imeicheck' ? 'IMEICheck.com' : 'Sickw'),
       api_key:          form.api_key,
-      api_endpoint:     form.api_endpoint || 'https://sickw.com/api.php',
+      api_endpoint:     form.api_endpoint || defaultEndpoint,
       tokens_limit:     parseInt(form.api_tokens_limit) || 100,
       tokens_used:      parseInt(form.api_tokens_used)  || 0,
       allowed_services: services,
@@ -177,7 +191,7 @@ export default function SuperadminPage() {
       updated_at:       new Date().toISOString(),
     };
     const { error } = await supabase.from('api_settings')
-      .upsert(payload, { onConflict: 'org_id,service' });
+      .upsert(payload, { onConflict: 'org_id,service,provider' });
     if (error) { showToast('Error: ' + error.message, 'err'); return; }
     showToast('API configurada ✓');
     setModal(null); setForm({});
@@ -613,7 +627,7 @@ export default function SuperadminPage() {
           <div style={{ padding: '16px' }}>
             <div className="section-header">
               <div className="section-title">🔑 APIs IMEI — Integraciones</div>
-              <button className="section-action" onClick={() => { setModal('add-api'); setForm({ api_tokens_limit: '100', api_tokens_used: '0', api_active: true, api_endpoint: 'https://sickw.com/api.php' }); }}>
+              <button className="section-action" onClick={() => { setModal('add-api'); setForm({ api_tokens_limit: '100', api_tokens_used: '0', api_active: true, api_provider_key: 'sickw', api_endpoint: 'https://sickw.com/api.php' }); }}>
                 + Configurar
               </button>
             </div>
@@ -633,11 +647,20 @@ export default function SuperadminPage() {
                     {/* Header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>
-                          🔍 {api.provider_name || 'IMEI API'} — {api.organizations?.name}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          <span style={{
+                            padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700,
+                            background: (api.provider || 'sickw') === 'imeicheck' ? 'rgba(48,209,88,0.15)' : 'rgba(10,132,255,0.15)',
+                            color:      (api.provider || 'sickw') === 'imeicheck' ? '#30D158' : '#4DA8FF',
+                          }}>
+                            {(api.provider || 'sickw') === 'imeicheck' ? 'IMEICheck' : 'Sickw'}
+                          </span>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>
+                            {api.provider_name || 'IMEI API'} — {api.organizations?.name}
+                          </div>
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'monospace' }}>
-                          Key: {api.api_key ? `${api.api_key.substring(0, 10)}...` : '⚠️ Sin key'}
+                          Key: {api.api_key ? `${api.api_key.substring(0, 8)}...` : '⚠️ Sin key'}
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
                           {api.api_endpoint}
@@ -691,14 +714,18 @@ export default function SuperadminPage() {
 
                     <button
                       onClick={() => {
-                        const svcs = (api.allowed_services || []).map(s => `${s.id}: ${s.label}`).join('\n');
+                        const svcs = (api.allowed_services || []).map(s => `${s.id}: ${s.label}${s.price ? ':' + s.price : ''}`).join('\n');
                         setForm({
-                          api_org_id: api.org_id, api_provider_name: api.provider_name,
-                          api_key: api.api_key, api_endpoint: api.api_endpoint,
-                          api_tokens_limit: String(api.tokens_limit || 100),
-                          api_tokens_used: String(api.tokens_used || 0),
-                          api_active: api.is_active, api_notas: api.notas,
-                          api_services_txt: svcs,
+                          api_org_id:        api.org_id,
+                          api_provider_key:  api.provider || 'sickw',
+                          api_provider_name: api.provider_name,
+                          api_key:           api.api_key,
+                          api_endpoint:      api.api_endpoint,
+                          api_tokens_limit:  String(api.tokens_limit || 100),
+                          api_tokens_used:   String(api.tokens_used || 0),
+                          api_active:        api.is_active,
+                          api_notas:         api.notas,
+                          api_services_txt:  svcs,
                         });
                         setModal('add-api');
                       }}
@@ -748,12 +775,28 @@ export default function SuperadminPage() {
                 </select>
               </div>
 
-              {/* Nombre del proveedor — libre */}
+              {/* Proveedor (selector técnico) */}
               <div className="form-group">
-                <label className="form-label">Nombre del proveedor (referencia)</label>
-                <input className="form-input" placeholder="Ej: Sickw, CheckIMEI, GSMA..."
-                  value={form.api_provider_name || ''}
-                  onChange={e => setForm({ ...form, api_provider_name: e.target.value })} />
+                <label className="form-label">Proveedor</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {[
+                    { key: 'sickw',     label: 'Sickw',          endpoint: 'https://sickw.com/api.php',                           color: '#0A84FF', hint: 'Respuesta texto Key: Value' },
+                    { key: 'imeicheck', label: 'IMEICheck.com',   endpoint: 'https://alpha.imeicheck.com/api/php-api/create',      color: '#30D158', hint: 'Respuesta JSON estructurada' },
+                  ].map(p => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => setForm({ ...form, api_provider_key: p.key, api_endpoint: p.endpoint, api_provider_name: p.label })}
+                      style={{
+                        padding: '10px 8px', borderRadius: 10, border: `2px solid ${(form.api_provider_key || 'sickw') === p.key ? p.color : 'var(--border)'}`,
+                        background: (form.api_provider_key || 'sickw') === p.key ? `${p.color}22` : 'var(--surface)',
+                        cursor: 'pointer', textAlign: 'center',
+                      }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: (form.api_provider_key || 'sickw') === p.key ? p.color : 'var(--text)' }}>{p.label}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{p.hint}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* API Key */}
@@ -764,11 +807,11 @@ export default function SuperadminPage() {
                   style={{ fontFamily: 'monospace', fontSize: 12 }} />
               </div>
 
-              {/* Endpoint */}
+              {/* Endpoint (auto-llenado pero editable) */}
               <div className="form-group">
                 <label className="form-label">URL del endpoint API</label>
-                <input className="form-input" placeholder="https://sickw.com/api.php"
-                  value={form.api_endpoint || 'https://sickw.com/api.php'}
+                <input className="form-input"
+                  value={form.api_endpoint || ((form.api_provider_key || 'sickw') === 'imeicheck' ? 'https://alpha.imeicheck.com/api/php-api/create' : 'https://sickw.com/api.php')}
                   onChange={e => setForm({ ...form, api_endpoint: e.target.value })} />
               </div>
 
@@ -790,16 +833,20 @@ export default function SuperadminPage() {
               <div className="form-group">
                 <label className="form-label">Servicios habilitados</label>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                  Una línea por servicio. Formato: <code style={{ background:'var(--surface)', padding:'1px 4px', borderRadius:4 }}>ID: Nombre</code>
-                  <br/>Ej: <code style={{ background:'var(--surface)', padding:'1px 4px', borderRadius:4 }}>12: Apple Info</code>
+                  Una línea por servicio. Formato: <code style={{ background:'var(--surface)', padding:'1px 4px', borderRadius:4 }}>ID: Nombre : precio_usd</code><br/>
+                  {(form.api_provider_key || 'sickw') === 'imeicheck'
+                    ? <span>Ej IMEICheck: <code style={{ background:'var(--surface)', padding:'1px 4px', borderRadius:4 }}>1: Find My iPhone:0.01</code></span>
+                    : <span>Ej Sickw: <code style={{ background:'var(--surface)', padding:'1px 4px', borderRadius:4 }}>12: Apple Info:0.07</code></span>}
                 </div>
                 <textarea
                   className="form-input"
-                  rows={5}
-                  placeholder={"12: Apple Info (modelo, activación, FMI)\n8: Blacklist / Reportado robado\n15: Samsung Info\n1: Info básica IMEI"}
+                  rows={6}
+                  placeholder={(form.api_provider_key || 'sickw') === 'imeicheck'
+                    ? '1: Find My iPhone:0.01\n2: Warranty + Activation:0.02\n3: Apple FULL INFO:0.07\n4: iCloud Clean/Lost:0.02\n5: Blacklist Status:0.02\n13: Model+Color+Storage+FMI:0.02'
+                    : '12: Apple Info (modelo, activación, FMI):0.07\n8: Blacklist / Reportado robado:0.04\n15: Samsung Info:0.04'}
                   value={form.api_services_txt || ''}
                   onChange={e => setForm({ ...form, api_services_txt: e.target.value })}
-                  style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }}
+                  style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 11 }}
                 />
               </div>
 
