@@ -1,4 +1,5 @@
 import './globals.css';
+import ChatBubble from './components/ChatBubble';
 
 export const metadata = {
   title: 'Corp Tech ERP',
@@ -25,7 +26,10 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#000000" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ChatBubble />
+      </body>
     </html>
   );
 }
