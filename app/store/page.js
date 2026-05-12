@@ -34,11 +34,17 @@ const DEFAULT_CONFIG = {
   whatsapp: '',
   instagram: '',
   tiktok: '',
+  facebook: '',
+  youtube: '',
   direccion: '',
   color_primario: '#0A84FF',
   color_secundario: '#5E5CE6',
   color_acento: '#30D158',
   google_place_id: '',
+  google_rating: 5.0,
+  google_reviews_count: 0,
+  gallery_urls: [],
+  reviews_data: [],
   horarios: {
     lunes: '9:00 - 18:00',
     martes: '9:00 - 18:00',
@@ -73,6 +79,10 @@ export default function StorePage() {
   const [configSaving, setConfigSaving] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const [galleryUploading, setGalleryUploading] = useState(false);
+  const [newGalleryUrl, setNewGalleryUrl] = useState('');
+  const [newReview, setNewReview] = useState({ name: '', rating: 5, text: '', date: '', color: '#4285F4' });
 
   // Deudas / Liquidaciones state
   const [deudas,       setDeudas]       = useState([]);
@@ -289,19 +299,25 @@ export default function StorePage() {
     if (data) {
       setConfigId(data.id);
       setConfig({
-        store_name:      data.store_name      || '',
-        tagline:         data.tagline         || '',
-        descripcion:     data.descripcion     || '',
-        logo_url:        data.logo_url        || '',
-        whatsapp:        data.whatsapp        || '',
-        instagram:       data.instagram       || '',
-        tiktok:          data.tiktok          || '',
-        direccion:       data.direccion       || '',
-        color_primario:  data.color_primario   || '#0A84FF',
-        color_secundario:data.color_secundario || '#5E5CE6',
-        color_acento:    data.color_acento     || '#30D158',
-        google_place_id: data.google_place_id  || '',
-        horarios:        data.horarios         || DEFAULT_CONFIG.horarios,
+        store_name:           data.store_name           || '',
+        tagline:              data.tagline              || '',
+        descripcion:          data.descripcion          || '',
+        logo_url:             data.logo_url             || '',
+        whatsapp:             data.whatsapp             || '',
+        instagram:            data.instagram            || '',
+        tiktok:               data.tiktok               || '',
+        facebook:             data.facebook             || '',
+        youtube:              data.youtube              || '',
+        direccion:            data.direccion            || '',
+        color_primario:       data.color_primario        || '#0A84FF',
+        color_secundario:     data.color_secundario      || '#5E5CE6',
+        color_acento:         data.color_acento          || '#30D158',
+        google_place_id:      data.google_place_id       || '',
+        google_rating:        data.google_rating         ?? 5.0,
+        google_reviews_count: data.google_reviews_count  || 0,
+        gallery_urls:         data.gallery_urls          || [],
+        reviews_data:         data.reviews_data          || [],
+        horarios:             data.horarios              || DEFAULT_CONFIG.horarios,
       });
     }
   }
@@ -338,6 +354,22 @@ export default function StorePage() {
     setConfig(c => ({ ...c, logo_url: publicUrl }));
     setLogoUploading(false);
     showToast('Logo subido ✓');
+  }
+
+  /* ── UPLOAD GALLERY PHOTO ── */
+  async function uploadGalleryPhoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('Foto muy grande (máx 5MB)', 'err'); return; }
+    setGalleryUploading(true);
+    const ext  = file.name.split('.').pop();
+    const path = `gallery/${orgId}/img_${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('store-assets').upload(path, file, { upsert: true });
+    if (upErr) { showToast('Error al subir: ' + upErr.message, 'err'); setGalleryUploading(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from('store-assets').getPublicUrl(path);
+    setConfig(c => ({ ...c, gallery_urls: [...(c.gallery_urls || []), publicUrl] }));
+    setGalleryUploading(false);
+    showToast('Foto subida ✓');
   }
 
   function showToast(msg, type = 'ok') {
@@ -938,25 +970,206 @@ export default function StorePage() {
                 </div>
               </div>
 
-              {/* GOOGLE */}
+              {/* REDES ADICIONALES */}
+              <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>🌐 Facebook y YouTube</div>
+                <div className="form-group">
+                  <label className="form-label">👍 Facebook (URL completa o usuario)</label>
+                  <input className="form-input" placeholder="https://facebook.com/futurteck" value={config.facebook}
+                    onChange={e => setConfig(c => ({ ...c, facebook: e.target.value }))} />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">▶️ YouTube (URL del canal)</label>
+                  <input className="form-input" placeholder="https://youtube.com/@futurteck" value={config.youtube}
+                    onChange={e => setConfig(c => ({ ...c, youtube: e.target.value }))} />
+                </div>
+              </div>
+
+              {/* GALERÍA HERO */}
+              <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>🖼 Galería Hero (Slideshow)</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+                  Estas fotos se muestran en el slider principal de tu tienda. Sube hasta 6 imágenes o pega URLs.
+                </div>
+
+                {/* Fotos actuales */}
+                {(config.gallery_urls || []).length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+                    {(config.gallery_urls || []).map((url, i) => (
+                      <div key={i} style={{ position: 'relative' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={`Slide ${i+1}`}
+                          style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', borderRadius: 8 }} />
+                        <button type="button"
+                          onClick={() => setConfig(c => ({ ...c, gallery_urls: c.gallery_urls.filter((_, j) => j !== i) }))}
+                          style={{
+                            position: 'absolute', top: 4, right: 4,
+                            background: 'rgba(255,69,58,0.85)', border: 'none',
+                            color: '#fff', borderRadius: 6, width: 22, height: 22,
+                            fontSize: 11, cursor: 'pointer', fontWeight: 700, lineHeight: '22px',
+                          }}>✕</button>
+                        <div style={{ fontSize: 9, textAlign: 'center', color: 'var(--text-muted)', marginTop: 2 }}>
+                          Slide {i+1}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload foto */}
+                <input ref={galleryInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={uploadGalleryPhoto} />
+                <button type="button" onClick={() => galleryInputRef.current?.click()} disabled={galleryUploading}
+                  style={{
+                    width: '100%', padding: '10px', borderRadius: 10,
+                    background: 'linear-gradient(135deg,#5E5CE6,#0A84FF)',
+                    border: 'none', color: '#fff', fontSize: 13, fontWeight: 600,
+                    cursor: galleryUploading ? 'not-allowed' : 'pointer', marginBottom: 10,
+                  }}>
+                  {galleryUploading ? '⏳ Subiendo...' : '📤 Subir foto al slide'}
+                </button>
+
+                {/* O pegar URL */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input className="form-input" placeholder="O pega URL de imagen..." value={newGalleryUrl}
+                    onChange={e => setNewGalleryUrl(e.target.value)}
+                    style={{ flex: 1, fontSize: 12 }} />
+                  <button type="button"
+                    onClick={() => {
+                      if (!newGalleryUrl.trim()) return;
+                      setConfig(c => ({ ...c, gallery_urls: [...(c.gallery_urls || []), newGalleryUrl.trim()] }));
+                      setNewGalleryUrl('');
+                    }}
+                    style={{
+                      padding: '0 14px', borderRadius: 10, border: 'none',
+                      background: 'var(--blue, #0A84FF)', color: '#fff', fontSize: 13,
+                      fontWeight: 700, cursor: 'pointer',
+                    }}>+</button>
+                </div>
+              </div>
+
+              {/* GOOGLE REVIEWS */}
               <div className="card" style={{ marginBottom: 16, padding: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>⭐ Google Reviews</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                  Busca tu tienda en Google Maps, entra al perfil y copia el ID de la URL (la parte después de <code>place/</code> o busca «Place ID» en la URL).
+                  Configura el mapa y agrega reseñas reales de Google para mostrarlas en tu tienda.
                 </div>
-                <div className="form-group" style={{ marginBottom: 8 }}>
-                  <label className="form-label">Google Place ID (opcional)</label>
+
+                {/* Place ID */}
+                <div className="form-group">
+                  <label className="form-label">Google Place ID (para el mapa)</label>
                   <input className="form-input" placeholder="ChIJN1t_tDeuEmsRUsoyG83frY4"
                     value={config.google_place_id}
                     onChange={e => setConfig(c => ({ ...c, google_place_id: e.target.value }))} />
                 </div>
                 {config.google_place_id && (
-                  <a
-                    href={`https://search.google.com/local/reviews?placeid=${config.google_place_id}`}
+                  <a href={`https://search.google.com/local/reviews?placeid=${config.google_place_id}`}
                     target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 12, color: '#4DA8FF', textDecoration: 'none' }}>
+                    style={{ fontSize: 12, color: '#4DA8FF', textDecoration: 'none', display: 'block', marginBottom: 12 }}>
                     ↗ Ver reseñas actuales en Google
                   </a>
+                )}
+
+                {/* Rating general */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">⭐ Rating (ej: 4.8)</label>
+                    <input className="form-input" type="number" step="0.1" min="1" max="5"
+                      value={config.google_rating}
+                      onChange={e => setConfig(c => ({ ...c, google_rating: parseFloat(e.target.value) || 5.0 }))} />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">📊 Total reseñas (ej: 127)</label>
+                    <input className="form-input" type="number" min="0"
+                      value={config.google_reviews_count}
+                      onChange={e => setConfig(c => ({ ...c, google_reviews_count: parseInt(e.target.value) || 0 }))} />
+                  </div>
+                </div>
+
+                {/* Lista de reseñas actuales */}
+                <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8, color: 'var(--text-muted)' }}>
+                  RESEÑAS ({(config.reviews_data || []).length}/6)
+                </div>
+                {(config.reviews_data || []).map((rv, i) => (
+                  <div key={i} style={{
+                    background: 'var(--surface)', borderRadius: 10, padding: '10px 12px',
+                    marginBottom: 8, borderLeft: `3px solid ${rv.color || '#4285F4'}`,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{rv.name}</div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: '#FF9F0A' }}>{'⭐'.repeat(rv.rating || 5)}</span>
+                        <button type="button"
+                          onClick={() => setConfig(c => ({ ...c, reviews_data: c.reviews_data.filter((_, j) => j !== i) }))}
+                          style={{ background: 'rgba(255,69,58,0.15)', border: 'none', color: '#FF453A', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{rv.text?.substring(0, 80)}...</div>
+                  </div>
+                ))}
+
+                {/* Agregar nueva reseña */}
+                {(config.reviews_data || []).length < 6 && (
+                  <div style={{ background: 'rgba(10,132,255,0.06)', border: '1px dashed rgba(10,132,255,0.3)', borderRadius: 12, padding: 12, marginTop: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8, color: '#4DA8FF' }}>+ Agregar reseña</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Nombre</label>
+                        <input className="form-input" placeholder="María G." value={newReview.name}
+                          onChange={e => setNewReview(r => ({ ...r, name: e.target.value }))} style={{ fontSize: 12 }} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Estrellas (1-5)</label>
+                        <select className="form-select" value={newReview.rating}
+                          onChange={e => setNewReview(r => ({ ...r, rating: parseInt(e.target.value) }))}>
+                          {[5,4,3,2,1].map(n => <option key={n} value={n}>{n} ⭐</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 8 }}>
+                      <label className="form-label">Texto de la reseña</label>
+                      <textarea className="form-input" rows={2} placeholder="Copiar el texto de la reseña de Google..."
+                        value={newReview.text}
+                        onChange={e => setNewReview(r => ({ ...r, text: e.target.value }))}
+                        style={{ resize: 'vertical', fontSize: 12 }} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Fecha (ej: hace 2 semanas)</label>
+                        <input className="form-input" placeholder="hace 2 semanas" value={newReview.date}
+                          onChange={e => setNewReview(r => ({ ...r, date: e.target.value }))} style={{ fontSize: 12 }} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Color del avatar</label>
+                        <div style={{ display: 'flex', gap: 6, paddingTop: 4 }}>
+                          {['#4285F4','#EA4335','#34A853','#FBBC05','#9C27B0','#FF6D00'].map(col => (
+                            <button key={col} type="button"
+                              onClick={() => setNewReview(r => ({ ...r, color: col }))}
+                              style={{
+                                width: 28, height: 28, borderRadius: '50%', background: col, border: 'none', cursor: 'pointer',
+                                outline: newReview.color === col ? '2px solid white' : 'none',
+                                boxShadow: newReview.color === col ? `0 0 0 3px ${col}` : 'none',
+                              }} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <button type="button"
+                      onClick={() => {
+                        if (!newReview.name || !newReview.text) { showToast('Nombre y texto son obligatorios', 'err'); return; }
+                        setConfig(c => ({ ...c, reviews_data: [...(c.reviews_data || []), { ...newReview }] }));
+                        setNewReview({ name: '', rating: 5, text: '', date: '', color: '#4285F4' });
+                        showToast('Reseña agregada ✓');
+                      }}
+                      style={{
+                        width: '100%', padding: '10px', borderRadius: 10, border: 'none',
+                        background: 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+                        color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                      }}>
+                      ✅ Agregar reseña
+                    </button>
+                  </div>
                 )}
               </div>
 
