@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -20,22 +20,58 @@ function useTheme() {
   return { theme, toggleTheme };
 }
 
+const SLUG_MAP = {
+  '00000000-0000-0000-0000-000000000002': 'futurteck',
+  '00000000-0000-0000-0000-000000000003': 'innovatech',
+  '00000000-0000-0000-0000-000000000004': 'wetech',
+};
+
+const DEFAULT_CONFIG = {
+  store_name: '',
+  tagline: '',
+  descripcion: '',
+  logo_url: '',
+  whatsapp: '',
+  instagram: '',
+  tiktok: '',
+  direccion: '',
+  color_primario: '#0A84FF',
+  color_secundario: '#5E5CE6',
+  color_acento: '#30D158',
+  horarios: {
+    lunes: '9:00 - 18:00',
+    martes: '9:00 - 18:00',
+    miercoles: '9:00 - 18:00',
+    jueves: '9:00 - 18:00',
+    viernes: '9:00 - 18:00',
+    sabado: '10:00 - 14:00',
+    domingo: 'Cerrado',
+  },
+};
+
 export default function StorePage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
-  const [me,       setMe]       = useState(null);
-  const [orgId,    setOrgId]    = useState(null);
-  const [orgName,  setOrgName]  = useState('');
-  const [loading,  setLoading]  = useState(true);
-  const [tab,      setTab]      = useState('stock');
-  const [stocks,   setStocks]   = useState([]);
-  const [products, setProducts] = useState([]);
-  const [customers,setCustomers]= useState([]);
-  const [sales,    setSales]    = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [toast,    setToast]    = useState(null);
-  const [modal,    setModal]    = useState(null); // null | 'add-stock' | 'add-customer' | 'open-session'
-  const [form,     setForm]     = useState({});
+  const [me,         setMe]         = useState(null);
+  const [orgId,      setOrgId]      = useState(null);
+  const [orgName,    setOrgName]    = useState('');
+  const [loading,    setLoading]    = useState(true);
+  const [tab,        setTab]        = useState('stock');
+  const [stocks,     setStocks]     = useState([]);
+  const [products,   setProducts]   = useState([]);
+  const [customers,  setCustomers]  = useState([]);
+  const [sales,      setSales]      = useState([]);
+  const [sessions,   setSessions]   = useState([]);
+  const [toast,      setToast]      = useState(null);
+  const [modal,      setModal]      = useState(null);
+  const [form,       setForm]       = useState({});
+
+  // Config state
+  const [config,     setConfig]     = useState(DEFAULT_CONFIG);
+  const [configId,   setConfigId]   = useState(null);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef(null);
 
   useEffect(() => { init(); }, []);
 
@@ -55,6 +91,7 @@ export default function StorePage() {
     setLoading(false);
     loadTab('stock', prof?.org_id);
     loadProducts(prof?.org_id);
+    loadConfig(prof?.org_id);
   }
 
   async function loadTab(t, oid) {
@@ -88,6 +125,63 @@ export default function StorePage() {
   async function loadSessions(oid) {
     const { data } = await supabase.from('cash_sessions').select('*').eq('org_id', oid).order('opened_at', { ascending: false }).limit(20);
     setSessions(data || []);
+  }
+
+  /* ── LOAD CONFIG ── */
+  async function loadConfig(oid) {
+    const id = oid || orgId;
+    const { data } = await supabase.from('tiendas_config').select('*').eq('org_id', id).single();
+    if (data) {
+      setConfigId(data.id);
+      setConfig({
+        store_name:      data.store_name      || '',
+        tagline:         data.tagline         || '',
+        descripcion:     data.descripcion     || '',
+        logo_url:        data.logo_url        || '',
+        whatsapp:        data.whatsapp        || '',
+        instagram:       data.instagram       || '',
+        tiktok:          data.tiktok          || '',
+        direccion:       data.direccion       || '',
+        color_primario:  data.color_primario  || '#0A84FF',
+        color_secundario:data.color_secundario|| '#5E5CE6',
+        color_acento:    data.color_acento    || '#30D158',
+        horarios:        data.horarios        || DEFAULT_CONFIG.horarios,
+      });
+    }
+  }
+
+  /* ── SAVE CONFIG ── */
+  async function saveConfig(e) {
+    e.preventDefault();
+    setConfigSaving(true);
+    const payload = { ...config, org_id: orgId, updated_at: new Date().toISOString() };
+    let error;
+    if (configId) {
+      ({ error } = await supabase.from('tiendas_config').update(payload).eq('id', configId));
+    } else {
+      const { data: ins, error: insErr } = await supabase.from('tiendas_config').insert(payload).select().single();
+      error = insErr;
+      if (ins) setConfigId(ins.id);
+    }
+    setConfigSaving(false);
+    if (error) { showToast('Error al guardar: ' + error.message, 'err'); return; }
+    showToast('✅ Configuración guardada');
+  }
+
+  /* ── UPLOAD LOGO ── */
+  async function uploadLogo(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { showToast('Logo muy grande (máx 2MB)', 'err'); return; }
+    setLogoUploading(true);
+    const ext  = file.name.split('.').pop();
+    const path = `logos/${orgId}/logo_${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('store-assets').upload(path, file, { upsert: true });
+    if (upErr) { showToast('Error al subir: ' + upErr.message, 'err'); setLogoUploading(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from('store-assets').getPublicUrl(path);
+    setConfig(c => ({ ...c, logo_url: publicUrl }));
+    setLogoUploading(false);
+    showToast('Logo subido ✓');
   }
 
   function showToast(msg, type = 'ok') {
@@ -160,6 +254,8 @@ export default function StorePage() {
   if (loading) return (
     <div className="auth-screen"><div className="loading-wrap"><div className="spinner" /></div></div>
   );
+
+  const slug = SLUG_MAP[orgId] || '';
 
   return (
     <div className="page-wrap">
@@ -294,6 +390,227 @@ export default function StorePage() {
           </div>
         )}
 
+        {/* ── CONFIGURACIÓN ── */}
+        {tab === 'config' && (
+          <div style={{ padding: '16px' }}>
+            <div className="section-title">⚙️ Configuración de Tienda</div>
+
+            {/* Preview link */}
+            {slug && (
+              <a
+                href={`/${slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '10px 14px', borderRadius: 12, marginBottom: 20,
+                  background: 'rgba(10,132,255,0.12)',
+                  border: '1px solid rgba(10,132,255,0.25)',
+                  color: '#4DA8FF', fontSize: 13, fontWeight: 600,
+                  textDecoration: 'none',
+                }}
+              >
+                <span>🌐</span>
+                <span>Ver tienda online: /{slug}</span>
+                <span style={{ marginLeft: 'auto' }}>↗</span>
+              </a>
+            )}
+
+            <form onSubmit={saveConfig}>
+
+              {/* LOGO */}
+              <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>🖼 Logo de la tienda</div>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                  {config.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={config.logo_url}
+                      alt="Logo"
+                      style={{ width: 72, height: 72, objectFit: 'contain', borderRadius: 12, background: 'var(--surface)', padding: 4 }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: 72, height: 72, borderRadius: 12,
+                      background: 'var(--surface)', border: '2px dashed var(--border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 28, color: 'var(--text-muted)',
+                    }}>🏪</div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={uploadLogo}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={logoUploading}
+                      style={{
+                        width: '100%', padding: '10px 14px', borderRadius: 10,
+                        background: 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+                        border: 'none', color: '#fff', fontSize: 13, fontWeight: 600,
+                        cursor: logoUploading ? 'not-allowed' : 'pointer', marginBottom: 8,
+                      }}
+                    >
+                      {logoUploading ? '⏳ Subiendo...' : '📤 Subir logo'}
+                    </button>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <input
+                        className="form-input"
+                        placeholder="O pega URL del logo"
+                        value={config.logo_url}
+                        onChange={e => setConfig(c => ({ ...c, logo_url: e.target.value }))}
+                        style={{ fontSize: 12 }}
+                      />
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      PNG o JPG · máx 2MB
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* INFORMACIÓN BÁSICA */}
+              <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>📝 Información básica</div>
+                <div className="form-group">
+                  <label className="form-label">Nombre de la tienda</label>
+                  <input className="form-input" placeholder="Ej: Futurteck" value={config.store_name}
+                    onChange={e => setConfig(c => ({ ...c, store_name: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Tagline / Eslogan</label>
+                  <input className="form-input" placeholder="Ej: La mejor tecnología para ti" value={config.tagline}
+                    onChange={e => setConfig(c => ({ ...c, tagline: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Descripción (para el footer)</label>
+                  <textarea className="form-input" rows={3} placeholder="Describe tu tienda..." value={config.descripcion}
+                    onChange={e => setConfig(c => ({ ...c, descripcion: e.target.value }))}
+                    style={{ resize: 'vertical', minHeight: 72 }} />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Dirección</label>
+                  <input className="form-input" placeholder="Ej: Jr. Camaná 123, Lima" value={config.direccion}
+                    onChange={e => setConfig(c => ({ ...c, direccion: e.target.value }))} />
+                </div>
+              </div>
+
+              {/* REDES SOCIALES */}
+              <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>📲 Redes sociales y contacto</div>
+                <div className="form-group">
+                  <label className="form-label">📱 WhatsApp (solo número, ej: 51999888777)</label>
+                  <input className="form-input" placeholder="51999888777" value={config.whatsapp}
+                    onChange={e => setConfig(c => ({ ...c, whatsapp: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">📸 Instagram (usuario sin @)</label>
+                  <input className="form-input" placeholder="futurteck" value={config.instagram}
+                    onChange={e => setConfig(c => ({ ...c, instagram: e.target.value }))} />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">🎵 TikTok (usuario sin @)</label>
+                  <input className="form-input" placeholder="futurteck" value={config.tiktok}
+                    onChange={e => setConfig(c => ({ ...c, tiktok: e.target.value }))} />
+                </div>
+              </div>
+
+              {/* COLORES */}
+              <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>🎨 Colores del tema</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                  {[
+                    { key: 'color_primario',   label: 'Primario'   },
+                    { key: 'color_secundario', label: 'Secundario' },
+                    { key: 'color_acento',     label: 'Acento'     },
+                  ].map(({ key, label }) => (
+                    <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>{label}</label>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="color"
+                          value={config[key]}
+                          onChange={e => setConfig(c => ({ ...c, [key]: e.target.value }))}
+                          style={{
+                            width: 56, height: 56, borderRadius: 12,
+                            border: '2px solid var(--border)', cursor: 'pointer',
+                            padding: 2, background: 'none',
+                          }}
+                        />
+                      </div>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{config[key]}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Preview */}
+                <div style={{
+                  marginTop: 16, borderRadius: 12, overflow: 'hidden',
+                  border: '1px solid var(--border)',
+                }}>
+                  <div style={{
+                    background: `linear-gradient(135deg, ${config.color_primario}, ${config.color_secundario})`,
+                    padding: '12px 16px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  }}>
+                    <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{config.store_name || 'Tu Tienda'}</span>
+                    <div style={{
+                      background: config.color_acento,
+                      color: '#fff', fontSize: 11, fontWeight: 700,
+                      padding: '4px 10px', borderRadius: 8,
+                    }}>Ver más</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* HORARIOS */}
+              <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>🕐 Horarios de atención</div>
+                {Object.entries(config.horarios || {}).map(([dia, hora]) => (
+                  <div key={dia} className="form-group" style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+                    <label style={{
+                      minWidth: 80, fontSize: 12, fontWeight: 600,
+                      color: 'var(--text-muted)', textTransform: 'capitalize',
+                    }}>{dia}</label>
+                    <input
+                      className="form-input"
+                      value={hora}
+                      placeholder="9:00 - 18:00 o Cerrado"
+                      onChange={e => setConfig(c => ({
+                        ...c,
+                        horarios: { ...c.horarios, [dia]: e.target.value },
+                      }))}
+                      style={{ flex: 1, fontSize: 13 }}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* SAVE BUTTON */}
+              <button
+                type="submit"
+                disabled={configSaving}
+                style={{
+                  width: '100%', padding: '16px', borderRadius: 16,
+                  background: configSaving
+                    ? 'var(--surface)'
+                    : 'linear-gradient(135deg,#30D158,#34C759)',
+                  border: 'none', color: '#fff', fontSize: 16, fontWeight: 700,
+                  cursor: configSaving ? 'not-allowed' : 'pointer',
+                  boxShadow: configSaving ? 'none' : '0 4px 20px rgba(48,209,88,0.35)',
+                  marginBottom: 40,
+                }}
+              >
+                {configSaving ? '⏳ Guardando...' : '💾 Guardar configuración'}
+              </button>
+            </form>
+          </div>
+        )}
+
       </div>
 
       {/* TAB BAR */}
@@ -303,6 +620,7 @@ export default function StorePage() {
           { id: 'clientes', ico: '👥', lbl: 'Clientes' },
           { id: 'ventas',   ico: '📊', lbl: 'Ventas'   },
           { id: 'caja',     ico: '💰', lbl: 'Caja'     },
+          { id: 'config',   ico: '⚙️', lbl: 'Config'   },
         ].map(t => (
           <button key={t.id} className={`tab-btn${tab===t.id?' active':''}`} onClick={() => switchTab(t.id)}>
             <span className="ico">{t.ico}</span>{t.lbl}
