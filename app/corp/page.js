@@ -54,10 +54,9 @@ export default function CorpPage() {
   const [txFilter,    setTxFilter]    = useState('all');
 
   /* ── IMPORTACIÓN ── */
-  const [imports,     setImports]     = useState([]);
+  const [batches,     setBatches]     = useState([]);
   const [usdRate,     setUsdRate]     = useState('');
   const [loadingRate, setLoadingRate] = useState(false);
-  const [importKpis,  setImportKpis]  = useState({ totalUSD: 0, totalPEN: 0, count: 0 });
 
   /* ── FINANZAS ── */
   const [finFx,       setFinFx]       = useState(null);
@@ -257,34 +256,100 @@ export default function CorpPage() {
     loadTransfers();
   }
 
-  /* ── IMPORTACIÓN USA ── */
-  async function loadImports() {
+  /* ── IMPORTACIÓN USA — Costo Landed ── */
+  async function loadBatches() {
     const { data } = await supabase
-      .from('accounting_tx')
-      .select('id, amount, currency, description, created_at, org_id')
+      .from('import_batches')
+      .select('*')
       .eq('org_id', CORP_ID)
-      .eq('type', 'expense')
-      .ilike('description', 'IMPORTACIÓN%')
       .order('created_at', { ascending: false })
-      .limit(60);
-    const list = data || [];
-    setImports(list);
-    // KPIs
-    const totalUSD = list.filter(x => x.currency === 'USD').reduce((s, x) => s + (x.amount || 0), 0);
-    const totalPEN = list.filter(x => x.currency === 'PEN').reduce((s, x) => s + (x.amount || 0), 0);
-    setImportKpis({ totalUSD, totalPEN, count: list.length });
+      .limit(50);
+    setBatches(data || []);
   }
 
   async function fetchUsdRate() {
     setLoadingRate(true);
     try {
-      const res  = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+      const res  = await fetch('https://api.frankfurter.app/latest?from=USD&to=PEN', { cache: 'no-store' });
       const json = await res.json();
       const pen  = json?.rates?.PEN;
       if (pen) { setUsdRate(pen.toFixed(3)); showToast(`Tipo de cambio: S/${pen.toFixed(3)} ✓`); }
-      else showToast('No se pudo obtener el tipo de cambio', 'err');
-    } catch { showToast('Error al consultar API', 'err'); }
+      else {
+        const res2  = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        const json2 = await res2.json();
+        const pen2  = json2?.rates?.PEN;
+        if (pen2) { setUsdRate(pen2.toFixed(3)); showToast(`TC: S/${pen2.toFixed(3)} ✓`); }
+      }
+    } catch { showToast('Error al consultar API de cambio', 'err'); }
     setLoadingRate(false);
+  }
+
+  // Calcula todos los valores del Costo Landed a partir del formulario
+  function calcLanded(f, tc) {
+    const compra   = parseFloat(f.imp_compra)   || 0;
+    const flete    = parseFloat(f.imp_flete)    || 0;
+    const seguro   = parseFloat(f.imp_seguro)   || 0;
+    const aranPct  = parseFloat(f.imp_arancel)  || 0;
+    const igvPct   = parseFloat(f.imp_igv)      ?? 18;
+    const gastosLima= parseFloat(f.imp_gastos)  || 0;
+    const rate     = parseFloat(tc) || parseFloat(f.imp_rate) || 3.75;
+    const unds     = Math.max(1, parseInt(f.imp_unidades) || 1);
+    const margenPct= parseFloat(f.imp_margen)   || 30;
+
+    const subtotalUSD   = compra + flete + seguro;
+    const arancelUSD    = subtotalUSD * aranPct / 100;
+    const baseIgv       = subtotalUSD + arancelUSD;
+    const igvUSD        = baseIgv * igvPct / 100;
+    const landedUSD     = subtotalUSD + arancelUSD + igvUSD;
+    const landedPEN     = landedUSD * rate + gastosLima;
+    const costoPorUnd   = landedPEN / unds;
+    const precioSug     = costoPorUnd / (1 - margenPct / 100);
+    const margenSoles   = precioSug - costoPorUnd;
+
+    return { subtotalUSD, arancelUSD, igvUSD, landedUSD, landedPEN, costoPorUnd, precioSug, margenSoles, rate };
+  }
+
+  async function addBatch(e) {
+    e.preventDefault();
+    const tc  = parseFloat(usdRate) || parseFloat(form.imp_rate) || 3.75;
+    const C   = calcLanded(form, tc);
+    const { error } = await supabase.from('import_batches').insert({
+      org_id:              CORP_ID,
+      descripcion:         form.imp_desc || '',
+      proveedor:           form.imp_proveedor || '',
+      fecha_compra:        form.imp_fecha_compra || null,
+      fecha_llegada_est:   form.imp_fecha_llegada || null,
+      estado:              'en_transito',
+      num_unidades:        parseInt(form.imp_unidades) || 1,
+      costo_usd:           parseFloat(form.imp_compra)   || 0,
+      flete_usd:           parseFloat(form.imp_flete)    || 0,
+      seguro_usd:          parseFloat(form.imp_seguro)   || 0,
+      arancel_pct:         parseFloat(form.imp_arancel)  || 0,
+      igv_pct:             parseFloat(form.imp_igv)      ?? 18,
+      gastos_lima_pen:     parseFloat(form.imp_gastos)   || 0,
+      tipo_cambio_usado:   C.rate,
+      subtotal_usd:        C.subtotalUSD,
+      arancel_usd:         C.arancelUSD,
+      igv_usd:             C.igvUSD,
+      costo_landed_usd:    C.landedUSD,
+      costo_landed_pen:    C.landedPEN,
+      margen_pct:          parseFloat(form.imp_margen)   || 30,
+      precio_sugerido_pen: C.precioSug,
+      notas:               form.imp_notas || '',
+      created_by:          me?.id,
+    });
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('Lote de importación registrado ✓');
+    setModal(null); setForm({});
+    loadBatches();
+  }
+
+  async function updateBatchStatus(id, estado) {
+    const updates = { estado };
+    if (estado === 'en_lima') updates.fecha_llegada_real = new Date().toISOString().split('T')[0];
+    await supabase.from('import_batches').update(updates).eq('id', id);
+    showToast('Estado actualizado ✓');
+    loadBatches();
   }
 
   async function addImport(e) {
@@ -456,7 +521,7 @@ export default function CorpPage() {
     if (t === 'equipo')       loadUsers();
     if (t === 'almacenes')    loadWarehouses();
     if (t === 'traslados')  { loadTransfers(); loadCorpStock(); }
-    if (t === 'importacion')  loadImports();
+    if (t === 'importacion')  loadBatches();
     if (t === 'finanzas')     loadFinanzas();
   }
 
@@ -791,78 +856,128 @@ export default function CorpPage() {
         )}
 
         {/* ══════════════════════════════════════
-            TAB: IMPORTACIÓN USA
+            TAB: IMPORTACIÓN USA — COSTO LANDED
         ══════════════════════════════════════ */}
-        {tab === 'importacion' && (
-          <div style={{ padding: '16px' }}>
-            {/* KPIs importación */}
-            <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 20 }}>
-              <div className="kpi">
-                <div className="kpi-ico">🇺🇸</div>
-                <div className="kpi-val" style={{ fontSize: 16 }}>${importKpis.totalUSD.toFixed(0)}</div>
-                <div className="kpi-lbl">Total USD</div>
-              </div>
-              <div className="kpi">
-                <div className="kpi-ico">🪙</div>
-                <div className="kpi-val" style={{ fontSize: 16 }}>S/{importKpis.totalPEN.toFixed(0)}</div>
-                <div className="kpi-lbl">Total PEN</div>
-              </div>
-              <div className="kpi">
-                <div className="kpi-ico">📥</div>
-                <div className="kpi-val">{importKpis.count}</div>
-                <div className="kpi-lbl">Registros</div>
-              </div>
-            </div>
+        {tab === 'importacion' && (() => {
+          // KPIs calculados desde batches
+          const totalLandedPEN = batches.reduce((s, b) => s + (b.costo_landed_pen || 0), 0);
+          const totalLandedUSD = batches.reduce((s, b) => s + (b.costo_landed_usd || 0), 0);
+          const enTransito     = batches.filter(b => b.estado === 'en_transito').length;
 
-            {/* Tipo de cambio */}
-            <div className="card" style={{ padding: '14px', marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>💱 Tipo de Cambio USD → PEN</div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          const ESTADO_BADGE = {
+            en_transito: { lbl: '✈️ En tránsito', color: '#FF9F0A' },
+            en_lima:     { lbl: '📦 En Lima',      color: '#30D158' },
+            distribuido: { lbl: '✅ Distribuido',   color: '#5E5CE6' },
+          };
+
+          return (
+            <div style={{ padding: '16px' }}>
+
+              {/* KPIs */}
+              <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 20 }}>
+                <div className="kpi">
+                  <div className="kpi-ico">💵</div>
+                  <div className="kpi-val" style={{ fontSize: 15 }}>${totalLandedUSD.toFixed(0)}</div>
+                  <div className="kpi-lbl">Invertido USD</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-ico">🪙</div>
+                  <div className="kpi-val" style={{ fontSize: 15 }}>S/{totalLandedPEN.toFixed(0)}</div>
+                  <div className="kpi-lbl">Costo total PEN</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-ico">✈️</div>
+                  <div className="kpi-val">{enTransito}</div>
+                  <div className="kpi-lbl">En tránsito</div>
+                </div>
+              </div>
+
+              {/* TC + botón nuevo lote */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                 <input
                   className="form-input"
                   style={{ flex: 1 }}
-                  type="number"
-                  step="0.001"
-                  placeholder="Ej: 3.750"
+                  type="number" step="0.001"
+                  placeholder="Tipo de cambio USD→PEN"
                   value={usdRate}
                   onChange={e => setUsdRate(e.target.value)}
                 />
                 <button className="btn btn-outline btn-sm" onClick={fetchUsdRate} disabled={loadingRate}>
-                  {loadingRate ? '…' : '🔄 API'}
+                  {loadingRate ? '…' : '🔄 TC'}
+                </button>
+                <button className="btn btn-primary btn-sm" onClick={() => {
+                  setModal('add-batch');
+                  setForm({ imp_igv: '18', imp_margen: '30', imp_unidades: '1', imp_arancel: '0' });
+                }}>
+                  + Lote
                 </button>
               </div>
-              {usdRate && <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 6 }}>✓ S/{usdRate} por $1 USD</div>}
-            </div>
+              {usdRate && <div style={{ fontSize: 12, color: 'var(--green)', marginBottom: 14 }}>✓ TC: S/{usdRate} por $1 USD</div>}
 
-            <div className="section-header">
-              <div className="section-title">📥 Costos de Importación</div>
-              <button className="section-action" onClick={() => { setModal('add-import'); setForm({}); }}>+ Registrar</button>
-            </div>
-
-            {imports.length === 0 ? (
-              <div className="empty-msg">Sin registros de importación</div>
-            ) : (
-              <div className="card">
-                {imports.map(imp => (
-                  <div className="list-item" key={imp.id}>
-                    <div className="list-item-ico">{imp.currency === 'USD' ? '🇺🇸' : '🪙'}</div>
-                    <div className="list-item-body">
-                      <div className="list-item-name" style={{ fontSize: 13 }}>
-                        {imp.description?.replace('IMPORTACIÓN USA: ', '') || '—'}
+              {/* Lista de lotes */}
+              <div className="section-title" style={{ marginBottom: 12 }}>📥 Lotes de importación</div>
+              {batches.length === 0 ? (
+                <div className="empty-msg">Sin lotes. Registra tu primera importación.</div>
+              ) : (
+                batches.map(b => {
+                  const badge = ESTADO_BADGE[b.estado] || { lbl: b.estado, color: '#888' };
+                  const costPU = b.num_unidades > 0 ? (b.costo_landed_pen || 0) / b.num_unidades : 0;
+                  return (
+                    <div className="card" key={b.id} style={{ padding: '14px', marginBottom: 12 }}>
+                      <div className="flex-between" style={{ marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>{b.descripcion || 'Lote sin nombre'}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {b.proveedor && <span>{b.proveedor} · </span>}
+                            {b.num_unidades} unid.
+                            {b.fecha_compra && <span> · Compra: {b.fecha_compra}</span>}
+                            {b.fecha_llegada_est && <span> · ETA: {b.fecha_llegada_est}</span>}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: badge.color }}>{badge.lbl}</span>
                       </div>
-                      <div className="list-item-sub">
-                        {new Date(imp.created_at).toLocaleDateString('es-PE')} · {imp.currency}
+
+                      {/* Costos */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                        <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px 12px' }}>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Costo Landed</div>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--red)' }}>S/{(b.costo_landed_pen || 0).toFixed(0)}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>${(b.costo_landed_usd || 0).toFixed(0)} USD</div>
+                        </div>
+                        <div style={{ background: 'rgba(48,209,88,0.08)', border: '1px solid rgba(48,209,88,0.2)', borderRadius: 10, padding: '8px 12px' }}>
+                          <div style={{ fontSize: 10, color: '#30D158', fontWeight: 700, textTransform: 'uppercase' }}>P. Sugerido x und.</div>
+                          <div style={{ fontSize: 16, fontWeight: 800, color: '#30D158' }}>S/{(b.precio_sugerido_pen || 0).toFixed(0)}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Margen: {b.margen_pct || 0}% · Costo/u: S/{costPU.toFixed(0)}</div>
+                        </div>
+                      </div>
+
+                      {/* Desglose colapsado */}
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                        Compra: ${(b.costo_usd || 0).toFixed(2)} · Flete: ${(b.flete_usd || 0).toFixed(2)} · Seguro: ${(b.seguro_usd || 0).toFixed(2)} · Arancel: {b.arancel_pct || 0}% · IGV: {b.igv_pct || 18}% · TC: S/{b.tipo_cambio_usado || '—'} · Lima: S/{(b.gastos_lima_pen || 0).toFixed(0)}
+                      </div>
+
+                      {/* Botones de estado */}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        {b.estado === 'en_transito' && (
+                          <button className="btn btn-primary btn-sm" style={{ background: '#30D158' }}
+                            onClick={() => updateBatchStatus(b.id, 'en_lima')}>
+                            📦 Llegó a Lima
+                          </button>
+                        )}
+                        {b.estado === 'en_lima' && (
+                          <button className="btn btn-primary btn-sm" style={{ background: '#5E5CE6' }}
+                            onClick={() => updateBatchStatus(b.id, 'distribuido')}>
+                            ✅ Marcar distribuido
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="list-item-val" style={{ color: 'var(--red)', fontWeight: 800 }}>
-                      {imp.currency === 'USD' ? '$' : 'S/'}{(imp.amount || 0).toFixed(2)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  );
+                })
+              )}
+            </div>
+          );
+        })()}
 
         {/* ══════════════════════════════════════
             TAB: FINANZAS
@@ -1226,38 +1341,126 @@ export default function CorpPage() {
               </>
             )}
 
-            {/* ── MODAL: Registrar Importación ── */}
-            {modal === 'add-import' && (
-              <>
-                <div className="modal-title">📥 Registrar Importación USA</div>
-                <form onSubmit={addImport}>
-                  <div className="form-group">
-                    <label className="form-label">Descripción / Productos</label>
-                    <input className="form-input" required placeholder="10x Samsung Galaxy S24 — Miami" value={form.imp_desc || ''} onChange={e => setForm({ ...form, imp_desc: e.target.value })} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Costo en USD ($)</label>
-                    <input className="form-input" type="number" step="0.01" required placeholder="0.00" value={form.imp_usd || ''} onChange={e => setForm({ ...form, imp_usd: e.target.value })} />
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-                    <div className="form-group" style={{ flex: 1, margin: 0 }}>
-                      <label className="form-label">Tipo de cambio</label>
-                      <input className="form-input" type="number" step="0.001" placeholder="3.750" value={usdRate || form.imp_rate || ''} onChange={e => setForm({ ...form, imp_rate: e.target.value })} />
+            {/* ── MODAL: Costo Landed Calculator ── */}
+            {modal === 'add-batch' && (() => {
+              const C = calcLanded(form, usdRate);
+              return (
+                <>
+                  <div className="modal-title">📥 Registrar Lote de Importación</div>
+                  <form onSubmit={addBatch}>
+                    {/* Info del lote */}
+                    <div className="form-group">
+                      <label className="form-label">Descripción del lote</label>
+                      <input className="form-input" required placeholder="10x iPhone 15 — Miami" value={form.imp_desc || ''} onChange={e => setForm({ ...form, imp_desc: e.target.value })} />
                     </div>
-                    <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 20 }} onClick={fetchUsdRate}>
-                      🔄
-                    </button>
-                  </div>
-                  <div style={{ padding: '10px 14px', background: 'var(--card2, rgba(255,255,255,0.05))', borderRadius: 10, marginBottom: 14, fontSize: 13 }}>
-                    <span>Equivalente PEN: </span>
-                    <b style={{ color: 'var(--green)' }}>
-                      S/{((parseFloat(form.imp_usd) || 0) * (parseFloat(usdRate) || parseFloat(form.imp_rate) || 0)).toFixed(2)}
-                    </b>
-                  </div>
-                  <button className="btn btn-primary" type="submit">Guardar importación</button>
-                </form>
-              </>
-            )}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 4 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Proveedor</label>
+                        <input className="form-input" placeholder="Swappa, eBay..." value={form.imp_proveedor || ''} onChange={e => setForm({ ...form, imp_proveedor: e.target.value })} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label"># Unidades</label>
+                        <input className="form-input" type="number" min="1" value={form.imp_unidades || '1'} onChange={e => setForm({ ...form, imp_unidades: e.target.value })} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 4 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Fecha de compra</label>
+                        <input className="form-input" type="date" value={form.imp_fecha_compra || ''} onChange={e => setForm({ ...form, imp_fecha_compra: e.target.value })} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">ETA llegada</label>
+                        <input className="form-input" type="date" value={form.imp_fecha_llegada || ''} onChange={e => setForm({ ...form, imp_fecha_llegada: e.target.value })} />
+                      </div>
+                    </div>
+
+                    {/* Separador */}
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '14px 0 8px' }}>💵 Costos en USD</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 4 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Precio compra</label>
+                        <input className="form-input" type="number" step="0.01" required placeholder="0.00" value={form.imp_compra || ''} onChange={e => setForm({ ...form, imp_compra: e.target.value })} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Flete</label>
+                        <input className="form-input" type="number" step="0.01" placeholder="0.00" value={form.imp_flete || ''} onChange={e => setForm({ ...form, imp_flete: e.target.value })} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Seguro</label>
+                        <input className="form-input" type="number" step="0.01" placeholder="0.00" value={form.imp_seguro || ''} onChange={e => setForm({ ...form, imp_seguro: e.target.value })} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 4 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Arancel (%)</label>
+                        <input className="form-input" type="number" step="0.1" placeholder="0" value={form.imp_arancel || '0'} onChange={e => setForm({ ...form, imp_arancel: e.target.value })} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">IGV (%)</label>
+                        <input className="form-input" type="number" step="0.1" placeholder="18" value={form.imp_igv || '18'} onChange={e => setForm({ ...form, imp_igv: e.target.value })} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 4 }}>
+                      <div className="form-group" style={{ gridColumn: '1/3', marginBottom: 0 }}>
+                        <label className="form-label">Gastos Lima (S/)</label>
+                        <input className="form-input" type="number" step="0.01" placeholder="Agencia, movilidad..." value={form.imp_gastos || ''} onChange={e => setForm({ ...form, imp_gastos: e.target.value })} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">TC S/$</label>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <input className="form-input" type="number" step="0.001" placeholder="3.75" value={usdRate || form.imp_rate || ''} onChange={e => setUsdRate(e.target.value)} style={{ flex: 1 }} />
+                          <button type="button" className="btn btn-outline btn-sm" onClick={fetchUsdRate} style={{ padding: '8px 6px', flexShrink: 0 }}>🔄</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 12 }}>
+                      <label className="form-label">Margen objetivo (%)</label>
+                      <input className="form-input" type="number" step="1" placeholder="30" value={form.imp_margen || '30'} onChange={e => setForm({ ...form, imp_margen: e.target.value })} />
+                    </div>
+
+                    {/* ── PREVIEW LIVE ── */}
+                    {(parseFloat(form.imp_compra) > 0) && (
+                      <div style={{
+                        background: 'linear-gradient(135deg,rgba(10,132,255,0.1),rgba(94,92,230,0.1))',
+                        border: '1px solid rgba(10,132,255,0.25)',
+                        borderRadius: 14, padding: '14px 16px', marginBottom: 14,
+                      }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#4DA8FF', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                          🧮 Desglose Costo Landed
+                        </div>
+                        {[
+                          { lbl: 'Subtotal (compra+flete+seguro)', val: `$${C.subtotalUSD.toFixed(2)}`, color: 'var(--text)' },
+                          { lbl: `Arancel (${form.imp_arancel||0}%)`, val: `$${C.arancelUSD.toFixed(2)}`, color: 'var(--text)' },
+                          { lbl: `IGV (${form.imp_igv||18}%)`, val: `$${C.igvUSD.toFixed(2)}`, color: 'var(--text)' },
+                          { lbl: 'Costo Landed USD', val: `$${C.landedUSD.toFixed(2)}`, color: '#FF9F0A', bold: true },
+                          { lbl: `Costo Landed PEN (TC ${C.rate.toFixed(3)})`, val: `S/${C.landedPEN.toFixed(2)}`, color: '#FF9F0A', bold: true },
+                        ].map(r => (
+                          <div key={r.lbl} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                            <span style={{ color: 'var(--text-muted)' }}>{r.lbl}</span>
+                            <span style={{ color: r.color, fontWeight: r.bold ? 800 : 500 }}>{r.val}</span>
+                          </div>
+                        ))}
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 8, paddingTop: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Costo por unidad</span>
+                            <span style={{ color: '#fff', fontWeight: 700 }}>S/{C.costoPorUnd.toFixed(2)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
+                            <span style={{ color: '#30D158', fontWeight: 700 }}>💡 Precio sugerido/und ({form.imp_margen||30}%)</span>
+                            <span style={{ color: '#30D158', fontWeight: 900 }}>S/{C.precioSug.toFixed(2)}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', marginTop: 2 }}>
+                            Margen: S/{C.margenSoles.toFixed(2)} por unidad
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <button className="btn btn-primary" type="submit">💾 Guardar lote</button>
+                  </form>
+                </>
+              );
+            })()}
 
             {/* ── MODAL: Agregar cuenta de caja ── */}
             {(modal === 'add-account' || modal === 'edit-account') && (
