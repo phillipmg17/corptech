@@ -87,6 +87,14 @@ export default function CorpPage() {
   const [imeiConfig,   setImeiConfig]   = useState(null);
   const [rechargeFile, setRechargeFile] = useState(null); // screenshot para recarga
 
+  /* ── BATCH IMEI CHECKER ── */
+  const [batchOpen,     setBatchOpen]     = useState(false);
+  const [batchImeis,    setBatchImeis]    = useState([]);
+  const [batchResults,  setBatchResults]  = useState([]);
+  const [batchLoading,  setBatchLoading]  = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
+  const [batchText,     setBatchText]     = useState('');
+
   useEffect(() => { init(); }, []);
 
   async function init() {
@@ -942,6 +950,132 @@ export default function CorpPage() {
     if (error) { showToast('Error al enviar solicitud: ' + error.message, 'err'); return; }
     showToast(`✅ Solicitud enviada — ${tokens} tokens por S/${soles.toFixed(2)}`);
     setModal(null); setForm({}); setRechargeFile(null);
+  }
+
+  /* ── BATCH IMEI — Extracción y Check Masivo ── */
+  function extractImeisFromText(text) {
+    const raw = typeof text === 'string' ? text : '';
+    const matches = raw.match(/\b\d{14,16}\b/g) || [];
+    return [...new Set(matches)];
+  }
+
+  async function readFileTextBatch(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          const bytes = new Uint8Array(e.target.result);
+          let str = ''; let run = '';
+          for (let i = 0; i < bytes.length; i++) {
+            const b = bytes[i];
+            if (b >= 32 && b <= 126) { run += String.fromCharCode(b); }
+            else { if (run.length >= 3) str += run + ' '; run = ''; }
+          }
+          if (run.length >= 3) str += run;
+          resolve(str);
+        } else {
+          resolve(e.target.result || '');
+        }
+      };
+      reader.onerror = () => resolve('');
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.readAsText(file);
+      }
+    });
+  }
+
+  async function processBatchFile(file) {
+    const text = await readFileTextBatch(file);
+    const found = extractImeisFromText(text);
+    setBatchImeis(found);
+    setBatchResults([]);
+    setBatchProgress({ done: 0, total: 0 });
+    if (found.length === 0) showToast('No se encontraron IMEIs en el archivo', 'err');
+    else showToast(`✅ ${found.length} IMEI${found.length !== 1 ? 's' : ''} detectados`);
+  }
+
+  function processBatchTextInput(text) {
+    const found = extractImeisFromText(text);
+    setBatchImeis(found);
+    setBatchResults([]);
+    setBatchProgress({ done: 0, total: 0 });
+    if (found.length > 0) showToast(`✅ ${found.length} IMEI${found.length !== 1 ? 's' : ''} detectados`);
+  }
+
+  async function runBatchCheck() {
+    if (batchImeis.length === 0) { showToast('No hay IMEIs para consultar', 'err'); return; }
+    if (!imeiService)            { showToast('Selecciona un tipo de consulta arriba', 'err'); return; }
+    setBatchLoading(true);
+    setBatchResults([]);
+    setBatchProgress({ done: 0, total: batchImeis.length });
+    const results = [];
+    for (let i = 0; i < batchImeis.length; i++) {
+      const imei = batchImeis[i];
+      try {
+        const res  = await fetch('/api/check-imei', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imei, service_id: imeiService, user_id: me?.id, org_id: CORP_ID, provider: imeiProvider }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          results.push({ imei, status: 'error', error: data.error || 'Error', result: null, info: null });
+        } else {
+          const info = extractDeviceInfo(data.result, data.check_id);
+          results.push({ imei, status: 'success', error: null, result: data.result, info });
+        }
+      } catch (err) {
+        results.push({ imei, status: 'error', error: err.message, result: null, info: null });
+      }
+      setBatchProgress({ done: i + 1, total: batchImeis.length });
+      setBatchResults([...results]);
+      if (i < batchImeis.length - 1) await new Promise(r => setTimeout(r, 350));
+    }
+    setBatchLoading(false);
+    const ok  = results.filter(r => r.status === 'success').length;
+    const err = results.filter(r => r.status === 'error').length;
+    showToast(`✅ ${ok} exitosos${err > 0 ? ` · ❌ ${err} errores` : ''}`);
+    loadImeiCredits();
+    loadImeiHistory();
+  }
+
+  async function addBatchStock(e) {
+    e.preventDefault();
+    const successes = batchResults.filter(r => r.status === 'success');
+    let added = 0; let errored = 0;
+    for (const r of successes) {
+      const info = r.info || {};
+      const matchedProduct = form.batch_product_id
+        ? null
+        : products.find(p => {
+            const pn = (p.name || '').toLowerCase();
+            const dn = (info.deviceName || '').toLowerCase();
+            return dn && (pn.includes(dn.split(' ').slice(0, 3).join(' ')) || dn.includes(pn.split(' ').slice(0, 2).join(' ')));
+          }) || products[0];
+      const { error } = await supabase.from('stock_items').insert({
+        product_id:    form.batch_product_id || matchedProduct?.id || null,
+        owner_org_id:  form.owner_org_id || CORP_ID,
+        serial_number: r.imei,
+        imei:          r.imei,
+        status:        'available',
+        sale_price:    parseFloat(form.sale_price) || 0,
+        emoji:         form.emoji || '📱',
+        imei_check_id: info.imei_check_id || null,
+        model_number:  info.modelNumber   || null,
+        color_info:    info.color_info    || info.color   || null,
+        storage_info:  info.storage_info  || info.storage || null,
+        notes:         info.description   || null,
+        created_by:    me?.id,
+      });
+      if (error) errored++;
+      else added++;
+    }
+    showToast(`✅ ${added} equipos agregados al stock${errored > 0 ? ` · ❌ ${errored} errores` : ''}`);
+    setModal(null); setForm({});
+    setBatchResults([]); setBatchImeis([]); setBatchText('');
+    loadGlobalStock(); loadKpis();
   }
 
   async function doLogout() {
@@ -2307,6 +2441,175 @@ export default function CorpPage() {
               );
             })()}
 
+            {/* ══ CHECK MASIVO — PDF / Invoice / Texto ══ */}
+            {imeiConfig && (
+              <div style={{ marginBottom: 16 }}>
+                {/* Toggle header */}
+                <button
+                  onClick={() => setBatchOpen(o => !o)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: batchOpen ? 'rgba(94,92,230,0.12)' : 'rgba(255,255,255,0.04)',
+                    border: `1.5px solid ${batchOpen ? 'rgba(94,92,230,0.4)' : 'var(--border)'}`,
+                    borderRadius: 14, padding: '12px 16px', cursor: 'pointer',
+                    color: 'var(--text)', fontSize: 14, fontWeight: 800,
+                  }}>
+                  <span>📋 Check Masivo — PDF / Invoice / Lista</span>
+                  <span style={{ fontSize: 18, transition: 'transform 0.2s', transform: batchOpen ? 'rotate(180deg)' : 'none' }}>⌄</span>
+                </button>
+
+                {batchOpen && (
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+                    {/* Zona de upload */}
+                    <div
+                      onDragOver={e => { e.preventDefault(); }}
+                      onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) processBatchFile(f); }}
+                      style={{
+                        border: '2px dashed rgba(94,92,230,0.5)', borderRadius: 14,
+                        padding: '24px 16px', textAlign: 'center', cursor: 'pointer',
+                        background: 'rgba(94,92,230,0.04)',
+                      }}
+                      onClick={() => document.getElementById('batch-file-input').click()}>
+                      <div style={{ fontSize: 36, marginBottom: 8 }}>📄</div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>Arrastra o toca para subir</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>PDF, TXT, CSV — detecta IMEIs/serials automáticamente</div>
+                      <input
+                        id="batch-file-input" type="file" accept=".pdf,.txt,.csv,.xlsx,.xls"
+                        style={{ display: 'none' }}
+                        onChange={e => { const f = e.target.files[0]; if (f) processBatchFile(f); }}
+                      />
+                    </div>
+
+                    {/* O pegar texto */}
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>O pega los IMEIs aquí (uno por línea o separados por coma/espacio):</div>
+                      <textarea
+                        className="form-input"
+                        rows={4}
+                        placeholder="352999111111111&#10;352999222222222&#10;352999333333333"
+                        value={batchText}
+                        onChange={e => { setBatchText(e.target.value); processBatchTextInput(e.target.value); }}
+                        style={{ fontFamily: 'monospace', fontSize: 13, resize: 'vertical' }}
+                      />
+                    </div>
+
+                    {/* IMEIs detectados */}
+                    {batchImeis.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
+                          🔢 {batchImeis.length} IMEI{batchImeis.length !== 1 ? 's' : ''} detectados
+                          {(imeiConfig?.totalRemaining || 0) > 0 && (
+                            <span style={{ color: (imeiConfig?.totalRemaining || 0) >= batchImeis.length ? '#30D158' : '#FF9F0A', marginLeft: 8 }}>
+                              · {(imeiConfig?.totalRemaining || 0) >= batchImeis.length ? '✅ tokens suficientes' : `⚠️ solo ${imeiConfig.totalRemaining} tokens disponibles`}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {batchImeis.map((imei, idx) => {
+                            const r = batchResults.find(x => x.imei === imei);
+                            return (
+                              <span key={idx} style={{
+                                fontFamily: 'monospace', fontSize: 11, padding: '4px 9px', borderRadius: 20, fontWeight: 700,
+                                background: !r ? 'rgba(255,255,255,0.08)' : r.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)',
+                                color: !r ? 'var(--text-muted)' : r.status === 'success' ? '#30D158' : '#FF453A',
+                                border: `1px solid ${!r ? 'transparent' : r.status === 'success' ? 'rgba(48,209,88,0.3)' : 'rgba(255,69,58,0.3)'}`,
+                              }}>
+                                {!r ? imei : r.status === 'success' ? `✓ ${imei}` : `✕ ${imei}`}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Barra de progreso */}
+                    {batchLoading && batchProgress.total > 0 && (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                          <span>⏳ Consultando...</span>
+                          <span style={{ color: '#4DA8FF' }}>{batchProgress.done}/{batchProgress.total}</span>
+                        </div>
+                        <div style={{ height: 8, borderRadius: 8, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                          <div style={{
+                            height: '100%', borderRadius: 8,
+                            background: 'linear-gradient(90deg,#0A84FF,#5E5CE6)',
+                            width: `${(batchProgress.done / batchProgress.total) * 100}%`,
+                            transition: 'width 0.3s',
+                          }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botones */}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={runBatchCheck}
+                        disabled={batchLoading || batchImeis.length === 0 || (imeiConfig?.totalRemaining || 0) <= 0}
+                        style={{
+                          flex: 1, padding: '12px', borderRadius: 12, border: 'none',
+                          background: (batchLoading || batchImeis.length === 0 || (imeiConfig?.totalRemaining || 0) <= 0)
+                            ? 'var(--surface)' : 'linear-gradient(135deg,#5E5CE6,#0A84FF)',
+                          color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer',
+                          opacity: batchImeis.length === 0 ? 0.5 : 1,
+                        }}>
+                        {batchLoading ? `⏳ ${batchProgress.done}/${batchProgress.total}` : `🔍 Verificar ${batchImeis.length > 0 ? batchImeis.length : ''} IMEI${batchImeis.length !== 1 ? 's' : ''}`}
+                      </button>
+                      {batchResults.filter(r => r.status === 'success').length > 0 && !batchLoading && (
+                        <button
+                          onClick={() => { setForm({ owner_org_id: CORP_ID, emoji: '📱', sale_price: '' }); setModal('batch-to-stock'); }}
+                          style={{
+                            flex: 1, padding: '12px', borderRadius: 12, border: 'none',
+                            background: 'linear-gradient(135deg,#30D158,#34C759)',
+                            color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer',
+                          }}>
+                          📦 Agregar {batchResults.filter(r => r.status === 'success').length} al Stock
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Resultado grid */}
+                    {batchResults.length > 0 && !batchLoading && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 8, alignItems: 'start' }}>
+                        {batchResults.map((r, idx) => {
+                          const info = r.info || {};
+                          const obj = r.result?.object;
+                          const hModel = obj?.model || obj?.Model || info.fullModel || '';
+                          const hModelShort = hModel.replace(/\([A-Z]\d{4,5}\)/g,'').replace(/\[[^\]]*\]/g,'').replace(/\d+\s*(?:GB|TB|MB)/gi,'').replace(/\s{2,}/g,' ').trim();
+                          return (
+                            <div key={idx} style={{
+                              borderRadius: 12, overflow: 'hidden',
+                              border: `1px solid ${r.status === 'success' ? 'rgba(48,209,88,0.25)' : 'rgba(255,69,58,0.25)'}`,
+                              background: r.status === 'success' ? 'rgba(48,209,88,0.04)' : 'rgba(255,69,58,0.04)',
+                            }}>
+                              <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontSize: 28 }}>{r.status === 'success' ? '✅' : '❌'}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-muted)', fontWeight: 700 }}>{r.imei}</div>
+                                  {r.status === 'success' ? (
+                                    <>
+                                      {hModelShort && <div style={{ fontSize: 12, fontWeight: 800, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hModelShort}</div>}
+                                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                                        {info.modelNumber && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 12, background: 'rgba(10,132,255,0.15)', color: '#4DA8FF', fontWeight: 700 }}>{info.modelNumber}</span>}
+                                        {info.storage     && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 12, background: 'rgba(255,159,10,0.15)', color: '#FF9F0A', fontWeight: 700 }}>{info.storage}</span>}
+                                        {info.color       && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 12, background: 'rgba(191,90,242,0.15)', color: '#BF5AF2', fontWeight: 700 }}>{info.color}</span>}
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div style={{ fontSize: 11, color: '#FF453A', marginTop: 2 }}>{r.error}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* HISTORIAL — grid elegante y uniforme */}
             {imeiHistory.length > 0 && (
               <div>
@@ -2967,6 +3270,70 @@ export default function CorpPage() {
                     </select>
                   </div>
                   <button className="btn btn-primary" type="submit">📅 Crear evento</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Registrar Batch al Stock ── */}
+            {modal === 'batch-to-stock' && (
+              <>
+                <div className="modal-title">📦 Agregar {batchResults.filter(r => r.status === 'success').length} equipos al Stock</div>
+
+                {/* Resumen de equipos */}
+                <div style={{ marginBottom: 14, maxHeight: 160, overflowY: 'auto' }}>
+                  {batchResults.filter(r => r.status === 'success').map((r, idx) => {
+                    const info = r.info || {};
+                    const label = info.fullModel
+                      ? info.fullModel.replace(/\([A-Z]\d{4,5}\)/g,'').replace(/\[[^\]]*\]/g,'').trim()
+                      : r.imei;
+                    return (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+                        <span>📱</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+                          <div style={{ fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>{r.imei}{info.storage ? ` · ${info.storage}` : ''}{info.color ? ` · ${info.color}` : ''}</div>
+                        </div>
+                        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'rgba(48,209,88,0.15)', color: '#30D158', fontWeight: 700, flexShrink: 0 }}>✓</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <form onSubmit={addBatchStock}>
+                  <div className="form-group">
+                    <label className="form-label">Asignar a</label>
+                    <select className="form-select" value={form.owner_org_id || CORP_ID} onChange={e => setForm({ ...form, owner_org_id: e.target.value })}>
+                      {ALL_ORGS.map(o => <option key={o.id} value={o.id}>{o.ico} {o.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Producto (opcional — se detecta automáticamente)</label>
+                    <select className="form-select" value={form.batch_product_id || ''} onChange={e => setForm({ ...form, batch_product_id: e.target.value })}>
+                      <option value="">🤖 Detectar automáticamente</option>
+                      {products.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Precio de venta S/ (se aplica a todos)</label>
+                    <input className="form-input" type="number" placeholder="0.00" step="0.01"
+                      value={form.sale_price || ''} onChange={e => setForm({ ...form, sale_price: e.target.value })} />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Emoji</label>
+                    <input className="form-input" placeholder="📱" value={form.emoji || '📱'}
+                      onChange={e => setForm({ ...form, emoji: e.target.value })} style={{ fontSize: 24 }} />
+                  </div>
+
+                  <div style={{ background: 'rgba(48,209,88,0.08)', border: '1px solid rgba(48,209,88,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#30D158', fontWeight: 600 }}>
+                    ✅ Se registrarán {batchResults.filter(r => r.status === 'success').length} equipos con la info de cada IMEI check.
+                  </div>
+
+                  <button className="btn btn-primary" type="submit" style={{ background: 'linear-gradient(135deg,#30D158,#34C759)' }}>
+                    📦 Registrar {batchResults.filter(r => r.status === 'success').length} equipos
+                  </button>
                 </form>
               </>
             )}
