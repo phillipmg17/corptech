@@ -143,7 +143,7 @@ export default function SuperadminPage() {
     if (t === 'apis')                               loadApiSettings();
   }
 
-  /* ── API Settings (Sickw, etc.) ── */
+  /* ── API Settings ── */
   async function loadApiSettings() {
     const { data } = await supabase
       .from('api_settings')
@@ -152,17 +152,29 @@ export default function SuperadminPage() {
     setApiSettings(data || []);
   }
 
+  // Parsea el textarea de servicios "id: label" línea por línea
+  function parseServicesText(txt) {
+    return (txt || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+      const [id, ...rest] = l.split(':');
+      return { id: id.trim(), label: rest.join(':').trim() || `Servicio ${id.trim()}` };
+    });
+  }
+
   async function saveApiSetting(e) {
     e.preventDefault();
+    const services = parseServicesText(form.api_services_txt);
     const payload = {
-      org_id:        form.api_org_id,
-      service:       form.api_service || 'sickw',
-      api_key:       form.api_key,
-      credits_limit: parseInt(form.api_credits_limit) || 100,
-      credits_used:  parseInt(form.api_credits_used) || 0,
-      is_active:     form.api_active !== false,
-      notas:         form.api_notas || '',
-      updated_at:    new Date().toISOString(),
+      org_id:           form.api_org_id,
+      service:          'imei',
+      provider_name:    form.api_provider_name || 'IMEI API',
+      api_key:          form.api_key,
+      api_endpoint:     form.api_endpoint || 'https://sickw.com/api.php',
+      tokens_limit:     parseInt(form.api_tokens_limit) || 100,
+      tokens_used:      parseInt(form.api_tokens_used)  || 0,
+      allowed_services: services,
+      is_active:        form.api_active !== false,
+      notas:            form.api_notas || '',
+      updated_at:       new Date().toISOString(),
     };
     const { error } = await supabase.from('api_settings')
       .upsert(payload, { onConflict: 'org_id,service' });
@@ -600,80 +612,102 @@ export default function SuperadminPage() {
         {tab === 'apis' && (
           <div style={{ padding: '16px' }}>
             <div className="section-header">
-              <div className="section-title">🔑 API Keys — Integraciones</div>
-              <button className="section-action" onClick={() => { setModal('add-api'); setForm({ api_service: 'sickw', api_credits_limit: '100', api_active: true }); }}>
+              <div className="section-title">🔑 APIs IMEI — Integraciones</div>
+              <button className="section-action" onClick={() => { setModal('add-api'); setForm({ api_tokens_limit: '100', api_tokens_used: '0', api_active: true, api_endpoint: 'https://sickw.com/api.php' }); }}>
                 + Configurar
               </button>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-              Asigna API keys de servicios externos (Sickw, CheckIMEI, etc.) a cada organización.
+              Asigna API key, tokens y servicios permitidos a cada organización. La key solo la ves tú.
             </div>
 
             {apiSettings.length === 0 ? (
               <div className="empty-msg">Sin APIs configuradas. Toca "+ Configurar" para agregar.</div>
             ) : (
-              apiSettings.map(api => (
-                <div key={api.id} className="card" style={{ padding: '14px', marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>
-                        {api.service === 'sickw' ? '🔍 Sickw' : api.service} — {api.organizations?.name}
+              apiSettings.map(api => {
+                const restantes = (api.tokens_limit || 0) - (api.tokens_used || 0);
+                const services  = api.allowed_services || [];
+                return (
+                  <div key={api.id} className="card" style={{ padding: '14px', marginBottom: 12 }}>
+
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>
+                          🔍 {api.provider_name || 'IMEI API'} — {api.organizations?.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'monospace' }}>
+                          Key: {api.api_key ? `${api.api_key.substring(0, 10)}...` : '⚠️ Sin key'}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+                          {api.api_endpoint}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'monospace' }}>
-                        Key: {api.api_key ? `${api.api_key.substring(0, 8)}...` : '(sin key)'}
+                      <button
+                        onClick={() => toggleApiActive(api.id, api.is_active)}
+                        style={{
+                          padding: '4px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                          background: api.is_active ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)',
+                          color: api.is_active ? '#30D158' : '#FF453A',
+                          fontSize: 12, fontWeight: 700,
+                        }}>
+                        {api.is_active ? '✅ Activo' : '🔴 Inactivo'}
+                      </button>
+                    </div>
+
+                    {/* Tokens */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+                      <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Usados</div>
+                        <div style={{ fontSize: 18, fontWeight: 900 }}>{api.tokens_used || 0}</div>
+                      </div>
+                      <div style={{ background: 'rgba(10,132,255,0.1)', borderRadius: 8, padding: '8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 9, color: '#4DA8FF', fontWeight: 700, textTransform: 'uppercase' }}>Límite</div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: '#4DA8FF' }}>{api.tokens_limit || 0}</div>
+                      </div>
+                      <div style={{ background: restantes > 10 ? 'rgba(48,209,88,0.1)' : 'rgba(255,69,58,0.1)', borderRadius: 8, padding: '8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>🪙 Tokens</div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: restantes > 10 ? '#30D158' : '#FF453A' }}>{restantes}</div>
                       </div>
                     </div>
+
+                    {/* Servicios habilitados */}
+                    {services.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 5 }}>
+                          Servicios habilitados ({services.length})
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {services.map(s => (
+                            <span key={s.id} style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(94,92,230,0.15)', color: '#A78BFA', fontSize: 11, fontWeight: 600 }}>
+                              [{s.id}] {s.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {api.notas && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>📝 {api.notas}</div>}
+
                     <button
-                      onClick={() => toggleApiActive(api.id, api.is_active)}
-                      style={{
-                        padding: '4px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        background: api.is_active ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)',
-                        color: api.is_active ? '#30D158' : '#FF453A',
-                        fontSize: 12, fontWeight: 700,
-                      }}>
-                      {api.is_active ? '✅ Activo' : '🔴 Inactivo'}
+                      onClick={() => {
+                        const svcs = (api.allowed_services || []).map(s => `${s.id}: ${s.label}`).join('\n');
+                        setForm({
+                          api_org_id: api.org_id, api_provider_name: api.provider_name,
+                          api_key: api.api_key, api_endpoint: api.api_endpoint,
+                          api_tokens_limit: String(api.tokens_limit || 100),
+                          api_tokens_used: String(api.tokens_used || 0),
+                          api_active: api.is_active, api_notas: api.notas,
+                          api_services_txt: svcs,
+                        });
+                        setModal('add-api');
+                      }}
+                      style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                      ✏️ Editar configuración
                     </button>
                   </div>
-
-                  {/* Créditos */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
-                    <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Usados</div>
-                      <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--text)' }}>{api.credits_used || 0}</div>
-                    </div>
-                    <div style={{ background: 'rgba(10,132,255,0.1)', borderRadius: 8, padding: '8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 9, color: '#4DA8FF', fontWeight: 700, textTransform: 'uppercase' }}>Límite</div>
-                      <div style={{ fontSize: 18, fontWeight: 900, color: '#4DA8FF' }}>{api.credits_limit || 0}</div>
-                    </div>
-                    <div style={{
-                      background: (api.credits_limit - api.credits_used) > 10 ? 'rgba(48,209,88,0.1)' : 'rgba(255,69,58,0.1)',
-                      borderRadius: 8, padding: '8px', textAlign: 'center'
-                    }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Restantes</div>
-                      <div style={{ fontSize: 18, fontWeight: 900, color: (api.credits_limit - api.credits_used) > 10 ? '#30D158' : '#FF453A' }}>
-                        {(api.credits_limit || 0) - (api.credits_used || 0)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {api.notas && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>📝 {api.notas}</div>}
-
-                  {/* Botón editar */}
-                  <button
-                    onClick={() => {
-                      setForm({
-                        api_org_id: api.org_id, api_service: api.service,
-                        api_key: api.api_key, api_credits_limit: String(api.credits_limit),
-                        api_credits_used: String(api.credits_used), api_active: api.is_active,
-                        api_notas: api.notas, _api_id: api.id,
-                      });
-                      setModal('add-api');
-                    }}
-                    style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
-                    ✏️ Editar configuración
-                  </button>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -702,8 +736,10 @@ export default function SuperadminPage() {
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal-sheet" onClick={e => e.stopPropagation()}>
             <div className="modal-drag" />
-            <div className="modal-title">🔑 Configurar API</div>
+            <div className="modal-title">🔑 Configurar API IMEI</div>
             <form onSubmit={saveApiSetting}>
+
+              {/* Org */}
               <div className="form-group">
                 <label className="form-label">Organización</label>
                 <select className="form-select" required value={form.api_org_id || ''} onChange={e => setForm({ ...form, api_org_id: e.target.value })}>
@@ -711,44 +747,78 @@ export default function SuperadminPage() {
                   {ORGS.map(o => <option key={o.id} value={o.id}>{o.ico} {o.name}</option>)}
                 </select>
               </div>
+
+              {/* Nombre del proveedor — libre */}
               <div className="form-group">
-                <label className="form-label">Servicio</label>
-                <select className="form-select" value={form.api_service || 'sickw'} onChange={e => setForm({ ...form, api_service: e.target.value })}>
-                  <option value="sickw">🔍 Sickw (IMEI Checker)</option>
-                  <option value="checkimei">📱 CheckIMEI</option>
-                  <option value="otro">Otro</option>
-                </select>
+                <label className="form-label">Nombre del proveedor (referencia)</label>
+                <input className="form-input" placeholder="Ej: Sickw, CheckIMEI, GSMA..."
+                  value={form.api_provider_name || ''}
+                  onChange={e => setForm({ ...form, api_provider_name: e.target.value })} />
               </div>
+
+              {/* API Key */}
               <div className="form-group">
                 <label className="form-label">API Key</label>
-                <input className="form-input" required placeholder="sk-xxxxxxxxxxxxxxxxxxxx"
+                <input className="form-input" required placeholder="Pega aquí la key del proveedor"
                   value={form.api_key || ''} onChange={e => setForm({ ...form, api_key: e.target.value })}
                   style={{ fontFamily: 'monospace', fontSize: 12 }} />
               </div>
+
+              {/* Endpoint */}
+              <div className="form-group">
+                <label className="form-label">URL del endpoint API</label>
+                <input className="form-input" placeholder="https://sickw.com/api.php"
+                  value={form.api_endpoint || 'https://sickw.com/api.php'}
+                  onChange={e => setForm({ ...form, api_endpoint: e.target.value })} />
+              </div>
+
+              {/* Tokens */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div className="form-group" style={{ marginBottom: 8 }}>
-                  <label className="form-label">Límite créditos</label>
+                  <label className="form-label">🪙 Límite de tokens</label>
                   <input className="form-input" type="number" min="0"
-                    value={form.api_credits_limit || '100'} onChange={e => setForm({ ...form, api_credits_limit: e.target.value })} />
+                    value={form.api_tokens_limit || '100'} onChange={e => setForm({ ...form, api_tokens_limit: e.target.value })} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 8 }}>
-                  <label className="form-label">Usados (reset)</label>
+                  <label className="form-label">Tokens usados (reset=0)</label>
                   <input className="form-input" type="number" min="0"
-                    value={form.api_credits_used || '0'} onChange={e => setForm({ ...form, api_credits_used: e.target.value })} />
+                    value={form.api_tokens_used || '0'} onChange={e => setForm({ ...form, api_tokens_used: e.target.value })} />
                 </div>
               </div>
+
+              {/* Servicios permitidos */}
+              <div className="form-group">
+                <label className="form-label">Servicios habilitados</label>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                  Una línea por servicio. Formato: <code style={{ background:'var(--surface)', padding:'1px 4px', borderRadius:4 }}>ID: Nombre</code>
+                  <br/>Ej: <code style={{ background:'var(--surface)', padding:'1px 4px', borderRadius:4 }}>12: Apple Info</code>
+                </div>
+                <textarea
+                  className="form-input"
+                  rows={5}
+                  placeholder={"12: Apple Info (modelo, activación, FMI)\n8: Blacklist / Reportado robado\n15: Samsung Info\n1: Info básica IMEI"}
+                  value={form.api_services_txt || ''}
+                  onChange={e => setForm({ ...form, api_services_txt: e.target.value })}
+                  style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 12 }}
+                />
+              </div>
+
+              {/* Notas */}
               <div className="form-group">
                 <label className="form-label">Notas internas</label>
-                <input className="form-input" placeholder="Ej: Plan básico, renovar en julio..."
+                <input className="form-input" placeholder="Plan básico, renovar en julio, etc."
                   value={form.api_notas || ''} onChange={e => setForm({ ...form, api_notas: e.target.value })} />
               </div>
+
+              {/* Activar */}
               <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <input type="checkbox" id="api_active_chk" checked={form.api_active !== false}
                   onChange={e => setForm({ ...form, api_active: e.target.checked })}
                   style={{ width: 18, height: 18 }} />
                 <label htmlFor="api_active_chk" style={{ fontSize: 13, fontWeight: 600 }}>Activar acceso inmediatamente</label>
               </div>
-              <button className="btn btn-primary" type="submit">💾 Guardar API</button>
+
+              <button className="btn btn-primary" type="submit">💾 Guardar configuración</button>
             </form>
             <button className="btn btn-outline btn-block" style={{ marginTop: 10 }} onClick={() => setModal(null)}>Cancelar</button>
           </div>

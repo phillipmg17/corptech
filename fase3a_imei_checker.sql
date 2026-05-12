@@ -1,34 +1,37 @@
 -- ============================================================
---  FASE 3A — IMEI Checker via Sickw API
+--  FASE 3A — IMEI Checker (genérico: Sickw, CheckIMEI, etc.)
 --  Corre esto en Supabase SQL Editor
 -- ============================================================
 
--- 1. Tabla de credenciales API por org (solo superadmin escribe)
+-- 1. Tabla de configuración API por org (solo superadmin escribe)
 CREATE TABLE IF NOT EXISTS api_settings (
-  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id         UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  service        TEXT NOT NULL,          -- 'sickw'
-  api_key        TEXT,
-  credits_limit  INTEGER DEFAULT 100,
-  credits_used   INTEGER DEFAULT 0,
-  is_active      BOOLEAN DEFAULT true,
-  notas          TEXT,
-  created_at     TIMESTAMPTZ DEFAULT now(),
-  updated_at     TIMESTAMPTZ DEFAULT now(),
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id           UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  provider_name    TEXT NOT NULL DEFAULT 'IMEI API',  -- nombre libre: "Sickw", "CheckIMEI", etc.
+  service          TEXT NOT NULL DEFAULT 'imei',      -- clave interna: 'imei'
+  api_key          TEXT,
+  api_endpoint     TEXT DEFAULT 'https://sickw.com/api.php',
+  tokens_limit     INTEGER DEFAULT 100,
+  tokens_used      INTEGER DEFAULT 0,
+  allowed_services JSONB DEFAULT '[]',   -- [{id:"12",label:"Apple Info"}, ...]
+  is_active        BOOLEAN DEFAULT true,
+  notas            TEXT,
+  created_at       TIMESTAMPTZ DEFAULT now(),
+  updated_at       TIMESTAMPTZ DEFAULT now(),
   UNIQUE(org_id, service)
 );
 
 -- RLS api_settings
 ALTER TABLE api_settings ENABLE ROW LEVEL SECURITY;
 
--- Corp y superadmin pueden LEER sus propias settings
+-- Org propia puede LEER sus settings (la API route lo usa vía service_role)
 CREATE POLICY "api_settings_read" ON api_settings
   FOR SELECT USING (
     org_id = (SELECT org_id FROM users WHERE id = auth.uid())
     OR EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'superadmin')
   );
 
--- Solo superadmin puede escribir
+-- Solo superadmin escribe
 CREATE POLICY "api_settings_write" ON api_settings
   FOR ALL USING (
     EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'superadmin')
@@ -61,6 +64,6 @@ CREATE POLICY "imei_checks_own_org" ON imei_checks
 -- 3. Feature registry
 INSERT INTO feature_registry (code, name, description, panel, status, version)
 VALUES
-  ('IMEI_CHECKER', 'IMEI Checker Sickw', 'Verificación de IMEI via Sickw — créditos habilitados por SuperAdmin', 'corp', 'done', '1.0'),
-  ('API_SETTINGS',  'API Settings por Org', 'SuperAdmin asigna claves API (Sickw, etc.) a cada organización',            'super', 'done', '1.0')
+  ('IMEI_CHECKER', 'IMEI Checker', 'Verificación IMEI via API externa — tokens habilitados por SuperAdmin', 'corp',  'done', '1.0'),
+  ('API_SETTINGS',  'API Settings', 'SuperAdmin asigna API keys y servicios permitidos a cada org',           'super', 'done', '1.0')
 ON CONFLICT (code) DO NOTHING;

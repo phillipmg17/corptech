@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-// Cliente Supabase con service_role (solo servidor — nunca llega al browser)
+// Cliente con service_role — solo corre en el servidor, nunca en el browser
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -9,82 +9,91 @@ const supabaseAdmin = createClient(
 
 export async function POST(req) {
   try {
-    const body = await req.json();
-    const { imei, service_id, user_id, org_id } = body;
+    const { imei, service_id, user_id, org_id } = await req.json();
 
     if (!imei || !org_id) {
-      return NextResponse.json({ error: 'IMEI y org_id son requeridos' }, { status: 400 });
+      return NextResponse.json({ error: 'Faltan datos: IMEI y org_id son requeridos.' }, { status: 400 });
     }
 
-    // 1. Leer la API key de Sickw para esta org
-    const { data: apiSetting, error: apiErr } = await supabaseAdmin
+    // 1. Leer configuración de API para esta org
+    const { data: cfg, error: cfgErr } = await supabaseAdmin
       .from('api_settings')
-      .select('api_key, credits_limit, credits_used, is_active')
+      .select('api_key, api_endpoint, provider_name, tokens_limit, tokens_used, is_active, allowed_services')
       .eq('org_id', org_id)
-      .eq('service', 'sickw')
+      .eq('service', 'imei')
       .single();
 
-    if (apiErr || !apiSetting) {
-      return NextResponse.json({ error: 'No tienes Sickw configurado. Pide al SuperAdmin que habilite tu API key.' }, { status: 403 });
+    if (cfgErr || !cfg) {
+      return NextResponse.json({ error: 'Sin API configurada. Pide al SuperAdmin que habilite tu acceso IMEI.' }, { status: 403 });
     }
-    if (!apiSetting.is_active) {
-      return NextResponse.json({ error: 'Tu acceso a Sickw está desactivado. Contacta al SuperAdmin.' }, { status: 403 });
+    if (!cfg.is_active) {
+      return NextResponse.json({ error: 'Tu acceso IMEI está desactivado. Contacta al SuperAdmin.' }, { status: 403 });
     }
-    if (apiSetting.credits_used >= apiSetting.credits_limit) {
-      return NextResponse.json({ error: `Límite de créditos alcanzado (${apiSetting.credits_limit}). Pide más créditos al SuperAdmin.` }, { status: 402 });
+    if (!cfg.api_key) {
+      return NextResponse.json({ error: 'No hay API key configurada. El SuperAdmin debe ingresarla.' }, { status: 403 });
+    }
+    if (cfg.tokens_used >= cfg.tokens_limit) {
+      return NextResponse.json({ error: `Sin tokens disponibles (${cfg.tokens_limit} usados). Pide más tokens al SuperAdmin.` }, { status: 402 });
     }
 
-    const svc = service_id || '12'; // Default: Apple basic info
+    // 2. Validar que el service_id esté en la lista permitida
+    const allowed = cfg.allowed_services || [];
+    const svcId   = service_id || (allowed[0]?.id) || '12';
+    if (allowed.length > 0 && !allowed.find(s => s.id === svcId)) {
+      return NextResponse.json({ error: `Servicio "${svcId}" no está habilitado. Pide al SuperAdmin que lo active.` }, { status: 403 });
+    }
+    const svcLabel = allowed.find(s => s.id === svcId)?.label || `Servicio ${svcId}`;
 
-    // 2. Llamar a Sickw API
-    const sickwUrl = `https://sickw.com/api.php?format=json&key=${apiSetting.api_key}&imei=${encodeURIComponent(imei)}&service=${svc}`;
-    let sickwData = null;
-    let rawResponse = '';
-    let checkStatus = 'success';
-    let errorMsg = null;
+    // 3. Llamar a la API externa
+    const endpoint = cfg.api_endpoint || 'https://sickw.com/api.php';
+    const apiUrl   = `${endpoint}?format=json&key=${cfg.api_key}&imei=${encodeURIComponent(imei)}&service=${svcId}`;
+    let apiData    = null;
+    let rawResp    = '';
+    let status     = 'success';
+    let errorMsg   = null;
 
     try {
-      const sickwRes = await fetch(sickwUrl, { cache: 'no-store' });
-      rawResponse = await sickwRes.text();
-      try { sickwData = JSON.parse(rawResponse); } catch { sickwData = { result: rawResponse }; }
-    } catch (fetchErr) {
-      checkStatus = 'error';
-      errorMsg = 'No se pudo conectar con Sickw: ' + fetchErr.message;
+      const res = await fetch(apiUrl, { cache: 'no-store' });
+      rawResp   = await res.text();
+      try { apiData = JSON.parse(rawResp); } catch { apiData = { result: rawResp }; }
+    } catch (e) {
+      status   = 'error';
+      errorMsg = 'No se pudo conectar con la API: ' + e.message;
     }
 
-    // 3. Guardar en historial
-    const { data: checkRow } = await supabaseAdmin.from('imei_checks').insert({
+    // 4. Guardar historial
+    const { data: row } = await supabaseAdmin.from('imei_checks').insert({
       org_id,
       checked_by:   user_id || null,
       imei,
-      service_id:   svc,
-      service_name: sickwData?.service || `Servicio ${svc}`,
-      result:       sickwData,
-      raw_response: rawResponse.substring(0, 2000),
-      status:       checkStatus,
+      service_id:   svcId,
+      service_name: svcLabel,
+      result:       apiData,
+      raw_response: rawResp.substring(0, 2000),
+      status,
       error_msg:    errorMsg,
     }).select('id').single();
 
-    // 4. Incrementar credits_used
+    // 5. Sumar token usado
     await supabaseAdmin.from('api_settings').update({
-      credits_used: (apiSetting.credits_used || 0) + 1,
-      updated_at:   new Date().toISOString(),
-    }).eq('org_id', org_id).eq('service', 'sickw');
+      tokens_used: (cfg.tokens_used || 0) + 1,
+      updated_at:  new Date().toISOString(),
+    }).eq('org_id', org_id).eq('service', 'imei');
 
-    if (checkStatus === 'error') {
+    if (status === 'error') {
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
     return NextResponse.json({
       ok:           true,
-      result:       sickwData,
-      credits_used: (apiSetting.credits_used || 0) + 1,
-      credits_limit: apiSetting.credits_limit,
-      check_id:     checkRow?.id,
+      result:       apiData,
+      tokens_used:  (cfg.tokens_used || 0) + 1,
+      tokens_limit: cfg.tokens_limit,
+      check_id:     row?.id,
     });
 
   } catch (err) {
-    console.error('check-imei error:', err);
+    console.error('[check-imei]', err);
     return NextResponse.json({ error: 'Error interno: ' + err.message }, { status: 500 });
   }
 }

@@ -79,12 +79,12 @@ export default function CorpPage() {
   const [calendarioAll, setCalendarioAll] = useState([]);
 
   /* ── IMEI CHECKER ── */
-  const [imeiInput,     setImeiInput]     = useState('');
-  const [imeiService,   setImeiService]   = useState('12');
-  const [imeiResult,    setImeiResult]    = useState(null);
-  const [imeiLoading,   setImeiLoading]   = useState(false);
-  const [imeiHistory,   setImeiHistory]   = useState([]);
-  const [imeiCredits,   setImeiCredits]   = useState(null); // {used, limit}
+  const [imeiInput,    setImeiInput]    = useState('');
+  const [imeiService,  setImeiService]  = useState('');
+  const [imeiResult,   setImeiResult]   = useState(null);
+  const [imeiLoading,  setImeiLoading]  = useState(false);
+  const [imeiHistory,  setImeiHistory]  = useState([]);
+  const [imeiConfig,   setImeiConfig]   = useState(null); // {tokens_used, tokens_limit, active, services, provider_name}
 
   useEffect(() => { init(); }, []);
 
@@ -722,11 +722,11 @@ export default function CorpPage() {
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        showToast(data.error || 'Error al consultar Sickw', 'err');
+        showToast(data.error || 'Error al consultar la API', 'err');
         setImeiResult({ error: data.error });
       } else {
         setImeiResult(data.result);
-        if (data.credits_used != null) setImeiCredits({ used: data.credits_used, limit: data.credits_limit });
+        if (data.tokens_used != null) setImeiConfig(c => c ? { ...c, used: data.tokens_used } : c);
         showToast('✅ Consulta exitosa');
         loadImeiHistory();
       }
@@ -750,12 +750,25 @@ export default function CorpPage() {
   async function loadImeiCredits() {
     const { data } = await supabase
       .from('api_settings')
-      .select('credits_used, credits_limit, is_active, api_key')
+      .select('tokens_used, tokens_limit, is_active, api_key, provider_name, allowed_services')
       .eq('org_id', CORP_ID)
-      .eq('service', 'sickw')
+      .eq('service', 'imei')
       .single();
-    if (data) setImeiCredits({ used: data.credits_used || 0, limit: data.credits_limit || 0, active: data.is_active, hasKey: !!data.api_key });
-    else setImeiCredits(null);
+    if (data) {
+      const cfg = {
+        used:          data.tokens_used      || 0,
+        limit:         data.tokens_limit     || 0,
+        active:        data.is_active,
+        hasKey:        !!data.api_key,
+        provider_name: data.provider_name    || 'IMEI API',
+        services:      data.allowed_services || [],
+      };
+      setImeiConfig(cfg);
+      // auto-seleccionar primer servicio si no hay uno elegido
+      if (!imeiService && cfg.services.length > 0) setImeiService(cfg.services[0].id);
+    } else {
+      setImeiConfig(null);
+    }
   }
 
   async function doLogout() {
@@ -1748,40 +1761,40 @@ export default function CorpPage() {
         {/* ── TAB: IMEI CHECKER ── */}
         {tab === 'imei' && (
           <div style={{ padding: '16px' }}>
-            <div className="section-title">🔍 IMEI Checker — Sickw</div>
+            <div className="section-title">🔍 IMEI Checker</div>
 
-            {/* Estado de créditos */}
-            {imeiCredits === null ? (
+            {/* Estado de tokens */}
+            {imeiConfig === null ? (
               <div style={{
                 background: 'rgba(255,69,58,0.1)', border: '1px solid rgba(255,69,58,0.3)',
                 borderRadius: 14, padding: '14px 16px', marginBottom: 16,
               }}>
-                <div style={{ fontWeight: 700, color: '#FF453A', marginBottom: 4 }}>⚠️ Sin acceso a Sickw</div>
+                <div style={{ fontWeight: 700, color: '#FF453A', marginBottom: 4 }}>⚠️ Sin acceso habilitado</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Pídele al SuperAdmin que configure tu API key de Sickw en el panel de administración.
+                  Pídele al SuperAdmin que configure tu acceso IMEI en su panel (🔑 APIs).
                 </div>
               </div>
             ) : (
               <div style={{
-                background: imeiCredits.active ? 'rgba(48,209,88,0.08)' : 'rgba(255,69,58,0.08)',
-                border: `1px solid ${imeiCredits.active ? 'rgba(48,209,88,0.25)' : 'rgba(255,69,58,0.25)'}`,
+                background: imeiConfig.active ? 'rgba(48,209,88,0.08)' : 'rgba(255,69,58,0.08)',
+                border: `1px solid ${imeiConfig.active ? 'rgba(48,209,88,0.25)' : 'rgba(255,69,58,0.25)'}`,
                 borderRadius: 14, padding: '12px 16px', marginBottom: 16,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: imeiCredits.active ? '#30D158' : '#FF453A' }}>
-                    {imeiCredits.active ? '✅ Sickw activo' : '🔴 Sickw desactivado'}
+                  <div style={{ fontWeight: 700, fontSize: 13, color: imeiConfig.active ? '#30D158' : '#FF453A' }}>
+                    {imeiConfig.active ? `✅ ${imeiConfig.provider_name} activo` : `🔴 ${imeiConfig.provider_name} desactivado`}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                    Créditos usados: {imeiCredits.used} / {imeiCredits.limit}
+                    Tokens usados: {imeiConfig.used} / {imeiConfig.limit}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 22, fontWeight: 900, color: imeiCredits.used >= imeiCredits.limit ? '#FF453A' : '#30D158' }}>
-                    {imeiCredits.limit - imeiCredits.used}
+                  <div style={{ fontSize: 26, fontWeight: 900, color: imeiConfig.used >= imeiConfig.limit ? '#FF453A' : '#30D158' }}>
+                    {imeiConfig.limit - imeiConfig.used}
                   </div>
                   <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
-                    restantes
+                    🪙 tokens
                   </div>
                 </div>
               </div>
@@ -1807,36 +1820,36 @@ export default function CorpPage() {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">🛠 Servicio Sickw</label>
-                <select className="form-select" value={imeiService} onChange={e => setImeiService(e.target.value)}>
-                  <option value="12">12 — Apple Info (modelo, activación, FMI)</option>
-                  <option value="8">8 — Blacklist / Reportado robado</option>
-                  <option value="1">1 — Info básica IMEI</option>
-                  <option value="15">15 — Samsung Info</option>
-                  <option value="35">35 — Carrier check USA</option>
-                  <option value="custom">Otro servicio...</option>
-                </select>
-                {imeiService === 'custom' && (
-                  <input className="form-input" placeholder="ID del servicio Sickw (número)"
-                    style={{ marginTop: 8 }}
-                    onChange={e => setImeiService(e.target.value)} />
-                )}
-              </div>
+              {/* Servicios habilitados por superadmin */}
+              {imeiConfig && imeiConfig.services.length > 0 && (
+                <div className="form-group">
+                  <label className="form-label">🛠 Tipo de consulta</label>
+                  <select className="form-select" value={imeiService} onChange={e => setImeiService(e.target.value)}>
+                    {imeiConfig.services.map(s => (
+                      <option key={s.id} value={s.id}>{s.id} — {s.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {imeiConfig && imeiConfig.services.length === 0 && (
+                <div style={{ fontSize: 12, color: '#FF9F0A', marginBottom: 12 }}>
+                  ⚠️ El SuperAdmin no ha configurado servicios aún. Pídele que los agregue en 🔑 APIs.
+                </div>
+              )}
 
               <button
                 onClick={checkImei}
-                disabled={imeiLoading || !imeiCredits?.active}
+                disabled={imeiLoading || !imeiConfig?.active || (imeiConfig?.limit - imeiConfig?.used) <= 0}
                 style={{
                   width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-                  background: (imeiLoading || !imeiCredits?.active)
+                  background: (imeiLoading || !imeiConfig?.active)
                     ? 'var(--surface)'
                     : 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
                   color: '#fff', fontSize: 16, fontWeight: 700,
-                  cursor: (imeiLoading || !imeiCredits?.active) ? 'not-allowed' : 'pointer',
-                  boxShadow: (imeiLoading || !imeiCredits?.active) ? 'none' : '0 4px 20px rgba(10,132,255,0.35)',
+                  cursor: (imeiLoading || !imeiConfig?.active) ? 'not-allowed' : 'pointer',
+                  boxShadow: (imeiLoading || !imeiConfig?.active) ? 'none' : '0 4px 20px rgba(10,132,255,0.35)',
                 }}>
-                {imeiLoading ? '⏳ Consultando Sickw...' : '🔍 Verificar IMEI'}
+                {imeiLoading ? '⏳ Consultando...' : '🔍 Verificar IMEI (-1 🪙)'}
               </button>
             </div>
 
