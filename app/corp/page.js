@@ -78,6 +78,14 @@ export default function CorpPage() {
   const [liqPlatFilter, setLiqPlatFilter] = useState('all');
   const [calendarioAll, setCalendarioAll] = useState([]);
 
+  /* ── IMEI CHECKER ── */
+  const [imeiInput,     setImeiInput]     = useState('');
+  const [imeiService,   setImeiService]   = useState('12');
+  const [imeiResult,    setImeiResult]    = useState(null);
+  const [imeiLoading,   setImeiLoading]   = useState(false);
+  const [imeiHistory,   setImeiHistory]   = useState([]);
+  const [imeiCredits,   setImeiCredits]   = useState(null); // {used, limit}
+
   useEffect(() => { init(); }, []);
 
   async function init() {
@@ -699,6 +707,57 @@ export default function CorpPage() {
     loadKpis();
   }
 
+  /* ── IMEI CHECKER ── */
+  async function checkImei() {
+    if (!imeiInput.trim()) { showToast('Ingresa un IMEI', 'err'); return; }
+    const clean = imeiInput.trim().replace(/\D/g, '');
+    if (clean.length < 14 || clean.length > 16) { showToast('El IMEI debe tener 14-16 dígitos', 'err'); return; }
+    setImeiLoading(true);
+    setImeiResult(null);
+    try {
+      const res  = await fetch('/api/check-imei', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imei: clean, service_id: imeiService, user_id: me?.id, org_id: CORP_ID }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        showToast(data.error || 'Error al consultar Sickw', 'err');
+        setImeiResult({ error: data.error });
+      } else {
+        setImeiResult(data.result);
+        if (data.credits_used != null) setImeiCredits({ used: data.credits_used, limit: data.credits_limit });
+        showToast('✅ Consulta exitosa');
+        loadImeiHistory();
+      }
+    } catch (err) {
+      showToast('Error de conexión', 'err');
+      setImeiResult({ error: err.message });
+    }
+    setImeiLoading(false);
+  }
+
+  async function loadImeiHistory() {
+    const { data } = await supabase
+      .from('imei_checks')
+      .select('id, imei, service_name, status, result, created_at')
+      .eq('org_id', CORP_ID)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    setImeiHistory(data || []);
+  }
+
+  async function loadImeiCredits() {
+    const { data } = await supabase
+      .from('api_settings')
+      .select('credits_used, credits_limit, is_active, api_key')
+      .eq('org_id', CORP_ID)
+      .eq('service', 'sickw')
+      .single();
+    if (data) setImeiCredits({ used: data.credits_used || 0, limit: data.credits_limit || 0, active: data.is_active, hasKey: !!data.api_key });
+    else setImeiCredits(null);
+  }
+
   async function doLogout() {
     await supabase.auth.signOut();
     router.replace('/login');
@@ -714,6 +773,7 @@ export default function CorpPage() {
     if (t === 'importacion')  loadBatches();
     if (t === 'finanzas')       loadFinanzas();
     if (t === 'liquidaciones') { loadLiquidaciones(); loadPlataformas(); loadLiqPlat(); loadCalendarioAll(); }
+    if (t === 'imei')         { loadImeiCredits(); loadImeiHistory(); }
   }
 
   useEffect(() => {
@@ -1685,6 +1745,210 @@ export default function CorpPage() {
           </div>
         )}
 
+        {/* ── TAB: IMEI CHECKER ── */}
+        {tab === 'imei' && (
+          <div style={{ padding: '16px' }}>
+            <div className="section-title">🔍 IMEI Checker — Sickw</div>
+
+            {/* Estado de créditos */}
+            {imeiCredits === null ? (
+              <div style={{
+                background: 'rgba(255,69,58,0.1)', border: '1px solid rgba(255,69,58,0.3)',
+                borderRadius: 14, padding: '14px 16px', marginBottom: 16,
+              }}>
+                <div style={{ fontWeight: 700, color: '#FF453A', marginBottom: 4 }}>⚠️ Sin acceso a Sickw</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Pídele al SuperAdmin que configure tu API key de Sickw en el panel de administración.
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                background: imeiCredits.active ? 'rgba(48,209,88,0.08)' : 'rgba(255,69,58,0.08)',
+                border: `1px solid ${imeiCredits.active ? 'rgba(48,209,88,0.25)' : 'rgba(255,69,58,0.25)'}`,
+                borderRadius: 14, padding: '12px 16px', marginBottom: 16,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: imeiCredits.active ? '#30D158' : '#FF453A' }}>
+                    {imeiCredits.active ? '✅ Sickw activo' : '🔴 Sickw desactivado'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Créditos usados: {imeiCredits.used} / {imeiCredits.limit}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: imeiCredits.used >= imeiCredits.limit ? '#FF453A' : '#30D158' }}>
+                    {imeiCredits.limit - imeiCredits.used}
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+                    restantes
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Formulario de consulta */}
+            <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Consultar IMEI</div>
+
+              <div className="form-group">
+                <label className="form-label">📱 IMEI (15 dígitos)</label>
+                <input
+                  className="form-input"
+                  placeholder="352999111111111"
+                  value={imeiInput}
+                  onChange={e => setImeiInput(e.target.value.replace(/\D/g, '').substring(0, 16))}
+                  maxLength={16}
+                  inputMode="numeric"
+                  style={{ fontFamily: 'monospace', fontSize: 18, letterSpacing: 2, fontWeight: 700 }}
+                />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  {imeiInput.length}/15 dígitos{imeiInput.length >= 14 && imeiInput.length <= 16 ? ' ✅' : ''}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">🛠 Servicio Sickw</label>
+                <select className="form-select" value={imeiService} onChange={e => setImeiService(e.target.value)}>
+                  <option value="12">12 — Apple Info (modelo, activación, FMI)</option>
+                  <option value="8">8 — Blacklist / Reportado robado</option>
+                  <option value="1">1 — Info básica IMEI</option>
+                  <option value="15">15 — Samsung Info</option>
+                  <option value="35">35 — Carrier check USA</option>
+                  <option value="custom">Otro servicio...</option>
+                </select>
+                {imeiService === 'custom' && (
+                  <input className="form-input" placeholder="ID del servicio Sickw (número)"
+                    style={{ marginTop: 8 }}
+                    onChange={e => setImeiService(e.target.value)} />
+                )}
+              </div>
+
+              <button
+                onClick={checkImei}
+                disabled={imeiLoading || !imeiCredits?.active}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+                  background: (imeiLoading || !imeiCredits?.active)
+                    ? 'var(--surface)'
+                    : 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+                  color: '#fff', fontSize: 16, fontWeight: 700,
+                  cursor: (imeiLoading || !imeiCredits?.active) ? 'not-allowed' : 'pointer',
+                  boxShadow: (imeiLoading || !imeiCredits?.active) ? 'none' : '0 4px 20px rgba(10,132,255,0.35)',
+                }}>
+                {imeiLoading ? '⏳ Consultando Sickw...' : '🔍 Verificar IMEI'}
+              </button>
+            </div>
+
+            {/* Resultado */}
+            {imeiResult && (
+              <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>
+                  {imeiResult.error ? '❌ Error' : '✅ Resultado'}
+                </div>
+
+                {imeiResult.error ? (
+                  <div style={{ color: '#FF453A', fontSize: 13 }}>{imeiResult.error}</div>
+                ) : (
+                  <div>
+                    {/* Mostrar result como texto formateado */}
+                    {typeof imeiResult.result === 'string' && (
+                      <div style={{
+                        background: 'var(--surface)', borderRadius: 10, padding: '12px 14px',
+                        fontFamily: 'monospace', fontSize: 12, lineHeight: 1.7,
+                        whiteSpace: 'pre-wrap', color: 'var(--text)',
+                      }}>
+                        {imeiResult.result}
+                      </div>
+                    )}
+
+                    {/* Si viene como objeto JSON */}
+                    {typeof imeiResult === 'object' && !imeiResult.result && (
+                      <div>
+                        {Object.entries(imeiResult).map(([k, v]) => (
+                          <div key={k} style={{
+                            display: 'flex', justifyContent: 'space-between', padding: '7px 0',
+                            borderBottom: '1px solid var(--border)', fontSize: 13,
+                          }}>
+                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, textTransform: 'capitalize' }}>
+                              {k.replace(/_/g, ' ')}
+                            </span>
+                            <span style={{ fontWeight: 700, maxWidth: '55%', textAlign: 'right' }}>
+                              {String(v)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Status badge de Sickw */}
+                    {imeiResult.status !== undefined && (
+                      <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                        <span style={{
+                          padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                          background: imeiResult.status === '1' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)',
+                          color: imeiResult.status === '1' ? '#30D158' : '#FF453A',
+                        }}>
+                          {imeiResult.status === '1' ? 'Consulta exitosa' : 'Sin datos / Error Sickw'}
+                        </span>
+                        {imeiResult.service && (
+                          <span style={{
+                            padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                            background: 'rgba(10,132,255,0.15)', color: '#4DA8FF',
+                          }}>
+                            {imeiResult.service}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Historial */}
+            {imeiHistory.length > 0 && (
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: 'var(--text-muted)' }}>
+                  📋 Últimas consultas
+                </div>
+                {imeiHistory.map(h => (
+                  <div key={h.id} className="card" style={{ padding: '12px 14px', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>
+                          {h.imei}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {h.service_name} · {new Date(h.created_at).toLocaleDateString('es-PE')} {new Date(h.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+                        background: h.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)',
+                        color: h.status === 'success' ? '#30D158' : '#FF453A',
+                      }}>
+                        {h.status === 'success' ? '✅' : '❌'}
+                      </span>
+                    </div>
+                    {/* Snippet del resultado */}
+                    {h.result?.result && typeof h.result.result === 'string' && (
+                      <div style={{
+                        marginTop: 8, padding: '8px 10px', background: 'var(--surface)',
+                        borderRadius: 8, fontFamily: 'monospace', fontSize: 11,
+                        color: 'var(--text-muted)', overflow: 'hidden',
+                        maxHeight: 60, textOverflow: 'ellipsis',
+                      }}>
+                        {h.result.result.substring(0, 200)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>{/* end .content */}
 
       {/* TAB BAR — scrollable on mobile */}
@@ -1696,6 +1960,7 @@ export default function CorpPage() {
           { id: 'almacenes',   ico: '🏭', lbl: 'Almacenes'  },
           { id: 'traslados',   ico: '🔄', lbl: 'Traslados'  },
           { id: 'importacion', ico: '📥', lbl: 'Importación' },
+          { id: 'imei',        ico: '🔍', lbl: 'IMEI'       },
           { id: 'ventas',      ico: '📊', lbl: 'Ventas'     },
           { id: 'productos',   ico: '🗂️', lbl: 'Catálogo'   },
           { id: 'equipo',      ico: '👥', lbl: 'Equipo'     },

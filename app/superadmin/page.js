@@ -62,6 +62,7 @@ export default function SuperadminPage() {
   const [qaTests,   setQaTests]   = useState([]);
   const [users,     setUsers]     = useState([]);
   const [featureFilter, setFeatureFilter] = useState('all');
+  const [apiSettings,   setApiSettings]   = useState([]);
 
   useEffect(() => { init(); }, []);
 
@@ -139,6 +140,42 @@ export default function SuperadminPage() {
     if (t === 'bugs'      && bugs.length === 0)     loadBugs();
     if (t === 'qa'        && qaTests.length === 0)  loadQA();
     if (t === 'usuarios'  && users.length === 0)    loadUsers();
+    if (t === 'apis')                               loadApiSettings();
+  }
+
+  /* ── API Settings (Sickw, etc.) ── */
+  async function loadApiSettings() {
+    const { data } = await supabase
+      .from('api_settings')
+      .select('*, organizations(name)')
+      .order('created_at', { ascending: false });
+    setApiSettings(data || []);
+  }
+
+  async function saveApiSetting(e) {
+    e.preventDefault();
+    const payload = {
+      org_id:        form.api_org_id,
+      service:       form.api_service || 'sickw',
+      api_key:       form.api_key,
+      credits_limit: parseInt(form.api_credits_limit) || 100,
+      credits_used:  parseInt(form.api_credits_used) || 0,
+      is_active:     form.api_active !== false,
+      notas:         form.api_notas || '',
+      updated_at:    new Date().toISOString(),
+    };
+    const { error } = await supabase.from('api_settings')
+      .upsert(payload, { onConflict: 'org_id,service' });
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('API configurada ✓');
+    setModal(null); setForm({});
+    loadApiSettings();
+  }
+
+  async function toggleApiActive(id, currentVal) {
+    await supabase.from('api_settings').update({ is_active: !currentVal, updated_at: new Date().toISOString() }).eq('id', id);
+    showToast(currentVal ? 'Acceso desactivado' : 'Acceso activado ✓');
+    loadApiSettings();
   }
 
   function showToast(msg, type = 'ok') {
@@ -559,6 +596,88 @@ export default function SuperadminPage() {
           </div>
         )}
 
+        {/* ── TAB: APIs ── */}
+        {tab === 'apis' && (
+          <div style={{ padding: '16px' }}>
+            <div className="section-header">
+              <div className="section-title">🔑 API Keys — Integraciones</div>
+              <button className="section-action" onClick={() => { setModal('add-api'); setForm({ api_service: 'sickw', api_credits_limit: '100', api_active: true }); }}>
+                + Configurar
+              </button>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+              Asigna API keys de servicios externos (Sickw, CheckIMEI, etc.) a cada organización.
+            </div>
+
+            {apiSettings.length === 0 ? (
+              <div className="empty-msg">Sin APIs configuradas. Toca "+ Configurar" para agregar.</div>
+            ) : (
+              apiSettings.map(api => (
+                <div key={api.id} className="card" style={{ padding: '14px', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>
+                        {api.service === 'sickw' ? '🔍 Sickw' : api.service} — {api.organizations?.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'monospace' }}>
+                        Key: {api.api_key ? `${api.api_key.substring(0, 8)}...` : '(sin key)'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toggleApiActive(api.id, api.is_active)}
+                      style={{
+                        padding: '4px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                        background: api.is_active ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)',
+                        color: api.is_active ? '#30D158' : '#FF453A',
+                        fontSize: 12, fontWeight: 700,
+                      }}>
+                      {api.is_active ? '✅ Activo' : '🔴 Inactivo'}
+                    </button>
+                  </div>
+
+                  {/* Créditos */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+                    <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Usados</div>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--text)' }}>{api.credits_used || 0}</div>
+                    </div>
+                    <div style={{ background: 'rgba(10,132,255,0.1)', borderRadius: 8, padding: '8px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 9, color: '#4DA8FF', fontWeight: 700, textTransform: 'uppercase' }}>Límite</div>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: '#4DA8FF' }}>{api.credits_limit || 0}</div>
+                    </div>
+                    <div style={{
+                      background: (api.credits_limit - api.credits_used) > 10 ? 'rgba(48,209,88,0.1)' : 'rgba(255,69,58,0.1)',
+                      borderRadius: 8, padding: '8px', textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Restantes</div>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: (api.credits_limit - api.credits_used) > 10 ? '#30D158' : '#FF453A' }}>
+                        {(api.credits_limit || 0) - (api.credits_used || 0)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {api.notas && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>📝 {api.notas}</div>}
+
+                  {/* Botón editar */}
+                  <button
+                    onClick={() => {
+                      setForm({
+                        api_org_id: api.org_id, api_service: api.service,
+                        api_key: api.api_key, api_credits_limit: String(api.credits_limit),
+                        api_credits_used: String(api.credits_used), api_active: api.is_active,
+                        api_notas: api.notas, _api_id: api.id,
+                      });
+                      setModal('add-api');
+                    }}
+                    style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                    ✏️ Editar configuración
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
       </div>
 
       {/* TAB BAR */}
@@ -567,6 +686,7 @@ export default function SuperadminPage() {
           { id: 'dashboard', ico: '⚡', lbl: 'Dashboard' },
           { id: 'usuarios',  ico: '👥', lbl: 'Usuarios'  },
           { id: 'creditos',  ico: '💎', lbl: 'Créditos'  },
+          { id: 'apis',      ico: '🔑', lbl: 'APIs'      },
           { id: 'funciones', ico: '🧩', lbl: 'Funciones' },
           { id: 'bugs',      ico: '🐛', lbl: 'Bugs'      },
           { id: 'qa',        ico: '🧪', lbl: 'QA'        },
@@ -576,6 +696,64 @@ export default function SuperadminPage() {
           </button>
         ))}
       </div>
+
+      {/* ── MODAL API SETTINGS ── */}
+      {modal === 'add-api' && (
+        <div className="modal-backdrop" onClick={() => setModal(null)}>
+          <div className="modal-sheet" onClick={e => e.stopPropagation()}>
+            <div className="modal-drag" />
+            <div className="modal-title">🔑 Configurar API</div>
+            <form onSubmit={saveApiSetting}>
+              <div className="form-group">
+                <label className="form-label">Organización</label>
+                <select className="form-select" required value={form.api_org_id || ''} onChange={e => setForm({ ...form, api_org_id: e.target.value })}>
+                  <option value="">Seleccionar...</option>
+                  {ORGS.map(o => <option key={o.id} value={o.id}>{o.ico} {o.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Servicio</label>
+                <select className="form-select" value={form.api_service || 'sickw'} onChange={e => setForm({ ...form, api_service: e.target.value })}>
+                  <option value="sickw">🔍 Sickw (IMEI Checker)</option>
+                  <option value="checkimei">📱 CheckIMEI</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">API Key</label>
+                <input className="form-input" required placeholder="sk-xxxxxxxxxxxxxxxxxxxx"
+                  value={form.api_key || ''} onChange={e => setForm({ ...form, api_key: e.target.value })}
+                  style={{ fontFamily: 'monospace', fontSize: 12 }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div className="form-group" style={{ marginBottom: 8 }}>
+                  <label className="form-label">Límite créditos</label>
+                  <input className="form-input" type="number" min="0"
+                    value={form.api_credits_limit || '100'} onChange={e => setForm({ ...form, api_credits_limit: e.target.value })} />
+                </div>
+                <div className="form-group" style={{ marginBottom: 8 }}>
+                  <label className="form-label">Usados (reset)</label>
+                  <input className="form-input" type="number" min="0"
+                    value={form.api_credits_used || '0'} onChange={e => setForm({ ...form, api_credits_used: e.target.value })} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Notas internas</label>
+                <input className="form-input" placeholder="Ej: Plan básico, renovar en julio..."
+                  value={form.api_notas || ''} onChange={e => setForm({ ...form, api_notas: e.target.value })} />
+              </div>
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input type="checkbox" id="api_active_chk" checked={form.api_active !== false}
+                  onChange={e => setForm({ ...form, api_active: e.target.checked })}
+                  style={{ width: 18, height: 18 }} />
+                <label htmlFor="api_active_chk" style={{ fontSize: 13, fontWeight: 600 }}>Activar acceso inmediatamente</label>
+              </div>
+              <button className="btn btn-primary" type="submit">💾 Guardar API</button>
+            </form>
+            <button className="btn btn-outline btn-block" style={{ marginTop: 10 }} onClick={() => setModal(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {/* ── MODAL CRÉDITOS ── */}
       {modal === 'credits' && (
