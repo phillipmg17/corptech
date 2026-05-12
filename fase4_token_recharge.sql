@@ -31,14 +31,28 @@ VALUES ('recharge-screenshots', 'recharge-screenshots', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- 3. Política: cualquier usuario autenticado puede subir al bucket
-CREATE POLICY IF NOT EXISTS "authenticated upload recharge"
-ON storage.objects FOR INSERT
-TO authenticated
-WITH CHECK (bucket_id = 'recharge-screenshots');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE policyname = 'authenticated upload recharge' AND tablename = 'objects'
+  ) THEN
+    CREATE POLICY "authenticated upload recharge"
+    ON storage.objects FOR INSERT
+    TO authenticated
+    WITH CHECK (bucket_id = 'recharge-screenshots');
+  END IF;
+END $$;
 
 -- 4. Política: todos pueden ver las imágenes (bucket público)
-CREATE POLICY IF NOT EXISTS "public read recharge"
-ON storage.objects FOR SELECT
-USING (bucket_id = 'recharge-screenshots');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE policyname = 'public read recharge' AND tablename = 'objects'
+  ) THEN
+    CREATE POLICY "public read recharge"
+    ON storage.objects FOR SELECT
+    USING (bucket_id = 'recharge-screenshots');
+  END IF;
+END $$;
 
 -- Listo. Ahora la tabla token_recharge_requests existe y el bucket está listo.

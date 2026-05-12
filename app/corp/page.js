@@ -2307,89 +2307,117 @@ export default function CorpPage() {
               );
             })()}
 
-            {/* HISTORIAL — 2 columnas para aprovechar el ancho */}
+            {/* HISTORIAL — grid elegante y uniforme */}
             {imeiHistory.length > 0 && (
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: 'var(--text-muted)' }}>📋 Últimas consultas</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>📋 Últimas consultas</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10, alignItems: 'start' }}>
                   {imeiHistory.map(h => {
-                    const raw    = h.result?.result || h.raw_response || '';
-                    const isHtml = typeof raw === 'string' && (raw.trim().startsWith('<!') || raw.trim().toLowerCase().startsWith('<html'));
-                    const obj    = h.result?.object;
+                    const raw     = h.result?.result || h.raw_response || '';
+                    const isHtml  = typeof raw === 'string' && (raw.trim().startsWith('<!') || raw.trim().toLowerCase().startsWith('<html'));
+                    const obj     = h.result?.object;
+                    const isOk    = h.status === 'success' && !isHtml;
+
                     const hModel = obj?.model || obj?.Model || obj?.modelName || parseLines(typeof h.result?.result === 'string' ? h.result.result : '').find(l => l.k.toLowerCase().includes('model'))?.v || '';
-                    // Extraer modelo corto y número
-                    const hModelNum = hModel.match(/A\d{4,5}/)?.[0] || '';
-                    const hModelShort = hModel.replace(/\([A-Z]\d{4,5}\)/g,'').replace(/\[.*?\]/g,'').replace(/\s{2,}/g,' ').trim();
-                    // Extraer storage: campos del objeto, luego del nombre del modelo
+                    const hModelNum   = hModel.match(/A\d{4,5}/)?.[0] || '';
+                    const hModelShort = hModel.replace(/\([A-Z]\d{4,5}\)/g,'').replace(/\[[^\]]*\]/g,'').replace(/\d+\s*(?:GB|TB|MB)/gi,'').replace(/\s{2,}/g,' ').trim();
+
                     let hStorage = (obj?.capacity || obj?.storage || obj?.Capacity || obj?.Storage || obj?.internalStorage || '').toString().replace(/\s+/g,'').trim();
-                    if (!hStorage) {
-                      const sm = hModel.match(/(\d+\s*(?:GB|TB|MB))/i);
-                      if (sm) hStorage = sm[1].replace(/\s+/g,'');
-                    }
-                    // Extraer color: campos del objeto
-                    const hColor = (obj?.color || obj?.Color || obj?.colour || obj?.Colour || '').toString().trim();
-                    // Badges de estado
-                    const hBadges = obj && typeof obj === 'object'
-                      ? dedupeObject(obj).filter(([k,v]) => statusBadge(k,String(v))).slice(0,2).map(([k,v]) => ({ k, v: String(v), b: statusBadge(k,String(v)) }))
-                      : parseLines(h.result?.result || '').filter(r => statusBadge(r.k,r.v)).slice(0,2).map(r => ({ k: r.k, v: r.v, b: statusBadge(r.k,r.v) }));
+                    if (!hStorage) { const sm = hModel.match(/(\d+\s*(?:GB|TB|MB))/i); if (sm) hStorage = sm[1].replace(/\s+/g,''); }
+
+                    const hColor  = (obj?.color || obj?.Color || obj?.colour || obj?.Colour || '').toString().trim();
+                    const hBadges = isOk
+                      ? (obj ? dedupeObject(obj) : parseLines(h.result?.result || '').map(r => [r.k, r.v]))
+                          .filter(([k,v]) => statusBadge(k, String(v))).slice(0,3)
+                          .map(([k,v]) => ({ b: statusBadge(k, String(v)) }))
+                      : [];
+
+                    const svcLabel = (h.service_name || '').replace(/\[IMEICHECK\]/gi,'[S1]').replace(/\[SICKW\]/gi,'[S2]').replace(/\[S\d\]\s*/,'').trim();
+                    const dateStr  = new Date(h.created_at).toLocaleDateString('es-PE', { day:'2-digit', month:'short' }) + ' ' + new Date(h.created_at).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' });
 
                     return (
-                      <div key={h.id} className="card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {/* Row 1: emoji + info + status */}
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                          <div style={{ fontSize: 32, lineHeight: 1 }}>{deviceEmoji(hModel)}</div>
+                      <div key={h.id} style={{
+                        background: 'var(--card, rgba(255,255,255,0.04))',
+                        border: `1px solid ${isOk ? 'rgba(255,255,255,0.08)' : 'rgba(255,69,58,0.2)'}`,
+                        borderRadius: 16,
+                        overflow: 'hidden',
+                        display: 'flex', flexDirection: 'column',
+                      }}>
+                        {/* Header — color según estado */}
+                        <div style={{
+                          padding: '10px 14px',
+                          background: isOk ? 'rgba(10,132,255,0.06)' : isHtml ? 'rgba(255,159,10,0.06)' : 'rgba(255,69,58,0.06)',
+                          borderBottom: '1px solid rgba(255,255,255,0.05)',
+                          display: 'flex', alignItems: 'center', gap: 8,
+                        }}>
+                          <span style={{ fontSize: 24, lineHeight: 1 }}>{deviceEmoji(hModel)}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, letterSpacing: 1, color: 'var(--text-muted)' }}>{h.imei}</div>
-                            {hModelShort && <div style={{ fontSize: 13, fontWeight: 800, marginTop: 1, lineHeight: 1.2 }}>{hModelShort}</div>}
-                            {/* Detalles: modelo A####, color, GB */}
-                            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
-                              {hModelNum && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 5, background: 'rgba(10,132,255,0.12)', color: '#4DA8FF', fontWeight: 700 }}>{hModelNum}</span>}
-                              {hStorage  && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 5, background: 'rgba(255,159,10,0.12)', color: '#FF9F0A', fontWeight: 700 }}>{hStorage}</span>}
-                              {hColor    && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 5, background: 'rgba(94,92,230,0.12)', color: '#A78BFA', fontWeight: 700 }}>{hColor}</span>}
-                            </div>
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
-                              {(h.service_name || '').replace(/\[IMEICHECK\]/gi,'[S1]').replace(/\[SICKW\]/gi,'[S2]')} · {new Date(h.created_at).toLocaleDateString('es-PE')} {new Date(h.created_at).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}
-                            </div>
+                            <div style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 1 }}>{h.imei}</div>
+                            {hModelShort
+                              ? <div style={{ fontSize: 12, fontWeight: 800, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hModelShort}</div>
+                              : <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{svcLabel || 'apple info'}</div>
+                            }
                           </div>
-                          <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: h.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)', color: h.status === 'success' ? '#30D158' : '#FF453A' }}>
-                            {h.status === 'success' ? '✅' : '❌'}
+                          <span style={{
+                            fontSize: 13, fontWeight: 800, padding: '4px 8px', borderRadius: 8,
+                            background: isOk ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)',
+                            color: isOk ? '#30D158' : '#FF453A', flexShrink: 0,
+                          }}>
+                            {isOk ? '✓' : '✕'}
                           </span>
                         </div>
 
-                        {/* Row 2: badges + botón usar */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          {isHtml ? (
-                            <span style={{ fontSize: 10, color: '#FF9F0A' }}>⚠️ API inválida</span>
-                          ) : hBadges.map(({k, v, b}, i) => b ? (
-                            <span key={i} style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: b.bg, color: b.color }}>
-                              {b.ico} {b.txt}
-                            </span>
-                          ) : null)}
+                        {/* Body */}
+                        <div style={{ padding: '10px 14px', flex: 1 }}>
+                          {/* Chips: modelo, storage, color */}
+                          {(hModelNum || hStorage || hColor) && (
+                            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 8 }}>
+                              {hModelNum && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: 'rgba(10,132,255,0.15)', color: '#4DA8FF', fontWeight: 700 }}>{hModelNum}</span>}
+                              {hStorage  && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: 'rgba(255,159,10,0.15)', color: '#FF9F0A', fontWeight: 700 }}>{hStorage}</span>}
+                              {hColor    && <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: 'rgba(191,90,242,0.15)', color: '#BF5AF2', fontWeight: 700 }}>{hColor}</span>}
+                            </div>
+                          )}
 
-                          {/* Botón para volver a usar la info de este check */}
-                          {h.status === 'success' && !isHtml && (
+                          {/* Badges de estado */}
+                          {isHtml ? (
+                            <div style={{ fontSize: 11, color: '#FF9F0A', fontWeight: 600 }}>⚠️ API key inválida</div>
+                          ) : hBadges.length > 0 ? (
+                            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                              {hBadges.map(({ b }, i) => (
+                                <span key={i} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: b.bg, color: b.color, fontWeight: 700 }}>
+                                  {b.ico} {b.txt}
+                                </span>
+                              ))}
+                            </div>
+                          ) : isOk ? (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sin alertas detectadas</div>
+                          ) : null}
+
+                          {/* Fecha y servicio */}
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
+                            {dateStr}{svcLabel ? ` · ${svcLabel}` : ''}
+                          </div>
+                        </div>
+
+                        {/* Footer — botón registrar */}
+                        {isOk && (
+                          <div style={{ padding: '8px 10px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                             <button
                               onClick={() => {
                                 const info = extractDeviceInfo(h.result, h.id);
-                                setForm({
-                                  ...info,
-                                  imei:            h.imei,
-                                  emoji:           '📱',
-                                  owner_org_id:    CORP_ID,
-                                  sale_price:      '',
-                                  _suggested_name: info.deviceName,
-                                });
+                                setForm({ ...info, imei: h.imei, emoji: '📱', owner_org_id: CORP_ID, sale_price: '', _suggested_name: info.deviceName });
                                 setModal('imei-to-stock');
                               }}
                               style={{
-                                marginLeft: 'auto', padding: '4px 10px', borderRadius: 8, border: 'none',
-                                background: 'rgba(48,209,88,0.15)', color: '#30D158',
-                                fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                                width: '100%', padding: '8px', borderRadius: 10, border: 'none',
+                                background: 'rgba(48,209,88,0.12)', color: '#30D158',
+                                fontSize: 12, fontWeight: 800, cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                               }}>
-                              📲 Registrar
+                              📲 Registrar equipo
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2946,94 +2974,114 @@ export default function CorpPage() {
             {/* ── MODAL: Recargar Tokens IMEI ── */}
             {modal === 'recharge-tokens' && (
               <>
-                <div className="modal-title">💳 Recargar Tokens IMEI</div>
+                <div className="modal-title">💳 Recargar Tokens</div>
 
-                {/* Info de precios */}
-                <div style={{ background: 'rgba(255,159,10,0.1)', border: '1px solid rgba(255,159,10,0.3)', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
-                  <div style={{ fontWeight: 700, color: '#FF9F0A', marginBottom: 4, fontSize: 13 }}>💡 Cómo funciona</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    Deposita en <b style={{ color: 'var(--text)' }}>Yape o transferencia bancaria</b>, sube el comprobante y el SuperAdmin aprobará tu recarga.<br/>
-                    <span style={{ color: '#FF9F0A', fontWeight: 700 }}>S/1.00 = 1 token</span> (1 consulta IMEI completa)
-                  </div>
+                {/* Precio */}
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, marginBottom: 14, background: 'rgba(255,159,10,0.1)', borderRadius: 10, padding: '8px 14px' }}>
+                  <span style={{ fontSize: 13, color: '#FF9F0A', fontWeight: 800 }}>S/1.00 = 1 token</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>· 1 token = 1 consulta IMEI completa</span>
                 </div>
 
                 <form onSubmit={requestRecharge}>
-                  <div className="form-group">
-                    <label className="form-label">Método de pago</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                      {[
-                        { id: 'yape', label: '💜 Yape' },
-                        { id: 'transferencia', label: '🏦 Transferencia' },
-                      ].map(m => (
-                        <button
-                          key={m.id} type="button"
-                          onClick={() => setForm({ ...form, recharge_method: m.id })}
-                          style={{
-                            padding: '10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
-                            background: form.recharge_method === m.id ? 'var(--blue)' : 'var(--surface)',
-                            color: form.recharge_method === m.id ? '#fff' : 'var(--text)',
-                          }}>
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
+                  {/* Selector de método */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+                    {[
+                      { id: 'yape', label: '💜 Yape', color: '#9B59B6' },
+                      { id: 'transferencia', label: '🏦 Transferencia', color: '#0A84FF' },
+                    ].map(m => (
+                      <button key={m.id} type="button"
+                        onClick={() => setForm({ ...form, recharge_method: m.id })}
+                        style={{
+                          padding: '12px 8px', borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                          border: form.recharge_method === m.id ? `2px solid ${m.color}` : '2px solid transparent',
+                          background: form.recharge_method === m.id ? `${m.color}22` : 'var(--surface)',
+                          color: form.recharge_method === m.id ? m.color : 'var(--text-muted)',
+                          transition: 'all 0.15s',
+                        }}>
+                        {m.label}
+                      </button>
+                    ))}
                   </div>
 
+                  {/* DATOS DE PAGO — Yape */}
+                  {form.recharge_method === 'yape' && (
+                    <div style={{ background: 'rgba(155,89,182,0.08)', border: '1px solid rgba(155,89,182,0.25)', borderRadius: 14, padding: '14px', marginBottom: 14, textAlign: 'center' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#9B59B6', textTransform: 'uppercase', marginBottom: 10 }}>Escanea el QR con Yape</div>
+                      <img src="/yape-qr.png" alt="Yape QR" onError={e => { e.target.style.display='none'; }}
+                        style={{ width: 160, height: 160, borderRadius: 14, objectFit: 'contain', background: '#fff', padding: 6 }} />
+                      <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700 }}>Phillip Mendoza Gonzales</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Yape al número vinculado</div>
+                    </div>
+                  )}
+
+                  {/* DATOS DE PAGO — Transferencia */}
+                  {form.recharge_method === 'transferencia' && (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#0A84FF', textTransform: 'uppercase', marginBottom: 8 }}>Cuentas en Soles — Phillip Mendoza Gonzales</div>
+                      {[
+                        { banco: 'BCP', color: '#003087', bg: '#E8F0FE', cta: '19172716515023', cci: '00219117271651502353' },
+                        { banco: 'BBVA', color: '#004A97', bg: '#E3EDF7', cta: '0011-0482-0200339128', cci: '011-814-000241193514-17' },
+                        { banco: 'Scotiabank', color: '#CC0000', bg: '#FFF0F0', cta: '8983463567141', cci: '003-898-013463567141-42' },
+                      ].map(b => (
+                        <div key={b.banco} style={{ background: 'var(--surface)', borderRadius: 10, padding: '10px 12px', marginBottom: 6, border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 8, background: b.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, flexShrink: 0, textAlign: 'center', padding: 2 }}>
+                            {b.banco}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 1 }}>{b.cta}</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>CCI: {b.cci}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Monto */}
                   <div className="form-group">
                     <label className="form-label">Monto depositado (S/)</label>
-                    <input
-                      className="form-input"
-                      type="number"
-                      required
-                      min="1"
-                      step="1"
-                      placeholder="100"
+                    <input className="form-input" type="number" required min="1" step="1" placeholder="100"
                       value={form.recharge_soles || ''}
                       onChange={e => setForm({ ...form, recharge_soles: e.target.value })}
-                      style={{ fontSize: 22, fontWeight: 900, textAlign: 'center' }}
-                    />
-                    {form.recharge_soles > 0 && (
+                      style={{ fontSize: 24, fontWeight: 900, textAlign: 'center', letterSpacing: 1 }} />
+                    {parseFloat(form.recharge_soles) > 0 && (
                       <div style={{ textAlign: 'center', marginTop: 6, fontSize: 13, fontWeight: 700, color: '#FF9F0A' }}>
-                        = {Math.floor(parseFloat(form.recharge_soles) || 0)} tokens para consultas
+                        = {Math.floor(parseFloat(form.recharge_soles))} tokens 🪙
                       </div>
                     )}
                   </div>
 
+                  {/* Screenshot */}
                   <div className="form-group">
-                    <label className="form-label">📸 Comprobante de pago (screenshot)</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={e => setRechargeFile(e.target.files?.[0] || null)}
-                      style={{ display: 'none' }}
-                      id="recharge-file-input"
-                    />
-                    <label
-                      htmlFor="recharge-file-input"
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                        padding: '14px', borderRadius: 12, border: '2px dashed var(--border)',
-                        cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)',
-                        background: rechargeFile ? 'rgba(48,209,88,0.08)' : 'transparent',
-                      }}>
-                      {rechargeFile
-                        ? <span style={{ color: '#30D158' }}>✅ {rechargeFile.name}</span>
-                        : <span>📷 Tocar para subir comprobante</span>}
+                    <label className="form-label">📸 Comprobante de pago</label>
+                    <input type="file" accept="image/*" onChange={e => setRechargeFile(e.target.files?.[0] || null)} style={{ display: 'none' }} id="recharge-file-input" />
+                    <label htmlFor="recharge-file-input" style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      padding: '16px', borderRadius: 12, border: '2px dashed var(--border)', cursor: 'pointer',
+                      background: rechargeFile ? 'rgba(48,209,88,0.06)' : 'transparent', minHeight: 60,
+                    }}>
+                      {rechargeFile ? (
+                        <>
+                          <span style={{ fontSize: 24 }}>✅</span>
+                          <span style={{ color: '#30D158', fontWeight: 700, fontSize: 12 }}>{rechargeFile.name}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: 24 }}>📷</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Subir comprobante (screenshot del pago)</span>
+                        </>
+                      )}
                     </label>
                   </div>
 
+                  {/* Notas */}
                   <div className="form-group">
-                    <label className="form-label">Notas (opcional)</label>
-                    <input
-                      className="form-input"
-                      placeholder="Referencia de pago, nombre titular..."
-                      value={form.recharge_notes || ''}
-                      onChange={e => setForm({ ...form, recharge_notes: e.target.value })}
-                    />
+                    <label className="form-label">Referencia / Notas</label>
+                    <input className="form-input" placeholder="Nombre del titular, operación #..." value={form.recharge_notes || ''} onChange={e => setForm({ ...form, recharge_notes: e.target.value })} />
                   </div>
 
-                  <button className="btn btn-primary" type="submit" style={{ background: 'linear-gradient(135deg,#FF9F0A,#FF6B00)' }}>
-                    📤 Enviar solicitud de recarga
+                  <button className="btn btn-primary" type="submit"
+                    style={{ background: 'linear-gradient(135deg,#FF9F0A,#FF6B00)', fontWeight: 800, fontSize: 15, padding: '14px', borderRadius: 14 }}>
+                    📤 Enviar solicitud
                   </button>
                 </form>
               </>
