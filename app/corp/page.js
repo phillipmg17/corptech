@@ -59,6 +59,13 @@ export default function CorpPage() {
   const [loadingRate, setLoadingRate] = useState(false);
   const [importKpis,  setImportKpis]  = useState({ totalUSD: 0, totalPEN: 0, count: 0 });
 
+  /* ── FINANZAS ── */
+  const [finFx,       setFinFx]       = useState(null);
+  const [finData,     setFinData]     = useState({ stockVal: 0, stockValUSD: 0, inTransitVal: 0, stockCount: 0, transitCount: 0, byStore: [] });
+  const [cashAccounts,setCashAccounts]= useState([]);
+  const [cashTotals,  setCashTotals]  = useState({ banks_pen: 0, platforms_pen: 0, cash_pen: 0, total_pen: 0, total_usd: 0 });
+  const [finLoading,  setFinLoading]  = useState(false);
+
   useEffect(() => { init(); }, []);
 
   async function init() {
@@ -314,6 +321,94 @@ export default function CorpPage() {
     loadImports();
   }
 
+  /* ── FINANZAS: load valorización + caja ── */
+  async function loadFinanzas() {
+    setFinLoading(true);
+    // 1. Tipo de cambio
+    let fx = finFx;
+    try {
+      const res  = await fetch('https://api.frankfurter.app/latest?from=USD&to=PEN', { cache: 'no-store' });
+      const json = await res.json();
+      if (json?.rates?.PEN) { fx = json.rates.PEN; setFinFx(json.rates.PEN); }
+    } catch {}
+    if (!fx) fx = 3.75;
+
+    // 2. Stock items — valorización
+    const { data: stockData } = await supabase
+      .from('stock_items')
+      .select('id, status, sale_price, owner_org_id')
+      .in('status', ['available', 'in_transit']);
+
+    const available  = (stockData || []).filter(s => s.status === 'available');
+    const inTransit  = (stockData || []).filter(s => s.status === 'in_transit');
+    const totalVal   = available.reduce((s, x) => s + (x.sale_price || 0), 0);
+    const transitVal = inTransit.reduce((s, x) => s + (x.sale_price || 0), 0);
+
+    const byStore = [...[{ id: CORP_ID, name: 'Corp Tech (Almacén)', ico: '🏢' }], ...STORES].map(org => {
+      const items = available.filter(s => s.owner_org_id === org.id);
+      return { ...org, count: items.length, valor: items.reduce((s, x) => s + (x.sale_price || 0), 0) };
+    });
+
+    setFinData({
+      stockVal: totalVal, stockValUSD: totalVal / fx,
+      inTransitVal: transitVal, inTransitValUSD: transitVal / fx,
+      stockCount: available.length, transitCount: inTransit.length,
+      byStore,
+    });
+
+    // 3. Cuentas de caja
+    await loadCashAccounts(fx);
+    setFinLoading(false);
+  }
+
+  async function loadCashAccounts(fx) {
+    const rate = fx || finFx || 3.75;
+    const { data } = await supabase.from('cash_accounts').select('*').eq('org_id', CORP_ID).order('tipo');
+    const accounts = data || [];
+    setCashAccounts(accounts);
+    const toSoles = (a) => a.moneda === 'USD' ? (a.saldo || 0) * rate : (a.saldo || 0);
+    const banks    = accounts.filter(a => a.tipo === 'banco').reduce((s, a) => s + toSoles(a), 0);
+    const plats    = accounts.filter(a => a.tipo === 'plataforma').reduce((s, a) => s + toSoles(a), 0);
+    const cash     = accounts.filter(a => a.tipo === 'efectivo').reduce((s, a) => s + toSoles(a), 0);
+    const other    = accounts.filter(a => a.tipo === 'otro').reduce((s, a) => s + toSoles(a), 0);
+    const total    = banks + plats + cash + other;
+    setCashTotals({ banks_pen: banks, platforms_pen: plats, cash_pen: cash, total_pen: total, total_usd: total / rate });
+  }
+
+  async function addCashAccount(e) {
+    e.preventDefault();
+    const { error } = await supabase.from('cash_accounts').insert({
+      org_id: CORP_ID, nombre: form.ca_nombre,
+      tipo: form.ca_tipo || 'banco', moneda: form.ca_moneda || 'PEN',
+      saldo: parseFloat(form.ca_saldo) || 0, updated_by: me?.id,
+    });
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('Cuenta agregada ✓');
+    setModal(null); setForm({});
+    loadFinanzas();
+  }
+
+  async function updateCashAccount(e) {
+    e.preventDefault();
+    const { error } = await supabase.from('cash_accounts').update({
+      nombre: form.ca_nombre, tipo: form.ca_tipo, moneda: form.ca_moneda,
+      saldo: parseFloat(form.ca_saldo) || 0,
+      updated_at: new Date().toISOString(), updated_by: me?.id,
+    }).eq('id', form.ca_id);
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('Cuenta actualizada ✓');
+    setModal(null); setForm({});
+    loadFinanzas();
+  }
+
+  async function deleteCashAccount(id) {
+    if (!confirm('¿Eliminar esta cuenta?')) return;
+    await supabase.from('cash_accounts').delete().eq('id', id);
+    showToast('Cuenta eliminada');
+    setModal(null); setForm({});
+    loadFinanzas();
+  }
+
   /* ── ADD PRODUCT ── */
   async function addProduct(e) {
     e.preventDefault();
@@ -362,6 +457,7 @@ export default function CorpPage() {
     if (t === 'almacenes')    loadWarehouses();
     if (t === 'traslados')  { loadTransfers(); loadCorpStock(); }
     if (t === 'importacion')  loadImports();
+    if (t === 'finanzas')     loadFinanzas();
   }
 
   useEffect(() => {
@@ -768,12 +864,185 @@ export default function CorpPage() {
           </div>
         )}
 
+        {/* ══════════════════════════════════════
+            TAB: FINANZAS
+        ══════════════════════════════════════ */}
+        {tab === 'finanzas' && (
+          <div style={{ padding: '16px' }}>
+
+            {/* ── HERO: Valorización total ── */}
+            <div style={{
+              background: 'linear-gradient(135deg,rgba(10,132,255,0.12),rgba(94,92,230,0.12))',
+              border: '1px solid rgba(10,132,255,0.22)', borderRadius: 20,
+              padding: 24, marginBottom: 20,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 8 }}>
+                📊 Valorización Total del Inventario
+              </div>
+              {finLoading ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Calculando…</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 38, fontWeight: 900, color: '#fff', lineHeight: 1.1 }}>
+                    S/ {finData.stockVal.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
+                  </div>
+                  <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', marginTop: 4, marginBottom: 20 }}>
+                    ≈ ${finData.stockValUSD.toLocaleString('en-US', { minimumFractionDigits: 0 })} USD
+                    {finFx && <span style={{ fontSize: 11, marginLeft: 8, background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: 6 }}>TC S/{finFx.toFixed(3)}</span>}
+                  </div>
+
+                  {/* Sub-cards: Lima vs Tránsito */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ background: 'rgba(48,209,88,0.12)', border: '1px solid rgba(48,209,88,0.25)', borderRadius: 14, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 10, color: '#30D158', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>📦 EN LIMA</div>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: '#fff' }}>{finData.stockCount}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>unidades disponibles</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: '#30D158' }}>
+                        S/{finData.stockVal.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                    <div style={{ background: 'rgba(255,159,10,0.12)', border: '1px solid rgba(255,159,10,0.25)', borderRadius: 14, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 10, color: '#FF9F0A', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>✈️ EN TRÁNSITO</div>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: '#fff' }}>{finData.transitCount}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>unidades por llegar</div>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: '#FF9F0A' }}>
+                        S/{finData.inTransitVal.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* ── Stock por empresa ── */}
+            <div className="section-title">📍 Stock por empresa</div>
+            <div className="card" style={{ marginBottom: 20 }}>
+              {(finData.byStore || []).length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Sin stock registrado</div>
+              ) : (
+                (finData.byStore || []).map(s => (
+                  <div key={s.id} className="list-item" style={{ padding: '12px 16px' }}>
+                    <div style={{ fontSize: 22, marginRight: 2 }}>{s.ico}</div>
+                    <div className="list-item-body">
+                      <div className="list-item-name">{s.name}</div>
+                      <div className="list-item-sub">{s.count} unidades disponibles</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 800, color: 'var(--green)', fontSize: 14 }}>
+                        S/{s.valor.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
+                      </div>
+                      {finFx && (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          ≈${(s.valor / finFx).toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* ── Flujo de Caja ── */}
+            <div className="section-header">
+              <div className="section-title">🏦 Flujo de Caja</div>
+              <button className="section-action" onClick={() => { setModal('add-account'); setForm({ ca_tipo: 'banco', ca_moneda: 'PEN' }); }}>+ Cuenta</button>
+            </div>
+
+            {cashAccounts.length > 0 && (
+              <>
+                {/* Mini KPIs */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+                  {[
+                    { lbl: 'Bancos',      val: cashTotals.banks_pen,     color: '#0A84FF' },
+                    { lbl: 'Plataformas', val: cashTotals.platforms_pen, color: '#A78BFA' },
+                    { lbl: 'Efectivo',    val: cashTotals.cash_pen,      color: '#30D158' },
+                  ].map(k => (
+                    <div key={k.lbl} style={{
+                      background: `${k.color}14`, border: `1px solid ${k.color}30`,
+                      borderRadius: 14, padding: '10px 10px', textAlign: 'center',
+                    }}>
+                      <div style={{ fontSize: 9, color: k.color, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{k.lbl}</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>S/{k.val.toLocaleString('es-PE', { minimumFractionDigits: 0 })}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Total hero */}
+                <div style={{
+                  background: 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+                  borderRadius: 16, padding: '16px 20px', marginBottom: 16,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>TOTAL DISPONIBLE EN CAJA</div>
+                    <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', lineHeight: 1.1 }}>
+                      S/{cashTotals.total_pen.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                  {finFx && (
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>≈ USD</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>
+                        ${cashTotals.total_usd.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Lista de cuentas */}
+            {cashAccounts.length === 0 ? (
+              <div className="empty-msg">Agrega tus cuentas: BCP, Interbank, MercadoLibre, etc.</div>
+            ) : (
+              <div className="card" style={{ marginBottom: 16 }}>
+                {cashAccounts.map(acc => (
+                  <div key={acc.id} className="list-item">
+                    <div className="list-item-ico">
+                      {acc.tipo === 'banco' ? '🏦' : acc.tipo === 'plataforma' ? '📱' : acc.tipo === 'efectivo' ? '💵' : '💼'}
+                    </div>
+                    <div className="list-item-body">
+                      <div className="list-item-name">{acc.nombre}</div>
+                      <div className="list-item-sub">{acc.tipo} · {acc.moneda}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 800, color: 'var(--green)', fontSize: 14 }}>
+                        {acc.moneda === 'USD' ? '$' : 'S/'}{(acc.saldo || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}
+                      </div>
+                      <button
+                        onClick={() => { setModal('edit-account'); setForm({ ca_id: acc.id, ca_nombre: acc.nombre, ca_tipo: acc.tipo, ca_moneda: acc.moneda, ca_saldo: acc.saldo }); }}
+                        style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}
+                      >
+                        ✏️ editar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={loadFinanzas}
+              disabled={finLoading}
+              style={{
+                width: '100%', padding: '12px', borderRadius: 14,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                color: 'var(--text-muted)', fontSize: 13, fontWeight: 600,
+                cursor: finLoading ? 'not-allowed' : 'pointer', marginBottom: 40,
+              }}
+            >
+              {finLoading ? '⏳ Calculando…' : '🔄 Actualizar datos financieros'}
+            </button>
+          </div>
+        )}
+
       </div>{/* end .content */}
 
       {/* TAB BAR — scrollable on mobile */}
       <div className="tab-bar" style={{ overflowX: 'auto' }}>
         {[
           { id: 'global',      ico: '📦', lbl: 'Stock'      },
+          { id: 'finanzas',    ico: '💰', lbl: 'Finanzas'   },
           { id: 'almacenes',   ico: '🏭', lbl: 'Almacenes'  },
           { id: 'traslados',   ico: '🔄', lbl: 'Traslados'  },
           { id: 'importacion', ico: '📥', lbl: 'Importación' },
@@ -986,6 +1255,45 @@ export default function CorpPage() {
                     </b>
                   </div>
                   <button className="btn btn-primary" type="submit">Guardar importación</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Agregar cuenta de caja ── */}
+            {(modal === 'add-account' || modal === 'edit-account') && (
+              <>
+                <div className="modal-title">{modal === 'add-account' ? '🏦 Nueva cuenta' : '🏦 Editar cuenta'}</div>
+                <form onSubmit={modal === 'add-account' ? addCashAccount : updateCashAccount}>
+                  <div className="form-group">
+                    <label className="form-label">Nombre de la cuenta</label>
+                    <input className="form-input" required placeholder="Ej: BCP Soles, MercadoLibre, Caja chica" value={form.ca_nombre || ''} onChange={e => setForm({ ...form, ca_nombre: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Tipo</label>
+                    <select className="form-select" value={form.ca_tipo || 'banco'} onChange={e => setForm({ ...form, ca_tipo: e.target.value })}>
+                      <option value="banco">🏦 Banco</option>
+                      <option value="efectivo">💵 Efectivo</option>
+                      <option value="plataforma">📱 Plataforma (ML, Saga, Falabella...)</option>
+                      <option value="otro">💼 Otro</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Moneda</label>
+                    <select className="form-select" value={form.ca_moneda || 'PEN'} onChange={e => setForm({ ...form, ca_moneda: e.target.value })}>
+                      <option value="PEN">🇵🇪 Soles (PEN)</option>
+                      <option value="USD">🇺🇸 Dólares (USD)</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Saldo actual</label>
+                    <input className="form-input" type="number" step="0.01" required placeholder="0.00" value={form.ca_saldo ?? ''} onChange={e => setForm({ ...form, ca_saldo: e.target.value })} />
+                  </div>
+                  <button className="btn btn-primary" type="submit">Guardar</button>
+                  {modal === 'edit-account' && (
+                    <button type="button" className="btn btn-red btn-block" style={{ marginTop: 8 }} onClick={() => deleteCashAccount(form.ca_id)}>
+                      🗑 Eliminar cuenta
+                    </button>
+                  )}
                 </form>
               </>
             )}
