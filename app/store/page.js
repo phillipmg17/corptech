@@ -38,6 +38,7 @@ const DEFAULT_CONFIG = {
   color_primario: '#0A84FF',
   color_secundario: '#5E5CE6',
   color_acento: '#30D158',
+  google_place_id: '',
   horarios: {
     lunes: '9:00 - 18:00',
     martes: '9:00 - 18:00',
@@ -296,10 +297,11 @@ export default function StorePage() {
         instagram:       data.instagram       || '',
         tiktok:          data.tiktok          || '',
         direccion:       data.direccion       || '',
-        color_primario:  data.color_primario  || '#0A84FF',
-        color_secundario:data.color_secundario|| '#5E5CE6',
-        color_acento:    data.color_acento    || '#30D158',
-        horarios:        data.horarios        || DEFAULT_CONFIG.horarios,
+        color_primario:  data.color_primario   || '#0A84FF',
+        color_secundario:data.color_secundario || '#5E5CE6',
+        color_acento:    data.color_acento     || '#30D158',
+        google_place_id: data.google_place_id  || '',
+        horarios:        data.horarios         || DEFAULT_CONFIG.horarios,
       });
     }
   }
@@ -934,6 +936,28 @@ export default function StorePage() {
                   <input className="form-input" placeholder="futurteck" value={config.tiktok}
                     onChange={e => setConfig(c => ({ ...c, tiktok: e.target.value }))} />
                 </div>
+              </div>
+
+              {/* GOOGLE */}
+              <div className="card" style={{ marginBottom: 16, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>⭐ Google Reviews</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+                  Busca tu tienda en Google Maps, entra al perfil y copia el ID de la URL (la parte después de <code>place/</code> o busca «Place ID» en la URL).
+                </div>
+                <div className="form-group" style={{ marginBottom: 8 }}>
+                  <label className="form-label">Google Place ID (opcional)</label>
+                  <input className="form-input" placeholder="ChIJN1t_tDeuEmsRUsoyG83frY4"
+                    value={config.google_place_id}
+                    onChange={e => setConfig(c => ({ ...c, google_place_id: e.target.value }))} />
+                </div>
+                {config.google_place_id && (
+                  <a
+                    href={`https://search.google.com/local/reviews?placeid=${config.google_place_id}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: 12, color: '#4DA8FF', textDecoration: 'none' }}>
+                    ↗ Ver reseñas actuales en Google
+                  </a>
+                )}
               </div>
 
               {/* COLORES */}
