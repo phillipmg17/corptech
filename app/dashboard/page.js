@@ -148,24 +148,28 @@ export default function DashboardPage() {
   /* ── QUICK LINKS by role ── */
   const LINKS = {
     superadmin: [
-      { href: '/pos',        ico: '🛒', lbl: 'Punto de Venta' },
-      { href: '/store',      ico: '🏪', lbl: 'Panel Tienda' },
-      { href: '/corp',       ico: '🏢', lbl: 'Panel Corp' },
-      { href: '/chat',       ico: '💬', lbl: 'Chat Interno' },
-      { href: '/superadmin', ico: '⚡', lbl: 'SuperAdmin' },
+      { href: '/pos',         ico: '🛒', lbl: 'Punto de Venta' },
+      { href: '/store',       ico: '🏪', lbl: 'Panel Tienda' },
+      { href: '/corp',        ico: '🏢', lbl: 'Panel Corp' },
+      { href: '/chat',        ico: '💬', lbl: 'Chat Interno' },
+      { href: '/superadmin',  ico: '⚡', lbl: 'SuperAdmin' },
+      { href: '/biometrics',  ico: '🔐', lbl: 'Mi Carnet QR' },
     ],
     corp: [
-      { href: '/pos',  ico: '🛒', lbl: 'Punto de Venta' },
-      { href: '/corp', ico: '🏢', lbl: 'Panel Corp' },
-      { href: '/chat', ico: '💬', lbl: 'Chat Interno' },
+      { href: '/pos',        ico: '🛒', lbl: 'Punto de Venta' },
+      { href: '/corp',       ico: '🏢', lbl: 'Panel Corp' },
+      { href: '/chat',       ico: '💬', lbl: 'Chat Interno' },
+      { href: '/biometrics', ico: '🔐', lbl: 'Mi Carnet QR' },
     ],
     gerente: [
-      { href: '/pos',   ico: '🛒', lbl: 'Punto de Venta' },
-      { href: '/store', ico: '🏪', lbl: 'Panel Tienda' },
-      { href: '/chat',  ico: '💬', lbl: 'Chat con Corp' },
+      { href: '/pos',        ico: '🛒', lbl: 'Punto de Venta' },
+      { href: '/store',      ico: '🏪', lbl: 'Panel Tienda' },
+      { href: '/chat',       ico: '💬', lbl: 'Chat con Corp' },
+      { href: '/biometrics', ico: '🔐', lbl: 'Mi Carnet QR' },
     ],
     vendedor: [
-      { href: '/pos', ico: '🛒', lbl: 'Punto de Venta' },
+      { href: '/pos',        ico: '🛒', lbl: 'Punto de Venta' },
+      { href: '/biometrics', ico: '🔐', lbl: 'Mi Carnet QR' },
     ],
   };
   const quickLinks = LINKS[role] || LINKS.vendedor;
