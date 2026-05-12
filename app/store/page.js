@@ -73,6 +73,11 @@ export default function StorePage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef(null);
 
+  // Deudas / Liquidaciones state
+  const [deudas,       setDeudas]       = useState([]);
+  const [deudasLoading,setDeudasLoading]= useState(false);
+  const comprobanteRef = useRef(null);
+
   useEffect(() => { init(); }, []);
 
   async function init() {
@@ -100,6 +105,38 @@ export default function StorePage() {
     if (t === 'clientes') return loadCustomers(id);
     if (t === 'ventas')   return loadSales(id);
     if (t === 'caja')     return loadSessions(id);
+    if (t === 'deudas')   return loadDeudas(id);
+  }
+
+  /* ── DEUDAS / LIQUIDACIONES ── */
+  async function loadDeudas(oid) {
+    const id = oid || orgId;
+    setDeudasLoading(true);
+    const { data } = await supabase
+      .from('liquidaciones')
+      .select('*')
+      .eq('store_org_id', id)
+      .order('created_at', { ascending: false });
+    setDeudas(data || []);
+    setDeudasLoading(false);
+  }
+
+  async function subirComprobante(liqId, file) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('Archivo muy grande (máx 5MB)', 'err'); return; }
+    const ext  = file.name.split('.').pop();
+    const path = `comprobantes/${orgId}/${liqId}_${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('store-assets').upload(path, file, { upsert: true });
+    if (upErr) { showToast('Error al subir: ' + upErr.message, 'err'); return; }
+    const { data: { publicUrl } } = supabase.storage.from('store-assets').getPublicUrl(path);
+    const { error } = await supabase.from('liquidaciones').update({
+      comprobante_url: publicUrl,
+      estado: 'pagada',
+      fecha_pago: new Date().toISOString().split('T')[0],
+    }).eq('id', liqId);
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('✅ Comprobante enviado a Corp');
+    loadDeudas();
   }
 
   async function loadStock(oid) {
@@ -389,6 +426,128 @@ export default function StorePage() {
             )}
           </div>
         )}
+
+        {/* ── DEUDAS / LIQUIDACIONES ── */}
+        {tab === 'deudas' && (() => {
+          const ESTADO = {
+            borrador:      { lbl: 'Borrador',      color: '#888'    },
+            enviada:       { lbl: '📋 Pendiente',   color: '#FF9F0A' },
+            pagada_parcial:{ lbl: '💸 Pago parcial',color: '#5E5CE6' },
+            pagada:        { lbl: '⏳ En revisión', color: '#0A84FF' },
+            aprobada:      { lbl: '✅ Aprobado',    color: '#30D158' },
+            rechazada:     { lbl: '❌ Rechazado',   color: '#FF453A' },
+          };
+          const totalDeuda = deudas
+            .filter(d => d.estado === 'enviada' || d.estado === 'pagada_parcial')
+            .reduce((s, d) => s + (d.monto_neto_pen || 0), 0);
+
+          return (
+            <div style={{ padding: '16px' }}>
+
+              {/* Hero deuda total */}
+              {totalDeuda > 0 && (
+                <div style={{
+                  background: 'linear-gradient(135deg,rgba(255,69,58,0.15),rgba(255,159,10,0.1))',
+                  border: '1px solid rgba(255,69,58,0.3)',
+                  borderRadius: 20, padding: '20px 24px', marginBottom: 20,
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#FF6B6B', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>⚠️ Deuda pendiente con Corp Tech</div>
+                  <div style={{ fontSize: 36, fontWeight: 900, color: '#fff' }}>S/{totalDeuda.toFixed(0)}</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>Sube el comprobante de pago en cada liquidación</div>
+                </div>
+              )}
+
+              {totalDeuda === 0 && deudas.filter(d => d.estado === 'aprobada').length > 0 && (
+                <div style={{
+                  background: 'rgba(48,209,88,0.1)', border: '1px solid rgba(48,209,88,0.25)',
+                  borderRadius: 16, padding: '16px 20px', marginBottom: 20, textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>🎉</div>
+                  <div style={{ fontWeight: 700, color: '#30D158' }}>¡Sin deudas pendientes!</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Todas las liquidaciones están al día</div>
+                </div>
+              )}
+
+              <div className="section-title" style={{ marginBottom: 12 }}>📋 Mis liquidaciones</div>
+
+              {deudasLoading ? (
+                <div className="empty-msg">Cargando…</div>
+              ) : deudas.length === 0 ? (
+                <div className="empty-msg">Sin liquidaciones de Corp todavía</div>
+              ) : (
+                deudas.map(liq => {
+                  const badge = ESTADO[liq.estado] || { lbl: liq.estado, color: '#888' };
+                  const puedePagar = liq.estado === 'enviada' || liq.estado === 'pagada_parcial';
+                  return (
+                    <div className="card" key={liq.id} style={{ padding: '14px', marginBottom: 12 }}>
+                      <div className="flex-between" style={{ marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>
+                            {liq.descripcion || `${liq.periodo_inicio} → ${liq.periodo_fin}`}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {liq.periodo_inicio} → {liq.periodo_fin}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: badge.color }}>{badge.lbl}</span>
+                      </div>
+
+                      {/* Detalle */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                        <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px 12px' }}>
+                          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Mis ventas</div>
+                          <div style={{ fontSize: 14, fontWeight: 700 }}>S/{(liq.total_ventas_pen || 0).toFixed(0)}</div>
+                        </div>
+                        <div style={{ background: 'rgba(255,69,58,0.08)', border: '1px solid rgba(255,69,58,0.2)', borderRadius: 10, padding: '8px 12px' }}>
+                          <div style={{ fontSize: 9, color: '#FF6B6B', fontWeight: 700, textTransform: 'uppercase' }}>Debo a Corp</div>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: '#FF6B6B' }}>S/{(liq.monto_neto_pen || 0).toFixed(0)}</div>
+                        </div>
+                      </div>
+
+                      {/* Comprobante ya enviado */}
+                      {liq.comprobante_url && (
+                        <a href={liq.comprobante_url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'block', padding: '8px 12px', background: 'rgba(10,132,255,0.1)', border: '1px solid rgba(10,132,255,0.25)', borderRadius: 10, fontSize: 12, color: '#4DA8FF', fontWeight: 600, marginBottom: 10, textDecoration: 'none' }}>
+                          🧾 Comprobante enviado — {liq.fecha_pago || ''}
+                        </a>
+                      )}
+
+                      {/* Nota rechazo */}
+                      {liq.notas_corp && liq.estado === 'rechazada' && (
+                        <div style={{ background: 'rgba(255,69,58,0.1)', borderRadius: 10, padding: '8px 12px', fontSize: 12, color: '#FF6B6B', marginBottom: 10 }}>
+                          ❌ {liq.notas_corp}
+                        </div>
+                      )}
+
+                      {/* Botón subir comprobante */}
+                      {puedePagar && (
+                        <>
+                          <input
+                            ref={comprobanteRef}
+                            type="file"
+                            accept="image/*,application/pdf"
+                            style={{ display: 'none' }}
+                            onChange={e => subirComprobante(liq.id, e.target.files?.[0])}
+                          />
+                          <button
+                            onClick={() => comprobanteRef.current?.click()}
+                            style={{
+                              width: '100%', padding: '12px', borderRadius: 14,
+                              background: 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+                              border: 'none', color: '#fff', fontSize: 14, fontWeight: 700,
+                              cursor: 'pointer', boxShadow: '0 4px 16px rgba(10,132,255,0.3)',
+                            }}>
+                            📎 Subir comprobante de pago
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── CONFIGURACIÓN ── */}
         {tab === 'config' && (

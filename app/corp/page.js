@@ -65,6 +65,12 @@ export default function CorpPage() {
   const [cashTotals,  setCashTotals]  = useState({ banks_pen: 0, platforms_pen: 0, cash_pen: 0, total_pen: 0, total_usd: 0 });
   const [finLoading,  setFinLoading]  = useState(false);
 
+  /* ── LIQUIDACIONES ── */
+  const [liquidaciones, setLiquidaciones] = useState([]);
+  const [liqLoading,    setLiqLoading]    = useState(false);
+  const [periodData,    setPeriodData]    = useState(null);
+  const [liqFilter,     setLiqFilter]     = useState('all');
+
   useEffect(() => { init(); }, []);
 
   async function init() {
@@ -386,6 +392,94 @@ export default function CorpPage() {
     loadImports();
   }
 
+  /* ── LIQUIDACIONES ── */
+  async function loadLiquidaciones() {
+    setLiqLoading(true);
+    let q = supabase.from('liquidaciones').select('*').order('created_at', { ascending: false }).limit(60);
+    if (liqFilter !== 'all') q = q.eq('store_org_id', liqFilter);
+    const { data } = await q;
+    setLiquidaciones(data || []);
+    setLiqLoading(false);
+  }
+
+  async function fetchPeriodData(storeId, start, end) {
+    if (!storeId || !start || !end) return;
+    setPeriodData(null);
+    // Ventas de la tienda en el período
+    const { data: salesData } = await supabase
+      .from('sales')
+      .select('total_amount')
+      .eq('org_id', storeId)
+      .gte('created_at', start + 'T00:00:00')
+      .lte('created_at', end + 'T23:59:59');
+    const totalVentas = (salesData || []).reduce((s, v) => s + (v.total_amount || 0), 0);
+    const numVentas   = (salesData || []).length;
+
+    // Traslados recibidos por la tienda en el período (productos extraídos de Corp)
+    const { data: txData } = await supabase
+      .from('stock_transfers')
+      .select('total_amount')
+      .eq('to_org_id', storeId)
+      .eq('status', 'received')
+      .gte('created_at', start + 'T00:00:00')
+      .lte('created_at', end + 'T23:59:59');
+    const valorProductos = (txData || []).reduce((s, t) => s + (t.total_amount || 0), 0);
+    const numProductos   = (txData || []).length;
+
+    setPeriodData({ totalVentas, numVentas, valorProductos, numProductos });
+    setForm(f => ({
+      ...f,
+      liq_ventas:    totalVentas.toFixed(2),
+      liq_productos: valorProductos.toFixed(2),
+      liq_monto:     valorProductos.toFixed(2),  // por defecto deben el valor de productos recibidos
+    }));
+  }
+
+  async function createLiquidacion(e) {
+    e.preventDefault();
+    const montoNeto = (parseFloat(form.liq_productos) || 0)
+                    - (parseFloat(form.liq_comision)  || 0)
+                    + (parseFloat(form.liq_ajuste)    || 0);
+    const { error } = await supabase.from('liquidaciones').insert({
+      store_org_id:           form.liq_store,
+      corp_org_id:            CORP_ID,
+      periodo_inicio:         form.liq_inicio,
+      periodo_fin:            form.liq_fin,
+      descripcion:            form.liq_desc || '',
+      total_ventas_pen:       parseFloat(form.liq_ventas)    || 0,
+      valor_productos_pen:    parseFloat(form.liq_productos) || 0,
+      comision_plataforma_pen:parseFloat(form.liq_comision)  || 0,
+      ajustes_pen:            parseFloat(form.liq_ajuste)    || 0,
+      notas_ajuste:           form.liq_notas || '',
+      monto_neto_pen:         montoNeto,
+      estado:                 'enviada',
+      created_by:             me?.id,
+    });
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('Liquidación enviada a la tienda ✓');
+    setModal(null); setForm({}); setPeriodData(null);
+    loadLiquidaciones();
+  }
+
+  async function approveLiquidacion(id) {
+    await supabase.from('liquidaciones').update({
+      estado: 'aprobada',
+      aprobado_por: me?.id,
+      aprobado_at: new Date().toISOString(),
+    }).eq('id', id);
+    showToast('Liquidación aprobada ✓');
+    loadLiquidaciones();
+  }
+
+  async function rejectLiquidacion(id, motivo) {
+    await supabase.from('liquidaciones').update({
+      estado: 'rechazada',
+      notas_corp: motivo || 'Rechazado por Corp',
+    }).eq('id', id);
+    showToast('Liquidación rechazada');
+    loadLiquidaciones();
+  }
+
   /* ── FINANZAS: load valorización + caja ── */
   async function loadFinanzas() {
     setFinLoading(true);
@@ -522,7 +616,8 @@ export default function CorpPage() {
     if (t === 'almacenes')    loadWarehouses();
     if (t === 'traslados')  { loadTransfers(); loadCorpStock(); }
     if (t === 'importacion')  loadBatches();
-    if (t === 'finanzas')     loadFinanzas();
+    if (t === 'finanzas')       loadFinanzas();
+    if (t === 'liquidaciones')  loadLiquidaciones();
   }
 
   useEffect(() => {
@@ -980,6 +1075,143 @@ export default function CorpPage() {
         })()}
 
         {/* ══════════════════════════════════════
+            TAB: LIQUIDACIONES
+        ══════════════════════════════════════ */}
+        {tab === 'liquidaciones' && (() => {
+          const LIQ_ESTADO = {
+            borrador:      { lbl: 'Borrador',       color: '#888'    },
+            enviada:       { lbl: '📤 Enviada',      color: '#FF9F0A' },
+            pagada_parcial:{ lbl: '💸 Parcial',      color: '#5E5CE6' },
+            pagada:        { lbl: '💰 Pagada',       color: '#0A84FF' },
+            aprobada:      { lbl: '✅ Aprobada',     color: '#30D158' },
+            rechazada:     { lbl: '❌ Rechazada',    color: '#FF453A' },
+          };
+          const totalPendiente = liquidaciones
+            .filter(l => l.estado === 'enviada' || l.estado === 'pagada_parcial')
+            .reduce((s, l) => s + (l.monto_neto_pen || 0), 0);
+          const totalAprobado  = liquidaciones
+            .filter(l => l.estado === 'aprobada')
+            .reduce((s, l) => s + (l.monto_neto_pen || 0), 0);
+
+          const liqFiltradas = liqFilter === 'all'
+            ? liquidaciones
+            : liquidaciones.filter(l => l.store_org_id === liqFilter);
+
+          return (
+            <div style={{ padding: '16px' }}>
+
+              {/* KPIs */}
+              <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginBottom: 16 }}>
+                <div className="kpi">
+                  <div className="kpi-ico">⏳</div>
+                  <div className="kpi-val" style={{ fontSize: 14 }}>S/{totalPendiente.toFixed(0)}</div>
+                  <div className="kpi-lbl">Por cobrar</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-ico">✅</div>
+                  <div className="kpi-val" style={{ fontSize: 14 }}>S/{totalAprobado.toFixed(0)}</div>
+                  <div className="kpi-lbl">Cobrado</div>
+                </div>
+                <div className="kpi">
+                  <div className="kpi-ico">📋</div>
+                  <div className="kpi-val">{liquidaciones.length}</div>
+                  <div className="kpi-lbl">Total liq.</div>
+                </div>
+              </div>
+
+              {/* Filtro por tienda + botón nueva */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
+                {[{ id: 'all', name: 'Todas', ico: '🌐' }, ...STORES].map(s => (
+                  <button key={s.id}
+                    onClick={() => { setLiqFilter(s.id); }}
+                    className={`btn btn-sm${liqFilter === s.id ? ' btn-primary' : ' btn-outline'}`}>
+                    {s.ico} {s.name}
+                  </button>
+                ))}
+                <button className="btn btn-primary btn-sm" style={{ marginLeft: 'auto', flexShrink: 0 }}
+                  onClick={() => { setModal('create-liquidacion'); setForm({ liq_store: STORES[0].id }); setPeriodData(null); }}>
+                  + Nueva
+                </button>
+              </div>
+
+              {/* Lista */}
+              {liqLoading ? (
+                <div className="empty-msg">Cargando…</div>
+              ) : liqFiltradas.length === 0 ? (
+                <div className="empty-msg">Sin liquidaciones. Crea la primera.</div>
+              ) : (
+                liqFiltradas.map(liq => {
+                  const store   = STORES.find(s => s.id === liq.store_org_id);
+                  const badge   = LIQ_ESTADO[liq.estado] || { lbl: liq.estado, color: '#888' };
+                  const pagPend = liq.estado === 'pagada' || liq.estado === 'pagada_parcial';
+                  return (
+                    <div className="card" key={liq.id} style={{ padding: '14px', marginBottom: 12 }}>
+                      {/* Header */}
+                      <div className="flex-between" style={{ marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>
+                            {store?.ico} {store?.name || 'Tienda'}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {liq.periodo_inicio} → {liq.periodo_fin}
+                            {liq.descripcion && <span> · {liq.descripcion}</span>}
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: badge.color }}>{badge.lbl}</span>
+                      </div>
+
+                      {/* Montos */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+                        <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Ventas</div>
+                          <div style={{ fontSize: 13, fontWeight: 700 }}>S/{(liq.total_ventas_pen || 0).toFixed(0)}</div>
+                        </div>
+                        <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Productos</div>
+                          <div style={{ fontSize: 13, fontWeight: 700 }}>S/{(liq.valor_productos_pen || 0).toFixed(0)}</div>
+                        </div>
+                        <div style={{ background: 'rgba(10,132,255,0.1)', border: '1px solid rgba(10,132,255,0.25)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 9, color: '#4DA8FF', fontWeight: 700, textTransform: 'uppercase' }}>A COBRAR</div>
+                          <div style={{ fontSize: 14, fontWeight: 900, color: '#4DA8FF' }}>S/{(liq.monto_neto_pen || 0).toFixed(0)}</div>
+                        </div>
+                      </div>
+
+                      {/* Comprobante si existe */}
+                      {liq.comprobante_url && (
+                        <a href={liq.comprobante_url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'block', padding: '8px 12px', background: 'rgba(48,209,88,0.1)', border: '1px solid rgba(48,209,88,0.25)', borderRadius: 10, fontSize: 12, color: '#30D158', fontWeight: 600, marginBottom: 10, textDecoration: 'none' }}>
+                          🧾 Ver comprobante de pago
+                        </a>
+                      )}
+
+                      {/* Acciones Corp */}
+                      {pagPend && (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button className="btn btn-primary btn-sm" style={{ flex: 1, background: '#30D158' }}
+                            onClick={() => approveLiquidacion(liq.id)}>
+                            ✅ Aprobar pago
+                          </button>
+                          <button className="btn btn-sm btn-outline" style={{ color: '#FF453A', borderColor: '#FF453A33' }}
+                            onClick={() => {
+                              const motivo = prompt('Motivo del rechazo:');
+                              if (motivo !== null) rejectLiquidacion(liq.id, motivo);
+                            }}>
+                            ❌ Rechazar
+                          </button>
+                        </div>
+                      )}
+                      {liq.notas_corp && (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Nota Corp: {liq.notas_corp}</div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ══════════════════════════════════════
             TAB: FINANZAS
         ══════════════════════════════════════ */}
         {tab === 'finanzas' && (
@@ -1156,8 +1388,9 @@ export default function CorpPage() {
       {/* TAB BAR — scrollable on mobile */}
       <div className="tab-bar" style={{ overflowX: 'auto' }}>
         {[
-          { id: 'global',      ico: '📦', lbl: 'Stock'      },
-          { id: 'finanzas',    ico: '💰', lbl: 'Finanzas'   },
+          { id: 'global',        ico: '📦', lbl: 'Stock'        },
+          { id: 'finanzas',      ico: '💰', lbl: 'Finanzas'     },
+          { id: 'liquidaciones', ico: '💳', lbl: 'Liquidaciones' },
           { id: 'almacenes',   ico: '🏭', lbl: 'Almacenes'  },
           { id: 'traslados',   ico: '🔄', lbl: 'Traslados'  },
           { id: 'importacion', ico: '📥', lbl: 'Importación' },
@@ -1457,6 +1690,96 @@ export default function CorpPage() {
                     )}
 
                     <button className="btn btn-primary" type="submit">💾 Guardar lote</button>
+                  </form>
+                </>
+              );
+            })()}
+
+            {/* ── MODAL: Nueva Liquidación ── */}
+            {modal === 'create-liquidacion' && (() => {
+              const montoNeto = (parseFloat(form.liq_productos) || 0)
+                              - (parseFloat(form.liq_comision)  || 0)
+                              + (parseFloat(form.liq_ajuste)    || 0);
+              return (
+                <>
+                  <div className="modal-title">💳 Nueva Liquidación</div>
+                  <form onSubmit={createLiquidacion}>
+                    <div className="form-group">
+                      <label className="form-label">Tienda</label>
+                      <select className="form-select" required value={form.liq_store || ''} onChange={e => { setForm({ ...form, liq_store: e.target.value }); setPeriodData(null); }}>
+                        {STORES.map(s => <option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Período inicio</label>
+                        <input className="form-input" type="date" required value={form.liq_inicio || ''} onChange={e => setForm({ ...form, liq_inicio: e.target.value })} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Período fin</label>
+                        <input className="form-input" type="date" required value={form.liq_fin || ''} onChange={e => setForm({ ...form, liq_fin: e.target.value })} />
+                      </div>
+                    </div>
+                    <button type="button"
+                      onClick={() => fetchPeriodData(form.liq_store, form.liq_inicio, form.liq_fin)}
+                      disabled={!form.liq_store || !form.liq_inicio || !form.liq_fin}
+                      style={{
+                        width: '100%', margin: '10px 0', padding: '10px', borderRadius: 12,
+                        background: 'rgba(10,132,255,0.15)', border: '1px solid rgba(10,132,255,0.3)',
+                        color: '#4DA8FF', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                      }}>
+                      🔍 Auto-calcular período
+                    </button>
+
+                    {/* Preview auto-cálculo */}
+                    {periodData && (
+                      <div style={{ background: 'rgba(48,209,88,0.08)', border: '1px solid rgba(48,209,88,0.2)', borderRadius: 12, padding: '10px 14px', marginBottom: 10, fontSize: 12 }}>
+                        <div style={{ fontWeight: 700, color: '#30D158', marginBottom: 6 }}>✅ Datos del período calculados</div>
+                        <div style={{ color: 'var(--text-muted)', lineHeight: 1.8 }}>
+                          {periodData.numVentas} ventas · S/{periodData.totalVentas.toFixed(0)} brutos<br/>
+                          {periodData.numProductos} traslados recibidos · S/{periodData.valorProductos.toFixed(0)} en productos
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="form-group">
+                      <label className="form-label">Descripción</label>
+                      <input className="form-input" placeholder="Quincena 1-15 Mayo 2026" value={form.liq_desc || ''} onChange={e => setForm({ ...form, liq_desc: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Total ventas brutas (S/) — referencia</label>
+                      <input className="form-input" type="number" step="0.01" placeholder="0.00" value={form.liq_ventas || ''} onChange={e => setForm({ ...form, liq_ventas: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Valor productos extraídos (S/) — LO QUE DEBE</label>
+                      <input className="form-input" type="number" step="0.01" required placeholder="0.00" value={form.liq_productos || ''} onChange={e => setForm({ ...form, liq_productos: e.target.value })} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Comisión plataforma (S/)</label>
+                        <input className="form-input" type="number" step="0.01" placeholder="0.00" value={form.liq_comision || ''} onChange={e => setForm({ ...form, liq_comision: e.target.value })} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Ajuste (S/) ± </label>
+                        <input className="form-input" type="number" step="0.01" placeholder="0.00" value={form.liq_ajuste || ''} onChange={e => setForm({ ...form, liq_ajuste: e.target.value })} />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Notas del ajuste</label>
+                      <input className="form-input" placeholder="Devolución equipo, descuento especial..." value={form.liq_notas || ''} onChange={e => setForm({ ...form, liq_notas: e.target.value })} />
+                    </div>
+
+                    {/* Total final */}
+                    <div style={{
+                      background: 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+                      borderRadius: 12, padding: '12px 16px', marginBottom: 14,
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                      <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 600 }}>MONTO NETO A COBRAR</span>
+                      <span style={{ color: '#fff', fontSize: 20, fontWeight: 900 }}>S/{montoNeto.toFixed(2)}</span>
+                    </div>
+
+                    <button className="btn btn-primary" type="submit">📤 Crear y enviar a tienda</button>
                   </form>
                 </>
               );
