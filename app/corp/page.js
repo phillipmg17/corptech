@@ -1792,7 +1792,106 @@ export default function CorpPage() {
         )}
 
         {/* ── TAB: IMEI CHECKER ── */}
-        {tab === 'imei' && (
+        {tab === 'imei' && (() => {
+
+          // ── helpers internos del tab ──────────────────────────────
+          // Nunca exponer nombres reales: Servidor 1, Servidor 2...
+          const provLabel = (provKey) => {
+            if (!imeiConfig?.providers) return 'Servidor';
+            const idx = imeiConfig.providers.findIndex(p => p.provider === provKey);
+            return idx >= 0 ? `Servidor ${idx + 1}` : 'Servidor';
+          };
+
+          // Emoji de dispositivo según modelo
+          function deviceEmoji(model) {
+            if (!model) return '📱';
+            const m = model.toLowerCase();
+            if (m.includes('ipad'))  return '📟';
+            if (m.includes('mac'))   return '💻';
+            if (m.includes('watch')) return '⌚';
+            if (m.includes('airpods')) return '🎧';
+            return '📱';
+          }
+
+          // Convertir camelCase/key a etiqueta legible — mapa de conocidos
+          const FIELD_LABELS = {
+            model:'Modelo', imei:'IMEI', imei2:'IMEI 2', serialNumber:'Serial Number',
+            color:'Color', capacity:'Capacidad', storage:'Almacenamiento',
+            carrier:'Carrier', country:'País', region:'Región',
+            fmiOn:'Find My iPhone', fmiON:'Find My iPhone',
+            blacklisted:'Lista Negra', blacklistStatus:'Lista Negra',
+            warrantyStatus:'Garantía', purchaseDate:'Compra',
+            simLock:'SIM Lock', simStatus:'SIM Status',
+            mdm:'MDM', mdmStatus:'MDM Status',
+            replacementStatus:'Reemplazo', replacedStatus:'Reemplazado',
+            icloudStatus:'iCloud', activationStatus:'Activación',
+          };
+          function fieldLabel(k) {
+            return FIELD_LABELS[k] || k.replace(/([A-Z]+)(?=[A-Z][a-z])|([a-z])(?=[A-Z])/g, '$1$2 ').trim();
+          }
+
+          // Info de estado para badges (icono + color + texto)
+          function statusBadge(k, v) {
+            const kl = (k || '').toLowerCase();
+            const vl = String(v || '').toLowerCase();
+            const isBad  = vl === 'true' || vl === 'on' || vl === 'yes' || vl.includes('block') || vl.includes('report') || vl.includes('stolen') || vl.includes('lost');
+            const isGood = vl === 'false' || vl === 'off' || vl === 'no'  || vl.includes('clean');
+            if (kl.includes('fmi') || kl.includes('find my') || kl.includes('icloud') || kl.includes('activation lock')) {
+              return isBad  ? { ico:'🔒', txt:'BLOQUEADO', color:'#FF453A', bg:'rgba(255,69,58,0.15)' }
+                   : isGood ? { ico:'🔓', txt:'LIBRE',     color:'#30D158', bg:'rgba(48,209,88,0.15)' }
+                   : null;
+            }
+            if (kl.includes('blacklist') || kl.includes('stolen') || kl.includes('lost') || kl.includes('block')) {
+              return isGood ? { ico:'✅', txt:'LIMPIO',    color:'#30D158', bg:'rgba(48,209,88,0.15)' }
+                   : isBad  ? { ico:'🚨', txt:'REPORTADO', color:'#FF453A', bg:'rgba(255,69,58,0.15)' }
+                   : null;
+            }
+            if (kl.includes('mdm')) {
+              return isBad  ? { ico:'🏢', txt:'MDM ON',  color:'#FF9F0A', bg:'rgba(255,159,10,0.15)' }
+                   : isGood ? { ico:'✅', txt:'MDM OFF', color:'#30D158', bg:'rgba(48,209,88,0.15)' }
+                   : null;
+            }
+            if (kl.includes('sim') && (kl.includes('lock') || kl.includes('status'))) {
+              return isBad  ? { ico:'📵', txt:'LOCKED',   color:'#FF453A', bg:'rgba(255,69,58,0.15)' }
+                   : isGood ? { ico:'📶', txt:'UNLOCKED', color:'#30D158', bg:'rgba(48,209,88,0.15)' }
+                   : null;
+            }
+            return null;
+          }
+
+          function valColor(k, v) {
+            const b = statusBadge(k, v);
+            return b ? b.color : 'var(--text)';
+          }
+
+          // Parsear texto "Key: Value\n..." de Sickw
+          function parseLines(txt) {
+            if (!txt || typeof txt !== 'string') return [];
+            const clean = txt.replace(/<[^>]*>/g, '').replace(/&amp;/g,'&').trim();
+            // Si es todo en una línea (sin \n), intentar split por palabras clave
+            const lines = clean.includes('\n') ? clean.split('\n') : clean.split(/(?=\b(?:IMEI|Find My|Model|Color|Carrier|Blacklist|Serial|Warranty)\b)/);
+            return lines.map(l => l.trim()).filter(Boolean).map(line => {
+              const idx = line.indexOf(':');
+              if (idx > 0) return { k: line.substring(0, idx).trim(), v: line.substring(idx + 1).trim() };
+              return { k: '', v: line };
+            }).filter(r => r.v);
+          }
+
+          // Deduplicar entradas del object (fmiOn y fmiON son lo mismo)
+          function dedupeObject(obj) {
+            if (!obj) return [];
+            const seen = new Set();
+            return Object.entries(obj)
+              .filter(([k]) => k !== '__v' && k !== '_id')
+              .filter(([k, v]) => {
+                const norm = k.toLowerCase();
+                if (seen.has(norm)) return false;
+                seen.add(norm);
+                return true;
+              });
+          }
+
+          return (
           <div style={{ padding: '16px' }}>
             <div className="section-title">🔍 IMEI Checker</div>
 
@@ -1800,23 +1899,23 @@ export default function CorpPage() {
             {imeiConfig === null && (
               <div style={{ background: 'rgba(255,69,58,0.1)', border: '1px solid rgba(255,69,58,0.3)', borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>
                 <div style={{ fontWeight: 700, color: '#FF453A', marginBottom: 4 }}>⚠️ Sin acceso habilitado</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Pídele al SuperAdmin que configure tu acceso IMEI en su panel (🔑 APIs).</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Pídele al SuperAdmin que configure tu acceso IMEI.</div>
               </div>
             )}
 
-            {/* Tokens por proveedor */}
+            {/* Tokens por servidor (anónimo) */}
             {imeiConfig && (
               <div style={{ display: 'grid', gridTemplateColumns: `repeat(${imeiConfig.providers.length}, 1fr)`, gap: 8, marginBottom: 16 }}>
-                {imeiConfig.providers.map(p => (
+                {imeiConfig.providers.map((p, idx) => (
                   <div key={p.provider} style={{
-                    background: p.remaining > 0 ? (p.provider === 'imeicheck' ? 'rgba(48,209,88,0.08)' : 'rgba(10,132,255,0.08)') : 'rgba(255,69,58,0.08)',
-                    border: `1px solid ${p.remaining > 0 ? (p.provider === 'imeicheck' ? 'rgba(48,209,88,0.25)' : 'rgba(10,132,255,0.25)') : 'rgba(255,69,58,0.25)'}`,
+                    background: p.remaining > 0 ? 'rgba(10,132,255,0.08)' : 'rgba(255,69,58,0.08)',
+                    border: `1px solid ${p.remaining > 0 ? 'rgba(10,132,255,0.25)' : 'rgba(255,69,58,0.25)'}`,
                     borderRadius: 12, padding: '10px 12px',
                   }}>
                     <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
-                      {p.provider === 'imeicheck' ? '🟢 IMEICheck' : '🔵 Sickw'}
+                      🖥 Servidor {idx + 1}
                     </div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: p.remaining > 0 ? (p.provider === 'imeicheck' ? '#30D158' : '#4DA8FF') : '#FF453A' }}>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: p.remaining > 0 ? '#4DA8FF' : '#FF453A' }}>
                       {p.remaining}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>🪙 tokens · {p.used}/{p.limit}</div>
@@ -1827,7 +1926,6 @@ export default function CorpPage() {
 
             {/* Formulario */}
             <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-              {/* IMEI input */}
               <div className="form-group">
                 <label className="form-label">📱 IMEI / Serial Number</label>
                 <input
@@ -1843,50 +1941,42 @@ export default function CorpPage() {
                 </div>
               </div>
 
-              {/* Tipo de consulta — servicios de todos los proveedores, precio visible */}
+              {/* Tipo de consulta */}
               {imeiConfig && imeiConfig.services.length > 0 && (
                 <div className="form-group">
                   <label className="form-label">🛠 Tipo de consulta</label>
                   <select className="form-select" value={imeiService} onChange={e => {
                     setImeiService(e.target.value);
-                    // Si hay un único proveedor para este servicio, seleccionarlo automáticamente
-                    const svc = imeiConfig.services.find(s => s.id === e.target.value);
-                    if (svc && svc.providerKey) setImeiProvider(svc.providerKey);
+                    setImeiProvider('auto'); // reset a auto al cambiar servicio
                   }}>
                     {imeiConfig.services.map(s => (
                       <option key={`${s.providerKey}-${s.id}`} value={s.id}>
-                        [{s.providerKey === 'imeicheck' ? 'IC' : 'SW'}] {s.label}{s.price ? ` · $${s.price}` : ''}
+                        {s.label}{s.price ? ` · $${s.price}` : ''}
                       </option>
                     ))}
                   </select>
-                  {imeiConfig.services.length === 0 && (
-                    <div style={{ fontSize: 11, color: '#FF9F0A', marginTop: 4 }}>
-                      ⚠️ El SuperAdmin no ha configurado servicios.
-                    </div>
-                  )}
                 </div>
               )}
+              {imeiConfig && imeiConfig.services.length === 0 && (
+                <div style={{ fontSize: 11, color: '#FF9F0A', marginBottom: 12 }}>⚠️ El SuperAdmin no ha configurado servicios aún.</div>
+              )}
 
-              {/* Selector de proveedor — auto o manual */}
+              {/* Selector servidor — siempre Auto por defecto, nombres anónimos */}
               {imeiConfig && imeiConfig.providers.length > 1 && (
                 <div className="form-group">
-                  <label className="form-label">⚡ Proveedor</label>
+                  <label className="form-label">⚡ Servidor</label>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {[
                       { key: 'auto', label: '🤖 Auto (más barato)', color: '#FF9F0A' },
-                      ...imeiConfig.providers.map(p => ({
-                        key: p.provider,
-                        label: p.provider === 'imeicheck' ? '🟢 IMEICheck' : '🔵 Sickw',
-                        color: p.provider === 'imeicheck' ? '#30D158' : '#4DA8FF',
-                        disabled: p.remaining <= 0,
+                      ...imeiConfig.providers.map((p, idx) => ({
+                        key: p.provider, label: `🖥 Servidor ${idx + 1}`, color: '#4DA8FF', disabled: p.remaining <= 0,
                       })),
                     ].map(opt => (
-                      <button
-                        key={opt.key}
-                        type="button"
+                      <button key={opt.key} type="button"
                         onClick={() => !opt.disabled && setImeiProvider(opt.key)}
                         style={{
-                          padding: '6px 12px', borderRadius: 8, border: `1.5px solid ${imeiProvider === opt.key ? opt.color : 'var(--border)'}`,
+                          padding: '6px 12px', borderRadius: 8,
+                          border: `1.5px solid ${imeiProvider === opt.key ? opt.color : 'var(--border)'}`,
                           background: imeiProvider === opt.key ? `${opt.color}22` : 'transparent',
                           color: opt.disabled ? 'var(--text-muted)' : (imeiProvider === opt.key ? opt.color : 'var(--text)'),
                           fontSize: 12, fontWeight: 700, cursor: opt.disabled ? 'not-allowed' : 'pointer',
@@ -1904,185 +1994,186 @@ export default function CorpPage() {
                 style={{
                   width: '100%', padding: '14px', borderRadius: 14, border: 'none',
                   background: (imeiLoading || !imeiConfig || (imeiConfig?.totalRemaining || 0) <= 0)
-                    ? 'var(--surface)'
-                    : 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+                    ? 'var(--surface)' : 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
                   color: '#fff', fontSize: 16, fontWeight: 700,
                   cursor: (imeiLoading || !imeiConfig || (imeiConfig?.totalRemaining || 0) <= 0) ? 'not-allowed' : 'pointer',
                   boxShadow: (imeiLoading || !imeiConfig) ? 'none' : '0 4px 20px rgba(10,132,255,0.35)',
                   opacity: (imeiConfig?.totalRemaining || 0) <= 0 ? 0.5 : 1,
                 }}>
-                {imeiLoading ? '⏳ Consultando...' : (imeiConfig?.totalRemaining || 0) <= 0 ? '🚫 Sin tokens' : '🔍 Verificar IMEI (-1 🪙)'}
+                {imeiLoading ? '⏳ Consultando...' : (imeiConfig?.totalRemaining || 0) <= 0 ? '🚫 Sin tokens' : '🔍 Verificar IMEI · 1 🪙'}
               </button>
             </div>
 
-            {/* Resultado */}
+            {/* ── RESULTADO ── */}
             {imeiResult && (() => {
-              const isErr = !!imeiResult.error;
-              const usedProvider = imeiResult._provider;
-
-              // Parsear texto "Key: Value\n..." (Sickw)
-              function parseResultLines(txt) {
-                if (!txt || typeof txt !== 'string') return [];
-                // Limpiar tags HTML si los hay (IMEICheck puede devolver HTML en el result)
-                const clean = txt.replace(/<[^>]*>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
-                return clean.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
-                  const idx = line.indexOf(':');
-                  if (idx > 0) return { k: line.substring(0, idx).trim(), v: line.substring(idx + 1).trim() };
-                  return { k: '', v: line };
-                });
-              }
-
-              // Color por tipo de campo
-              function valColor(k, v) {
-                const kl = (k || '').toLowerCase(); const vl = (v || '').toLowerCase();
-                if (kl.includes('blacklist') || kl.includes('lost') || kl.includes('stolen') || kl.includes('block'))
-                  return vl.includes('clean') || vl === 'no' || vl === 'false' ? '#30D158' : '#FF453A';
-                if (kl.includes('find my') || kl.includes('fmi') || kl.includes('fmion') || kl.includes('activation lock') || kl.includes('icloud'))
-                  return (vl === 'off' || vl === 'no' || vl === 'false') ? '#30D158' : (vl === 'on' || vl === 'yes' || vl === 'true') ? '#FF453A' : 'var(--text)';
-                if (kl.includes('mdm'))
-                  return (vl === 'off' || vl === 'no' || vl === 'false') ? '#30D158' : '#FF9F0A';
-                return 'var(--text)';
-              }
-
-              // IMEICheck devuelve `object` con datos estructurados cuando OBJECT=yes
+              const isErr   = !!imeiResult.error;
               const objData = imeiResult.object;
-              const hasObject = objData && typeof objData === 'object' && Object.keys(objData).length > 0;
-
-              // Sickw devuelve result como string de texto
+              const hasObj  = objData && typeof objData === 'object' && Object.keys(objData).length > 0;
               const resultTxt = typeof imeiResult.result === 'string' ? imeiResult.result : null;
-              const lines = parseResultLines(resultTxt);
+              const lines = parseLines(resultTxt);
+              const entries = hasObj ? dedupeObject(objData) : [];
+
+              // Extraer modelo para el header visual
+              const modelVal = hasObj
+                ? (objData.model || objData.Model || '')
+                : (lines.find(l => l.k.toLowerCase() === 'model')?.v || '');
+
+              // Extraer badges de status
+              const statusEntries = hasObj
+                ? entries.filter(([k, v]) => statusBadge(k, String(v)))
+                : lines.filter(r => statusBadge(r.k, r.v));
+
+              // Resto de campos (no status) para la tabla
+              const detailEntries = hasObj
+                ? entries.filter(([k, v]) => !statusBadge(k, String(v)))
+                : lines.filter(r => !statusBadge(r.k, r.v));
 
               return (
-                <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-                  {/* Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{isErr ? '❌ Error' : '✅ Resultado'}</div>
-                    {usedProvider && (
-                      <span style={{
-                        padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700,
-                        background: usedProvider === 'imeicheck' ? 'rgba(48,209,88,0.15)' : 'rgba(10,132,255,0.15)',
-                        color: usedProvider === 'imeicheck' ? '#30D158' : '#4DA8FF',
-                      }}>
-                        {usedProvider === 'imeicheck' ? '🟢 IMEICheck' : '🔵 Sickw'}
-                      </span>
-                    )}
-                  </div>
-
+                <div style={{ marginBottom: 16 }}>
                   {isErr ? (
-                    <div style={{ background: 'rgba(255,69,58,0.08)', border: '1px solid rgba(255,69,58,0.2)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#FF6B6B', lineHeight: 1.6 }}>
-                      {imeiResult.error}
-                    </div>
-                  ) : hasObject ? (
-                    /* IMEICheck: datos estructurados del campo object{} */
-                    <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                      {Object.entries(objData).filter(([k]) => k !== '__v').map(([k, v], i) => {
-                        const vStr = String(v ?? '');
-                        return (
-                          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '9px 12px', background: i % 2 === 0 ? 'var(--surface)' : 'transparent' }}>
-                            <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, minWidth: 110, paddingRight: 8, textTransform: 'capitalize' }}>
-                              {k.replace(/([A-Z])/g, ' $1').trim()}
-                            </span>
-                            <span style={{ fontWeight: 700, fontSize: 13, textAlign: 'right', color: valColor(k, vStr), wordBreak: 'break-word', maxWidth: '60%' }}>
-                              {vStr}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      {/* También mostrar el result text si hay */}
-                      {resultTxt && lines.length > 0 && (
-                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)' }}>
-                          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, marginBottom: 4 }}>DETALLE COMPLETO</div>
-                          {lines.map((row, i) => (
-                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
-                              <span style={{ color: 'var(--text-muted)' }}>{row.k || '—'}</span>
-                              <span style={{ fontWeight: 600, color: valColor(row.k, row.v) }}>{row.v}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : lines.length > 0 ? (
-                    /* Sickw: texto Key: Value */
-                    <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                      {lines.map((row, i) => (
-                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '9px 12px', background: i % 2 === 0 ? 'var(--surface)' : 'transparent' }}>
-                          <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, minWidth: 110, paddingRight: 8 }}>{row.k || '—'}</span>
-                          <span style={{ fontWeight: 700, fontSize: 13, textAlign: 'right', color: valColor(row.k, row.v), wordBreak: 'break-word', maxWidth: '60%' }}>{row.v}</span>
-                        </div>
-                      ))}
+                    <div className="card" style={{ padding: 16, background: 'rgba(255,69,58,0.06)', border: '1px solid rgba(255,69,58,0.2)' }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#FF453A', marginBottom: 8 }}>❌ Error en la consulta</div>
+                      <div style={{ fontSize: 13, color: '#FF6B6B', lineHeight: 1.7 }}>{imeiResult.error}</div>
                     </div>
                   ) : (
-                    <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '12px 14px', fontFamily: 'monospace', fontSize: 11, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--text)' }}>
-                      {JSON.stringify(imeiResult, null, 2)}
-                    </div>
+                    <>
+                      {/* HEADER — dispositivo */}
+                      <div className="card" style={{ padding: '20px 18px', marginBottom: 10, background: 'linear-gradient(135deg, rgba(10,132,255,0.1), rgba(94,92,230,0.08))', border: '1px solid rgba(10,132,255,0.2)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                          <div style={{ fontSize: 52, lineHeight: 1, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }}>
+                            {deviceEmoji(modelVal)}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.2, marginBottom: 4 }}>
+                              {modelVal || 'Dispositivo'}
+                            </div>
+                            {imeiInput && (
+                              <div style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-muted)', letterSpacing: 1 }}>
+                                IMEI: {imeiInput}
+                              </div>
+                            )}
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                              🖥 {provLabel(imeiResult._provider)} · ✅ Verificado
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BADGES — FMI, Blacklist, MDM, SIM */}
+                      {statusEntries.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(statusEntries.length, 2)}, 1fr)`, gap: 8, marginBottom: 10 }}>
+                          {(hasObj ? statusEntries : statusEntries).map((entry, i) => {
+                            const k = hasObj ? entry[0] : entry.k;
+                            const v = hasObj ? String(entry[1]) : entry.v;
+                            const badge = statusBadge(k, v);
+                            if (!badge) return null;
+                            return (
+                              <div key={i} style={{ background: badge.bg, border: `1px solid ${badge.color}44`, borderRadius: 14, padding: '14px 16px', textAlign: 'center' }}>
+                                <div style={{ fontSize: 28, marginBottom: 4 }}>{badge.ico}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
+                                  {fieldLabel(k)}
+                                </div>
+                                <div style={{ fontSize: 16, fontWeight: 900, color: badge.color }}>{badge.txt}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* TABLA DETALLES */}
+                      {detailEntries.length > 0 && (
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                          {(hasObj ? detailEntries : detailEntries).map((entry, i) => {
+                            const k = hasObj ? entry[0] : entry.k;
+                            const v = hasObj ? String(entry[1] ?? '') : entry.v;
+                            if (!k && !v) return null;
+                            return (
+                              <div key={i} style={{
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                padding: '10px 14px',
+                                background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
+                                borderBottom: i < detailEntries.length - 1 ? '1px solid var(--border)' : 'none',
+                              }}>
+                                <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, minWidth: 120 }}>
+                                  {k ? fieldLabel(k) : ''}
+                                </span>
+                                <span style={{ fontWeight: 700, fontSize: 13, textAlign: 'right', color: valColor(k, v), wordBreak: 'break-word', maxWidth: '58%' }}>
+                                  {v}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               );
             })()}
 
-            {/* Historial */}
+            {/* HISTORIAL */}
             {imeiHistory.length > 0 && (
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: 'var(--text-muted)' }}>📋 Últimas consultas</div>
-                {imeiHistory.map(h => (
-                  <div key={h.id} className="card" style={{ padding: '12px 14px', marginBottom: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14, letterSpacing: 1 }}>{h.imei}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                          {h.service_name} · {new Date(h.created_at).toLocaleDateString('es-PE')} {new Date(h.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                {imeiHistory.map(h => {
+                  const raw    = h.result?.result || h.raw_response || '';
+                  const isHtml = typeof raw === 'string' && (raw.trim().startsWith('<!') || raw.trim().toLowerCase().startsWith('<html'));
+                  const obj    = h.result?.object;
+                  // Extraer modelo del historial
+                  const hModel = obj?.model || obj?.Model || parseLines(typeof h.result?.result === 'string' ? h.result.result : '').find(l => l.k.toLowerCase() === 'model')?.v || '';
+                  return (
+                    <div key={h.id} className="card" style={{ padding: '12px 14px', marginBottom: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ fontSize: 28 }}>{deviceEmoji(hModel)}</div>
+                          <div>
+                            <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, letterSpacing: 1 }}>{h.imei}</div>
+                            {hModel && <div style={{ fontSize: 12, fontWeight: 700, marginTop: 1 }}>{hModel}</div>}
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                              {/* Ocultar nombre real de proveedor del historial */}
+                              {(h.service_name || '').replace(/\[IMEICHECK\]/gi,'[S1]').replace(/\[SICKW\]/gi,'[S2]')} · {new Date(h.created_at).toLocaleDateString('es-PE')} {new Date(h.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
                         </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: h.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)', color: h.status === 'success' ? '#30D158' : '#FF453A' }}>
+                          {h.status === 'success' ? '✅' : '❌'}
+                        </span>
                       </div>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: h.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)', color: h.status === 'success' ? '#30D158' : '#FF453A' }}>
-                        {h.status === 'success' ? '✅' : '❌'}
-                      </span>
+
+                      {/* Snippet */}
+                      {isHtml ? (
+                        <div style={{ marginTop: 6, fontSize: 11, color: '#FF9F0A' }}>⚠️ Error de API — intento previo inválido</div>
+                      ) : obj && typeof obj === 'object' ? (
+                        <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {dedupeObject(obj).filter(([k,v]) => statusBadge(k,String(v))).slice(0,3).map(([k,v]) => {
+                            const b = statusBadge(k, String(v));
+                            return b ? (
+                              <span key={k} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: b.bg, color: b.color }}>
+                                {b.ico} {b.txt}
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      ) : typeof h.result?.result === 'string' ? (
+                        <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {parseLines(h.result.result).filter(r => statusBadge(r.k,r.v)).slice(0,3).map((r,i) => {
+                            const b = statusBadge(r.k, r.v);
+                            return b ? (
+                              <span key={i} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: b.bg, color: b.color }}>
+                                {b.ico} {b.txt}
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      ) : null}
                     </div>
-                    {/* Snippet resultado */}
-                    {(() => {
-                      const raw = h.result?.result || h.raw_response || '';
-                      const isHtml = typeof raw === 'string' && (raw.trim().startsWith('<!') || raw.trim().toLowerCase().startsWith('<html'));
-                      if (isHtml) return <div style={{ marginTop: 6, fontSize: 11, color: '#FF9F0A' }}>⚠️ API devolvió HTML — key inválida en esa consulta</div>;
-                      // IMEICheck object
-                      const obj = h.result?.object;
-                      if (obj && typeof obj === 'object') {
-                        const entries = Object.entries(obj).filter(([k]) => k !== '__v').slice(0, 3);
-                        return (
-                          <div style={{ marginTop: 8 }}>
-                            {entries.map(([k, v], i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
-                                <span style={{ color: 'var(--text-muted)', textTransform: 'capitalize' }}>{k.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                <span style={{ fontWeight: 600 }}>{String(v)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      }
-                      // Sickw text
-                      if (h.result?.result && typeof h.result.result === 'string') {
-                        return (
-                          <div style={{ marginTop: 8 }}>
-                            {h.result.result.split('\n').slice(0, 3).filter(Boolean).map((line, li) => {
-                              const idx = line.indexOf(':');
-                              const k = idx > 0 ? line.substring(0, idx).trim() : '';
-                              const v = idx > 0 ? line.substring(idx + 1).trim() : line;
-                              return (
-                                <div key={li} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
-                                  <span style={{ color: 'var(--text-muted)' }}>{k}</span>
-                                  <span style={{ fontWeight: 600 }}>{v}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
       </div>{/* end .content */}
 
