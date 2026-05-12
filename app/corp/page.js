@@ -1854,70 +1854,81 @@ export default function CorpPage() {
             </div>
 
             {/* Resultado */}
-            {imeiResult && (
-              <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>
-                  {imeiResult.error ? '❌ Error' : '✅ Resultado'}
-                </div>
+            {imeiResult && (() => {
+              const isErr = !!imeiResult.error;
 
-                {imeiResult.error ? (
-                  <div style={{ color: '#FF453A', fontSize: 13 }}>{imeiResult.error}</div>
-                ) : (
-                  <div>
-                    {/* Mostrar result como texto formateado */}
-                    {typeof imeiResult.result === 'string' && (
-                      <div style={{
-                        background: 'var(--surface)', borderRadius: 10, padding: '12px 14px',
-                        fontFamily: 'monospace', fontSize: 12, lineHeight: 1.7,
-                        whiteSpace: 'pre-wrap', color: 'var(--text)',
-                      }}>
-                        {imeiResult.result}
-                      </div>
-                    )}
+              // Parsear el string "Key: Value\nKey: Value\n..." de Sickw
+              function parseResultLines(txt) {
+                if (!txt || typeof txt !== 'string') return [];
+                return txt.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+                  const idx = line.indexOf(':');
+                  if (idx > 0) return { k: line.substring(0, idx).trim(), v: line.substring(idx + 1).trim() };
+                  return { k: '', v: line };
+                });
+              }
 
-                    {/* Si viene como objeto JSON */}
-                    {typeof imeiResult === 'object' && !imeiResult.result && (
-                      <div>
-                        {Object.entries(imeiResult).map(([k, v]) => (
-                          <div key={k} style={{
-                            display: 'flex', justifyContent: 'space-between', padding: '7px 0',
-                            borderBottom: '1px solid var(--border)', fontSize: 13,
-                          }}>
-                            <span style={{ color: 'var(--text-muted)', fontWeight: 600, textTransform: 'capitalize' }}>
-                              {k.replace(/_/g, ' ')}
-                            </span>
-                            <span style={{ fontWeight: 700, maxWidth: '55%', textAlign: 'right' }}>
-                              {String(v)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+              // Colorear valores clave
+              function valColor(k, v) {
+                const kl = k.toLowerCase(); const vl = (v || '').toLowerCase();
+                if (kl.includes('blacklist') || kl.includes('lost') || kl.includes('stolen')) {
+                  return vl.includes('clean') || vl.includes('no') ? '#30D158' : '#FF453A';
+                }
+                if (kl.includes('find my') || kl.includes('fmi') || kl.includes('activation lock')) {
+                  return vl === 'off' || vl === 'no' ? '#30D158' : vl === 'on' || vl === 'yes' ? '#FF453A' : 'var(--text)';
+                }
+                if (kl.includes('status') || kl.includes('state')) {
+                  return vl.includes('activ') ? '#30D158' : vl.includes('block') || vl.includes('lost') ? '#FF453A' : 'var(--text)';
+                }
+                return 'var(--text)';
+              }
 
-                    {/* Status badge de Sickw */}
-                    {imeiResult.status !== undefined && (
-                      <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                        <span style={{
-                          padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                          background: imeiResult.status === '1' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)',
-                          color: imeiResult.status === '1' ? '#30D158' : '#FF453A',
-                        }}>
-                          {imeiResult.status === '1' ? 'Consulta exitosa' : 'Sin datos / Error Sickw'}
-                        </span>
-                        {imeiResult.service && (
-                          <span style={{
-                            padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-                            background: 'rgba(10,132,255,0.15)', color: '#4DA8FF',
-                          }}>
-                            {imeiResult.service}
-                          </span>
-                        )}
-                      </div>
+              const lines = parseResultLines(imeiResult.result);
+
+              return (
+                <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>
+                      {isErr ? '❌ Error' : '✅ Resultado'}
+                    </div>
+                    {!isErr && imeiResult.service && (
+                      <span style={{ padding: '3px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, background: 'rgba(10,132,255,0.15)', color: '#4DA8FF' }}>
+                        {imeiResult.service}
+                      </span>
                     )}
                   </div>
-                )}
-              </div>
-            )}
+
+                  {isErr ? (
+                    <div style={{ background: 'rgba(255,69,58,0.08)', border: '1px solid rgba(255,69,58,0.2)', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#FF6B6B', lineHeight: 1.6 }}>
+                      {imeiResult.error}
+                    </div>
+                  ) : lines.length > 0 ? (
+                    /* Tabla key-value parseada */
+                    <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                      {lines.map((row, i) => (
+                        <div key={i} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                          padding: '9px 12px',
+                          background: i % 2 === 0 ? 'var(--surface)' : 'transparent',
+                        }}>
+                          <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, minWidth: 110, paddingRight: 8 }}>
+                            {row.k || '—'}
+                          </span>
+                          <span style={{ fontWeight: 700, fontSize: 13, textAlign: 'right', color: valColor(row.k, row.v), wordBreak: 'break-word', maxWidth: '60%' }}>
+                            {row.v}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    /* Fallback: raw text */
+                    <div style={{ background: 'var(--surface)', borderRadius: 10, padding: '12px 14px', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre-wrap', color: 'var(--text)' }}>
+                      {JSON.stringify(imeiResult, null, 2)}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Historial */}
             {imeiHistory.length > 0 && (
@@ -1944,15 +1955,20 @@ export default function CorpPage() {
                         {h.status === 'success' ? '✅' : '❌'}
                       </span>
                     </div>
-                    {/* Snippet del resultado */}
+                    {/* Snippet del resultado — primeras 3 líneas */}
                     {h.result?.result && typeof h.result.result === 'string' && (
-                      <div style={{
-                        marginTop: 8, padding: '8px 10px', background: 'var(--surface)',
-                        borderRadius: 8, fontFamily: 'monospace', fontSize: 11,
-                        color: 'var(--text-muted)', overflow: 'hidden',
-                        maxHeight: 60, textOverflow: 'ellipsis',
-                      }}>
-                        {h.result.result.substring(0, 200)}
+                      <div style={{ marginTop: 8 }}>
+                        {h.result.result.split('\n').slice(0, 3).filter(Boolean).map((line, li) => {
+                          const idx = line.indexOf(':');
+                          const k = idx > 0 ? line.substring(0, idx).trim() : '';
+                          const v = idx > 0 ? line.substring(idx + 1).trim() : line;
+                          return (
+                            <div key={li} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
+                              <span style={{ color: 'var(--text-muted)' }}>{k}</span>
+                              <span style={{ fontWeight: 600 }}>{v}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

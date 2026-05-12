@@ -55,7 +55,21 @@ export async function POST(req) {
     try {
       const res = await fetch(apiUrl, { cache: 'no-store' });
       rawResp   = await res.text();
-      try { apiData = JSON.parse(rawResp); } catch { apiData = { result: rawResp }; }
+
+      // Detectar si Sickw devolvió HTML (API key inválida o endpoint incorrecto)
+      const trimmed = rawResp.trim();
+      if (trimmed.startsWith('<!') || trimmed.toLowerCase().startsWith('<html')) {
+        status   = 'error';
+        errorMsg = 'La API devolvió HTML en lugar de datos. Revisa: (1) que la API key sea correcta, (2) que el endpoint sea exactamente https://sickw.com/api.php, (3) que el ID de servicio exista en tu plan.';
+        apiData  = null;
+      } else {
+        try { apiData = JSON.parse(rawResp); } catch { apiData = { result: rawResp }; }
+        // Si Sickw devuelve status != 1, marcarlo como error descriptivo
+        if (apiData?.status && apiData.status !== '1' && apiData.status !== 1) {
+          status   = 'error';
+          errorMsg = apiData?.result || apiData?.message || `Error Sickw status: ${apiData.status}`;
+        }
+      }
     } catch (e) {
       status   = 'error';
       errorMsg = 'No se pudo conectar con la API: ' + e.message;
