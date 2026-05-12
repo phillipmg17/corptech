@@ -1956,21 +1956,35 @@ export default function CorpPage() {
                       </span>
                     </div>
                     {/* Snippet del resultado — primeras 3 líneas */}
-                    {h.result?.result && typeof h.result.result === 'string' && (
-                      <div style={{ marginTop: 8 }}>
-                        {h.result.result.split('\n').slice(0, 3).filter(Boolean).map((line, li) => {
-                          const idx = line.indexOf(':');
-                          const k = idx > 0 ? line.substring(0, idx).trim() : '';
-                          const v = idx > 0 ? line.substring(idx + 1).trim() : line;
-                          return (
-                            <div key={li} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
-                              <span style={{ color: 'var(--text-muted)' }}>{k}</span>
-                              <span style={{ fontWeight: 600 }}>{v}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                    {(() => {
+                      const raw = h.result?.result || h.raw_response || '';
+                      const isHtml = typeof raw === 'string' && (raw.trim().startsWith('<!') || raw.trim().toLowerCase().startsWith('<html'));
+                      if (isHtml) {
+                        return (
+                          <div style={{ marginTop: 6, fontSize: 11, color: '#FF9F0A' }}>
+                            ⚠️ API devolvió HTML — key inválida en esa consulta
+                          </div>
+                        );
+                      }
+                      if (h.result?.result && typeof h.result.result === 'string') {
+                        return (
+                          <div style={{ marginTop: 8 }}>
+                            {h.result.result.split('\n').slice(0, 3).filter(Boolean).map((line, li) => {
+                              const idx = line.indexOf(':');
+                              const k = idx > 0 ? line.substring(0, idx).trim() : '';
+                              const v = idx > 0 ? line.substring(idx + 1).trim() : line;
+                              return (
+                                <div key={li} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
+                                  <span style={{ color: 'var(--text-muted)' }}>{k}</span>
+                                  <span style={{ fontWeight: 600 }}>{v}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 ))}
               </div>
