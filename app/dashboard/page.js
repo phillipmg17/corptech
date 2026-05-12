@@ -45,7 +45,7 @@ export default function DashboardPage() {
 
   async function init() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { router.replace('/'); return; }
+    if (!session) { router.replace('/login'); return; }
     const uid = session.user.id;
 
     const { data: prof } = await supabase.from('users').select('*, organizations(name)').eq('id', uid).single();
@@ -137,7 +137,7 @@ export default function DashboardPage() {
 
   async function doLogout() {
     await supabase.auth.signOut();
-    router.replace('/');
+    router.replace('/login');
   }
 
   function showToast(msg, type = 'ok') {

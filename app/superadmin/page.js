@@ -67,7 +67,7 @@ export default function SuperadminPage() {
 
   async function init() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { router.replace('/'); return; }
+    if (!session) { router.replace('/login'); return; }
     const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', session.user.id).single();
     if (roleRow?.role !== 'superadmin') { router.replace('/dashboard'); return; }
     const { data: prof } = await supabase.from('users').select('full_name').eq('id', session.user.id).single();
@@ -209,7 +209,7 @@ export default function SuperadminPage() {
 
   async function doLogout() {
     await supabase.auth.signOut();
-    router.replace('/');
+    router.replace('/login');
   }
 
   const panelCodes = [...new Set(features.map(f => f.panel || f.code?.split('-')[0]))].filter(Boolean);

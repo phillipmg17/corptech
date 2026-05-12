@@ -44,7 +44,7 @@ export default function PosPage() {
 
   async function init() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { router.replace('/'); return; }
+    if (!session) { router.replace('/login'); return; }
     const uid = session.user.id;
     const { data: prof } = await supabase.from('users').select('org_id, full_name').eq('id', uid).single();
     const oid = prof?.org_id;
