@@ -58,6 +58,11 @@ export default function DashboardPage() {
     setOrgId(oid);
     setOrgName(prof?.organizations?.name || 'Corp Tech');
 
+    // Auto-redirect al panel correspondiente por rol
+    if (r === 'corp') { router.replace('/corp'); return; }
+    if (r === 'gerente' || r === 'store_manager') { router.replace('/store'); return; }
+    // superadmin y vendedor se quedan en dashboard
+
     // Si es gerente de tienda y no ha hecho onboarding → redirigir a setup
     if (r === 'store_manager' || r === 'admin_corp') {
       const { data: stSettings } = await supabase.from('org_settings').select('onboarding_done').eq('org_id', oid).single();

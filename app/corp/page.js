@@ -86,7 +86,7 @@ export default function CorpPage() {
     const uid = session.user.id;
     const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
     const r = roleRow?.role;
-    if (r !== 'corp' && r !== 'superadmin') { router.replace('/dashboard'); return; }
+    if (r !== 'corp' && r !== 'superadmin' && r !== 'admin_corp') { router.replace('/dashboard'); return; }
     const { data: prof } = await supabase.from('users').select('full_name').eq('id', uid).single();
     setMe({ id: uid, name: prof?.full_name, role: r });
     await loadKpis();

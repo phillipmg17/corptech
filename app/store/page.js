@@ -95,7 +95,7 @@ export default function StorePage() {
     const { data: prof } = await supabase.from('users').select('org_id, full_name, organizations(name)').eq('id', uid).single();
     const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
     const r = roleRow?.role;
-    if (!r || (r !== 'gerente' && r !== 'vendedor' && r !== 'superadmin' && r !== 'corp')) {
+    if (!r || (r !== 'gerente' && r !== 'vendedor' && r !== 'superadmin' && r !== 'corp' && r !== 'store_manager')) {
       router.replace('/dashboard'); return;
     }
     setMe({ id: uid, name: prof?.full_name, role: r });
