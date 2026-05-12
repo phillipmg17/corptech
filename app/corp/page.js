@@ -113,7 +113,7 @@ export default function CorpPage() {
   async function loadGlobalStock() {
     let q = supabase
       .from('stock_items')
-      .select('id, serial_number, imei, status, sale_price, emoji, owner_org_id, product_id, products(name)')
+      .select('id, serial_number, imei, status, sale_price, emoji, owner_org_id, product_id, products(name), imei_check_id, model_number, color_info, storage_info')
       .order('created_at', { ascending: false })
       .limit(100);
     if (storeFilter !== 'all') q = q.eq('owner_org_id', storeFilter);
@@ -699,12 +699,69 @@ export default function CorpPage() {
       sale_price:    parseFloat(form.sale_price) || 0,
       emoji:         form.emoji || '📦',
       status:        'available',
+      imei_check_id: form.imei_check_id || null,
+      model_number:  form.model_number  || null,
+      color_info:    form.color_info    || form.color   || null,
+      storage_info:  form.storage_info  || form.storage || null,
     });
     if (error) { showToast('Error: ' + error.message, 'err'); return; }
     showToast('Stock agregado ✓');
     setModal(null); setForm({});
     loadGlobalStock();
     loadKpis();
+  }
+
+  /* ── EXTRAER INFO DEL IMEI RESULT ── */
+  function extractDeviceInfo(result, checkId) {
+    if (!result) return {};
+    const obj = result.object;
+    const txt = typeof result.result === 'string' ? result.result : '';
+
+    // Parsear texto plano (Sickw)
+    function parseLines(t) {
+      if (!t) return [];
+      return t.replace(/<[^>]*>/g,'').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+        const idx = l.indexOf(':');
+        return idx > 0 ? { k: l.substring(0,idx).trim(), v: l.substring(idx+1).trim() } : { k:'', v:l };
+      });
+    }
+    const lines = parseLines(txt);
+    const getLine = (keys) => {
+      for (const key of keys) {
+        const f = lines.find(l => l.k.toLowerCase().includes(key));
+        if (f?.v) return f.v;
+      }
+      return '';
+    };
+
+    // Modelo completo ej: "iPhone 17 Pro Max (A3526) [Global]"
+    const fullModel = (obj?.model || obj?.Model || getLine(['model']) || '').trim();
+
+    // Extraer número de modelo A####
+    const modelNumMatch = fullModel.match(/\(?(A\d{4,5})\)?/);
+    const modelNumber   = modelNumMatch ? modelNumMatch[1] : '';
+
+    // Nombre limpio: quitar (A####), [Region], paréntesis vacíos
+    const deviceName = fullModel
+      .replace(/\([A-Z]\d{4,5}\)/g, '')
+      .replace(/\[.*?\]/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    // Color
+    const color = (obj?.color || obj?.Color || getLine(['color']) || '').trim();
+
+    // Almacenamiento
+    const storage = (obj?.capacity || obj?.storage || obj?.Capacity || getLine(['capac','storage','gb','memory']) || '').trim();
+
+    // IMEI
+    const imei = (obj?.imei || obj?.IMEI || getLine(['imei']) || '').trim();
+
+    // Descripción compuesta
+    const parts = [modelNumber, storage, color].filter(Boolean);
+    const description = parts.join(' · ');
+
+    return { deviceName, modelNumber, color, storage, imei, description, fullModel, imei_check_id: checkId };
   }
 
   /* ── IMEI CHECKER ── */
@@ -928,8 +985,22 @@ export default function CorpPage() {
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                       <span style={{ fontSize: 26 }}>{s.emoji || '📦'}</span>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{s.products?.name || 'Producto'}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>{s.imei || s.serial_number || 'Sin serial'}</div>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>
+                          {s.products?.name || 'Producto'}
+                          {s.imei_check_id && (
+                            <span
+                              title="Ver check IMEI"
+                              style={{ marginLeft: 6, fontSize: 11, background: 'rgba(10,132,255,0.15)', color: '#0A84FF', borderRadius: 6, padding: '1px 6px', fontWeight: 700, cursor: 'pointer' }}
+                              onClick={() => switchTab('imei')}
+                            >🔍 IMEI</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                          {s.imei || s.serial_number || 'Sin serial'}
+                          {s.model_number && <span style={{ marginLeft: 5, color: '#0A84FF', fontWeight: 700 }}>{s.model_number}</span>}
+                          {s.storage_info && <span style={{ marginLeft: 4, color: '#FF9F0A', fontWeight: 700 }}>{s.storage_info}</span>}
+                          {s.color_info   && <span style={{ marginLeft: 4, color: '#BF5AF2' }}>{s.color_info}</span>}
+                        </div>
                         <div style={{ fontSize: 11, color: 'var(--text3)' }}>{getOrgIco(s.owner_org_id)} {getOrgName(s.owner_org_id)}</div>
                       </div>
                     </div>
@@ -2038,24 +2109,49 @@ export default function CorpPage() {
                   ) : (
                     <>
                       {/* HEADER — dispositivo */}
-                      <div className="card" style={{ padding: '20px 18px', marginBottom: 10, background: 'linear-gradient(135deg, rgba(10,132,255,0.1), rgba(94,92,230,0.08))', border: '1px solid rgba(10,132,255,0.2)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                          <div style={{ fontSize: 52, lineHeight: 1, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }}>
+                      <div className="card" style={{ padding: '18px', marginBottom: 10, background: 'linear-gradient(135deg, rgba(10,132,255,0.1), rgba(94,92,230,0.08))', border: '1px solid rgba(10,132,255,0.2)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                          <div style={{ fontSize: 50, lineHeight: 1, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }}>
                             {deviceEmoji(modelVal)}
                           </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.2, marginBottom: 4 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 17, fontWeight: 900, lineHeight: 1.2, marginBottom: 3 }}>
                               {modelVal || 'Dispositivo'}
                             </div>
                             {imeiInput && (
-                              <div style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-muted)', letterSpacing: 1 }}>
+                              <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1 }}>
                                 IMEI: {imeiInput}
                               </div>
                             )}
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
                               🖥 {provLabel(imeiResult._provider)} · ✅ Verificado
                             </div>
                           </div>
+                          {/* Botón registrar equipo */}
+                          <button
+                            onClick={() => {
+                              const info = extractDeviceInfo(imeiResult, imeiResult._check_id);
+                              setForm({
+                                ...info,
+                                imei:         imeiInput || info.imei,
+                                emoji:        '📱',
+                                owner_org_id: CORP_ID,
+                                sale_price:   '',
+                                // nombre sugerido para buscar producto
+                                _suggested_name: info.deviceName,
+                              });
+                              setModal('imei-to-stock');
+                            }}
+                            style={{
+                              flexShrink: 0,
+                              padding: '10px 14px', borderRadius: 12, border: 'none',
+                              background: 'linear-gradient(135deg,#30D158,#34C759)',
+                              color: '#fff', fontSize: 12, fontWeight: 800,
+                              cursor: 'pointer', textAlign: 'center', lineHeight: 1.3,
+                              boxShadow: '0 4px 14px rgba(48,209,88,0.4)',
+                            }}>
+                            📲<br/>Registrar<br/>Equipo
+                          </button>
                         </div>
                       </div>
 
@@ -2111,64 +2207,88 @@ export default function CorpPage() {
               );
             })()}
 
-            {/* HISTORIAL */}
+            {/* HISTORIAL — 2 columnas para aprovechar el ancho */}
             {imeiHistory.length > 0 && (
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: 'var(--text-muted)' }}>📋 Últimas consultas</div>
-                {imeiHistory.map(h => {
-                  const raw    = h.result?.result || h.raw_response || '';
-                  const isHtml = typeof raw === 'string' && (raw.trim().startsWith('<!') || raw.trim().toLowerCase().startsWith('<html'));
-                  const obj    = h.result?.object;
-                  // Extraer modelo del historial
-                  const hModel = obj?.model || obj?.Model || parseLines(typeof h.result?.result === 'string' ? h.result.result : '').find(l => l.k.toLowerCase() === 'model')?.v || '';
-                  return (
-                    <div key={h.id} className="card" style={{ padding: '12px 14px', marginBottom: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ fontSize: 28 }}>{deviceEmoji(hModel)}</div>
-                          <div>
-                            <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13, letterSpacing: 1 }}>{h.imei}</div>
-                            {hModel && <div style={{ fontSize: 12, fontWeight: 700, marginTop: 1 }}>{hModel}</div>}
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                              {/* Ocultar nombre real de proveedor del historial */}
-                              {(h.service_name || '').replace(/\[IMEICHECK\]/gi,'[S1]').replace(/\[SICKW\]/gi,'[S2]')} · {new Date(h.created_at).toLocaleDateString('es-PE')} {new Date(h.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
+                  {imeiHistory.map(h => {
+                    const raw    = h.result?.result || h.raw_response || '';
+                    const isHtml = typeof raw === 'string' && (raw.trim().startsWith('<!') || raw.trim().toLowerCase().startsWith('<html'));
+                    const obj    = h.result?.object;
+                    const hModel = obj?.model || obj?.Model || parseLines(typeof h.result?.result === 'string' ? h.result.result : '').find(l => l.k.toLowerCase() === 'model')?.v || '';
+                    // Extraer modelo corto y número
+                    const hModelNum = hModel.match(/A\d{4,5}/)?.[0] || '';
+                    const hModelShort = hModel.replace(/\([A-Z]\d{4,5}\)/g,'').replace(/\[.*?\]/g,'').trim();
+                    // Extraer color y storage del object
+                    const hColor   = obj?.color   || obj?.Color   || '';
+                    const hStorage = obj?.capacity || obj?.storage || '';
+                    // Badges de estado
+                    const hBadges = obj && typeof obj === 'object'
+                      ? dedupeObject(obj).filter(([k,v]) => statusBadge(k,String(v))).slice(0,2).map(([k,v]) => ({ k, v: String(v), b: statusBadge(k,String(v)) }))
+                      : parseLines(h.result?.result || '').filter(r => statusBadge(r.k,r.v)).slice(0,2).map(r => ({ k: r.k, v: r.v, b: statusBadge(r.k,r.v) }));
+
+                    return (
+                      <div key={h.id} className="card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {/* Row 1: emoji + info + status */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                          <div style={{ fontSize: 32, lineHeight: 1 }}>{deviceEmoji(hModel)}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, letterSpacing: 1, color: 'var(--text-muted)' }}>{h.imei}</div>
+                            {hModelShort && <div style={{ fontSize: 13, fontWeight: 800, marginTop: 1, lineHeight: 1.2 }}>{hModelShort}</div>}
+                            {/* Detalles: modelo A####, color, GB */}
+                            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 4 }}>
+                              {hModelNum && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 5, background: 'rgba(10,132,255,0.12)', color: '#4DA8FF', fontWeight: 700 }}>{hModelNum}</span>}
+                              {hStorage  && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 5, background: 'rgba(255,159,10,0.12)', color: '#FF9F0A', fontWeight: 700 }}>{hStorage}</span>}
+                              {hColor    && <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 5, background: 'rgba(94,92,230,0.12)', color: '#A78BFA', fontWeight: 700 }}>{hColor}</span>}
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
+                              {(h.service_name || '').replace(/\[IMEICHECK\]/gi,'[S1]').replace(/\[SICKW\]/gi,'[S2]')} · {new Date(h.created_at).toLocaleDateString('es-PE')} {new Date(h.created_at).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' })}
                             </div>
                           </div>
+                          <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: h.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)', color: h.status === 'success' ? '#30D158' : '#FF453A' }}>
+                            {h.status === 'success' ? '✅' : '❌'}
+                          </span>
                         </div>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: h.status === 'success' ? 'rgba(48,209,88,0.15)' : 'rgba(255,69,58,0.15)', color: h.status === 'success' ? '#30D158' : '#FF453A' }}>
-                          {h.status === 'success' ? '✅' : '❌'}
-                        </span>
-                      </div>
 
-                      {/* Snippet */}
-                      {isHtml ? (
-                        <div style={{ marginTop: 6, fontSize: 11, color: '#FF9F0A' }}>⚠️ Error de API — intento previo inválido</div>
-                      ) : obj && typeof obj === 'object' ? (
-                        <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {dedupeObject(obj).filter(([k,v]) => statusBadge(k,String(v))).slice(0,3).map(([k,v]) => {
-                            const b = statusBadge(k, String(v));
-                            return b ? (
-                              <span key={k} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: b.bg, color: b.color }}>
-                                {b.ico} {b.txt}
-                              </span>
-                            ) : null;
-                          })}
+                        {/* Row 2: badges + botón usar */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {isHtml ? (
+                            <span style={{ fontSize: 10, color: '#FF9F0A' }}>⚠️ API inválida</span>
+                          ) : hBadges.map(({k, v, b}, i) => b ? (
+                            <span key={i} style={{ padding: '3px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: b.bg, color: b.color }}>
+                              {b.ico} {b.txt}
+                            </span>
+                          ) : null)}
+
+                          {/* Botón para volver a usar la info de este check */}
+                          {h.status === 'success' && !isHtml && (
+                            <button
+                              onClick={() => {
+                                const info = extractDeviceInfo(h.result, h.id);
+                                setForm({
+                                  ...info,
+                                  imei:            h.imei,
+                                  emoji:           '📱',
+                                  owner_org_id:    CORP_ID,
+                                  sale_price:      '',
+                                  _suggested_name: info.deviceName,
+                                });
+                                setModal('imei-to-stock');
+                              }}
+                              style={{
+                                marginLeft: 'auto', padding: '4px 10px', borderRadius: 8, border: 'none',
+                                background: 'rgba(48,209,88,0.15)', color: '#30D158',
+                                fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                              }}>
+                              📲 Registrar
+                            </button>
+                          )}
                         </div>
-                      ) : typeof h.result?.result === 'string' ? (
-                        <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {parseLines(h.result.result).filter(r => statusBadge(r.k,r.v)).slice(0,3).map((r,i) => {
-                            const b = statusBadge(r.k, r.v);
-                            return b ? (
-                              <span key={i} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: b.bg, color: b.color }}>
-                                {b.ico} {b.txt}
-                              </span>
-                            ) : null;
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -2714,6 +2834,155 @@ export default function CorpPage() {
                     </select>
                   </div>
                   <button className="btn btn-primary" type="submit">📅 Crear evento</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Registrar Equipo desde IMEI Check ── */}
+            {modal === 'imei-to-stock' && (
+              <>
+                <div className="modal-title">📲 Registrar Equipo</div>
+
+                {/* Preview del dispositivo detectado */}
+                {(form.deviceName || form.modelNumber || form.color || form.storage) && (
+                  <div style={{
+                    background: 'var(--card2, rgba(255,255,255,0.06))',
+                    borderRadius: 12,
+                    padding: '12px 14px',
+                    marginBottom: 16,
+                    border: '1px solid var(--border)',
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>
+                      📡 Datos del check IMEI
+                    </div>
+                    {form.deviceName && (
+                      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                        {form.emoji || '📱'} {form.deviceName}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                      {form.modelNumber && (
+                        <span style={{ background: '#0A84FF22', color: '#0A84FF', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>
+                          {form.modelNumber}
+                        </span>
+                      )}
+                      {form.storage && (
+                        <span style={{ background: '#FF9F0A22', color: '#FF9F0A', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>
+                          {form.storage}
+                        </span>
+                      )}
+                      {form.color && (
+                        <span style={{ background: '#BF5AF222', color: '#BF5AF2', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>
+                          {form.color}
+                        </span>
+                      )}
+                      {form.imei && (
+                        <span style={{ background: 'var(--border)', color: 'var(--text3)', borderRadius: 20, padding: '2px 10px', fontSize: 11 }}>
+                          IMEI: {form.imei}
+                        </span>
+                      )}
+                    </div>
+                    {form.imei_check_id && (
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
+                        🔗 Vinculado al check #{form.imei_check_id.substring(0, 8)}…
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <form onSubmit={addStock}>
+                  {/* Asignar a */}
+                  <div className="form-group">
+                    <label className="form-label">Asignar a</label>
+                    <select className="form-select" value={form.owner_org_id || CORP_ID} onChange={e => setForm({ ...form, owner_org_id: e.target.value })}>
+                      <option value={CORP_ID}>🏢 Corp Tech (Almacén Central)</option>
+                      {STORES.map(s => <option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Seleccionar producto del catálogo */}
+                  <div className="form-group">
+                    <label className="form-label">Producto del catálogo</label>
+                    <select
+                      className="form-select"
+                      required
+                      value={form.product_id || ''}
+                      onChange={e => {
+                        const prod = products.find(p => p.id === e.target.value);
+                        setForm({ ...form, product_id: e.target.value, emoji: prod?.emoji || form.emoji || '📱' });
+                      }}
+                    >
+                      <option value="">Seleccionar producto…</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>{p.emoji || '📦'} {p.name}</option>
+                      ))}
+                    </select>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      Si no existe, créalo primero en el catálogo
+                    </div>
+                  </div>
+
+                  {/* IMEI (pre-llenado) */}
+                  <div className="form-group">
+                    <label className="form-label">IMEI</label>
+                    <input
+                      className="form-input"
+                      placeholder="352999111111111"
+                      value={form.imei || ''}
+                      onChange={e => setForm({ ...form, imei: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Precio */}
+                  <div className="form-group">
+                    <label className="form-label">Precio de venta (S/)</label>
+                    <input
+                      className="form-input"
+                      type="number"
+                      required
+                      placeholder="0.00"
+                      value={form.sale_price || ''}
+                      onChange={e => setForm({ ...form, sale_price: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Campos del check — editable por si viene mal */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '8px 0 10px' }}>
+                    Detalles del equipo (editables)
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Modelo #</label>
+                      <input
+                        className="form-input"
+                        placeholder="A3526"
+                        value={form.model_number || ''}
+                        onChange={e => setForm({ ...form, model_number: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Almacenamiento</label>
+                      <input
+                        className="form-input"
+                        placeholder="256GB"
+                        value={form.storage || ''}
+                        onChange={e => setForm({ ...form, storage_info: e.target.value, storage: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ marginTop: 8 }}>
+                    <label className="form-label">Color</label>
+                    <input
+                      className="form-input"
+                      placeholder="Natural Titanium"
+                      value={form.color || ''}
+                      onChange={e => setForm({ ...form, color_info: e.target.value, color: e.target.value })}
+                    />
+                  </div>
+
+                  <button className="btn btn-primary" type="submit" style={{ marginTop: 4 }}>
+                    📦 Guardar en stock
+                  </button>
                 </form>
               </>
             )}
