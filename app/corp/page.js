@@ -84,7 +84,8 @@ export default function CorpPage() {
   const [imeiResult,   setImeiResult]   = useState(null);
   const [imeiLoading,  setImeiLoading]  = useState(false);
   const [imeiHistory,  setImeiHistory]  = useState([]);
-  const [imeiConfig,   setImeiConfig]   = useState(null); // {tokens_used, tokens_limit, active, services, provider_name}
+  const [imeiConfig,   setImeiConfig]   = useState(null);
+  const [rechargeFile, setRechargeFile] = useState(null); // screenshot para recarga
 
   useEffect(() => { init(); }, []);
 
@@ -717,51 +718,90 @@ export default function CorpPage() {
     const obj = result.object;
     const txt = typeof result.result === 'string' ? result.result : '';
 
-    // Parsear texto plano (Sickw)
+    // Parsear texto plano (Sickw / fallback)
     function parseLines(t) {
-      if (!t) return [];
-      return t.replace(/<[^>]*>/g,'').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
-        const idx = l.indexOf(':');
-        return idx > 0 ? { k: l.substring(0,idx).trim(), v: l.substring(idx+1).trim() } : { k:'', v:l };
-      });
+      if (!t || typeof t !== 'string') return [];
+      const clean = t.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').trim();
+      const lines = clean.includes('\n')
+        ? clean.split('\n')
+        : clean.split(/(?=\b(?:IMEI|Find My|Model|Color|Carrier|Blacklist|Serial|Warranty|Capacity|Storage)\b)/i);
+      return lines.map(l => l.trim()).filter(Boolean).map(line => {
+        const idx = line.indexOf(':');
+        return idx > 0 ? { k: line.substring(0, idx).trim(), v: line.substring(idx + 1).trim() } : { k: '', v: line };
+      }).filter(r => r.v);
     }
     const lines = parseLines(txt);
     const getLine = (keys) => {
       for (const key of keys) {
-        const f = lines.find(l => l.k.toLowerCase().includes(key));
+        const f = lines.find(l => l.k.toLowerCase().includes(key.toLowerCase()));
         if (f?.v) return f.v;
       }
       return '';
     };
 
-    // Modelo completo ej: "iPhone 17 Pro Max (A3526) [Global]"
-    const fullModel = (obj?.model || obj?.Model || getLine(['model']) || '').trim();
+    // Modelo completo ej: "iPhone 17 Pro Max 512GB Deep Blue (A3526) [Global]"
+    const fullModel = (
+      obj?.model || obj?.Model || obj?.modelName || obj?.ModelName ||
+      obj?.deviceName || obj?.DeviceName ||
+      getLine(['model','device name','device']) || ''
+    ).trim();
 
     // Extraer número de modelo A####
     const modelNumMatch = fullModel.match(/\(?(A\d{4,5})\)?/);
     const modelNumber   = modelNumMatch ? modelNumMatch[1] : '';
 
-    // Nombre limpio: quitar (A####), [Region], paréntesis vacíos
+    // Almacenamiento: intentar campos del objeto, luego parsear del nombre
+    const storObjFields = ['storage','Storage','capacity','Capacity','internalStorage','InternalStorage','memory','Memory'];
+    let storage = '';
+    for (const f of storObjFields) {
+      if (obj?.[f] && String(obj[f]).trim()) { storage = String(obj[f]).replace(/\s+/g,'').trim(); break; }
+    }
+    if (!storage) storage = getLine(['storage','capacity','capacidad','gb','memory']).replace(/\s+/g,'').trim();
+    if (!storage) {
+      // Extraer "512GB", "256 GB", "1TB" del modelo
+      const sm = fullModel.match(/(\d+\s*(?:GB|TB|MB))/i);
+      if (sm) storage = sm[1].replace(/\s+/g, '');
+    }
+
+    // Color: intentar campos del objeto, luego extraer del modelo quitando device y storage
+    const colorObjFields = ['color','Color','colour','Colour','colorName','ColorName','bodyColor'];
+    let color = '';
+    for (const f of colorObjFields) {
+      if (obj?.[f] && String(obj[f]).trim()) { color = String(obj[f]).trim(); break; }
+    }
+    if (!color) color = getLine(['color','colour','color name']).trim();
+    if (!color) {
+      // Quitar: (A####), [region], storage, nombre del dispositivo conocido
+      const stripped = fullModel
+        .replace(/\([A-Z]\d{4,5}\)/g, '')
+        .replace(/\[[^\]]*\]/g, '')
+        .replace(/\d+\s*(?:GB|TB|MB)/gi, '')
+        .replace(/\b(iPhone\s*\d*\s*(?:Pro\s*Max|Pro|Plus|Mini|Max|SE)?|iPad\s*(?:Pro|Air|Mini|mini)?|MacBook\s*(?:Pro|Air)?|Apple Watch\s*(?:Series\s*\d+|SE|Ultra\s*\d*)?|AirPods?\s*(?:Pro\s*\d*|Max)?|iPod|iMac|Mac\s*(?:Mini|Studio|Pro)?)\s*/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      if (stripped && stripped.length > 0 && stripped.length < 50) color = stripped;
+    }
+
+    // Nombre limpio del dispositivo (quitar model#, región, storage y color)
     const deviceName = fullModel
       .replace(/\([A-Z]\d{4,5}\)/g, '')
-      .replace(/\[.*?\]/g, '')
+      .replace(/\[[^\]]*\]/g, '')
+      .replace(/\d+\s*(?:GB|TB|MB)/gi, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
-
-    // Color
-    const color = (obj?.color || obj?.Color || getLine(['color']) || '').trim();
-
-    // Almacenamiento
-    const storage = (obj?.capacity || obj?.storage || obj?.Capacity || getLine(['capac','storage','gb','memory']) || '').trim();
 
     // IMEI
     const imei = (obj?.imei || obj?.IMEI || getLine(['imei']) || '').trim();
 
-    // Descripción compuesta
-    const parts = [modelNumber, storage, color].filter(Boolean);
-    const description = parts.join(' · ');
+    const description = [modelNumber, storage, color].filter(Boolean).join(' · ');
 
-    return { deviceName, modelNumber, color, storage, imei, description, fullModel, imei_check_id: checkId };
+    return {
+      deviceName: deviceName || fullModel.replace(/\([A-Z]\d{4,5}\)/g,'').replace(/\[[^\]]*\]/g,'').trim(),
+      modelNumber, color, color_info: color,
+      storage, storage_info: storage,
+      imei, description, fullModel,
+      imei_check_id: checkId,
+    };
   }
 
   /* ── IMEI CHECKER ── */
@@ -854,11 +894,54 @@ export default function CorpPage() {
         totalRemaining: data.reduce((s, d) => s + Math.max(0, (d.tokens_limit || 0) - (d.tokens_used || 0)), 0),
       };
       setImeiConfig(combined);
-      // Auto-seleccionar el servicio más barato disponible
-      if (!imeiService && allServices.length > 0) setImeiService(allServices[0].id);
+      // Preferir servicio 19 (Apple FULL INFO [+Carrier]) o el más completo con carrier
+      const preferred = allServices.find(s => String(s.id) === '19')
+        || allServices.find(s => (s.label||'').toLowerCase().includes('full info') && (s.label||'').toLowerCase().includes('carrier'))
+        || allServices.find(s => (s.label||'').toLowerCase().includes('full info'))
+        || allServices[0];
+      if (!imeiService && preferred) setImeiService(preferred.id);
     } else {
       setImeiConfig(null);
     }
+  }
+
+  /* ── SOLICITAR RECARGA DE TOKENS ── */
+  async function requestRecharge(e) {
+    e.preventDefault();
+    const soles  = parseFloat(form.recharge_soles) || 0;
+    const tokens = Math.floor(soles); // 1 sol = 1 token
+    if (soles <= 0) { showToast('Ingresa un monto válido', 'err'); return; }
+
+    let screenshotUrl = null;
+
+    // Subir screenshot a Supabase Storage
+    if (rechargeFile) {
+      try {
+        const ext  = rechargeFile.name.split('.').pop() || 'jpg';
+        const path = `${CORP_ID}/${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from('recharge-screenshots')
+          .upload(path, rechargeFile, { contentType: rechargeFile.type });
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from('recharge-screenshots').getPublicUrl(path);
+          screenshotUrl = urlData?.publicUrl || null;
+        }
+      } catch { /* continuar sin screenshot */ }
+    }
+
+    const { error } = await supabase.from('token_recharge_requests').insert({
+      org_id:           CORP_ID,
+      amount_soles:     soles,
+      tokens_requested: tokens,
+      payment_method:   form.recharge_method || 'yape',
+      screenshot_url:   screenshotUrl,
+      notes:            form.recharge_notes || '',
+      status:           'pending',
+      created_by:       me?.id,
+    });
+    if (error) { showToast('Error al enviar solicitud: ' + error.message, 'err'); return; }
+    showToast(`✅ Solicitud enviada — ${tokens} tokens por S/${soles.toFixed(2)}`);
+    setModal(null); setForm({}); setRechargeFile(null);
   }
 
   async function doLogout() {
@@ -1974,24 +2057,41 @@ export default function CorpPage() {
               </div>
             )}
 
-            {/* Tokens por servidor (anónimo) */}
+            {/* Tokens por servidor (anónimo) + botón recargar */}
             {imeiConfig && (
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${imeiConfig.providers.length}, 1fr)`, gap: 8, marginBottom: 16 }}>
-                {imeiConfig.providers.map((p, idx) => (
-                  <div key={p.provider} style={{
-                    background: p.remaining > 0 ? 'rgba(10,132,255,0.08)' : 'rgba(255,69,58,0.08)',
-                    border: `1px solid ${p.remaining > 0 ? 'rgba(10,132,255,0.25)' : 'rgba(255,69,58,0.25)'}`,
-                    borderRadius: 12, padding: '10px 12px',
-                  }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
-                      🖥 Servidor {idx + 1}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${imeiConfig.providers.length}, 1fr) auto`, gap: 8 }}>
+                  {imeiConfig.providers.map((p, idx) => (
+                    <div key={p.provider} style={{
+                      background: p.remaining > 0 ? 'rgba(10,132,255,0.08)' : 'rgba(255,69,58,0.08)',
+                      border: `1px solid ${p.remaining > 0 ? 'rgba(10,132,255,0.25)' : 'rgba(255,69,58,0.25)'}`,
+                      borderRadius: 12, padding: '10px 12px',
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 4 }}>
+                        🖥 Servidor {idx + 1}
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: p.remaining > 0 ? '#4DA8FF' : '#FF453A' }}>
+                        {p.remaining}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>🪙 tokens · {p.used}/{p.limit}</div>
                     </div>
-                    <div style={{ fontSize: 22, fontWeight: 900, color: p.remaining > 0 ? '#4DA8FF' : '#FF453A' }}>
-                      {p.remaining}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>🪙 tokens · {p.used}/{p.limit}</div>
-                  </div>
-                ))}
+                  ))}
+                  {/* Botón recargar */}
+                  <button
+                    onClick={() => { setModal('recharge-tokens'); setForm({ recharge_method: 'yape', recharge_soles: '' }); setRechargeFile(null); }}
+                    style={{
+                      borderRadius: 12, border: 'none', padding: '8px 10px',
+                      background: 'linear-gradient(135deg,#FF9F0A,#FF6B00)',
+                      color: '#fff', fontSize: 11, fontWeight: 800,
+                      cursor: 'pointer', textAlign: 'center', lineHeight: 1.4,
+                      boxShadow: '0 4px 12px rgba(255,159,10,0.4)',
+                    }}>
+                    💳<br/>Recargar<br/>Tokens
+                  </button>
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, textAlign: 'right' }}>
+                  1 sol = 1 token · Precio por consulta: S/1.00
+                </div>
               </div>
             )}
 
@@ -2216,13 +2316,18 @@ export default function CorpPage() {
                     const raw    = h.result?.result || h.raw_response || '';
                     const isHtml = typeof raw === 'string' && (raw.trim().startsWith('<!') || raw.trim().toLowerCase().startsWith('<html'));
                     const obj    = h.result?.object;
-                    const hModel = obj?.model || obj?.Model || parseLines(typeof h.result?.result === 'string' ? h.result.result : '').find(l => l.k.toLowerCase() === 'model')?.v || '';
+                    const hModel = obj?.model || obj?.Model || obj?.modelName || parseLines(typeof h.result?.result === 'string' ? h.result.result : '').find(l => l.k.toLowerCase().includes('model'))?.v || '';
                     // Extraer modelo corto y número
                     const hModelNum = hModel.match(/A\d{4,5}/)?.[0] || '';
-                    const hModelShort = hModel.replace(/\([A-Z]\d{4,5}\)/g,'').replace(/\[.*?\]/g,'').trim();
-                    // Extraer color y storage del object
-                    const hColor   = obj?.color   || obj?.Color   || '';
-                    const hStorage = obj?.capacity || obj?.storage || '';
+                    const hModelShort = hModel.replace(/\([A-Z]\d{4,5}\)/g,'').replace(/\[.*?\]/g,'').replace(/\s{2,}/g,' ').trim();
+                    // Extraer storage: campos del objeto, luego del nombre del modelo
+                    let hStorage = (obj?.capacity || obj?.storage || obj?.Capacity || obj?.Storage || obj?.internalStorage || '').toString().replace(/\s+/g,'').trim();
+                    if (!hStorage) {
+                      const sm = hModel.match(/(\d+\s*(?:GB|TB|MB))/i);
+                      if (sm) hStorage = sm[1].replace(/\s+/g,'');
+                    }
+                    // Extraer color: campos del objeto
+                    const hColor = (obj?.color || obj?.Color || obj?.colour || obj?.Colour || '').toString().trim();
                     // Badges de estado
                     const hBadges = obj && typeof obj === 'object'
                       ? dedupeObject(obj).filter(([k,v]) => statusBadge(k,String(v))).slice(0,2).map(([k,v]) => ({ k, v: String(v), b: statusBadge(k,String(v)) }))
@@ -2834,6 +2939,102 @@ export default function CorpPage() {
                     </select>
                   </div>
                   <button className="btn btn-primary" type="submit">📅 Crear evento</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Recargar Tokens IMEI ── */}
+            {modal === 'recharge-tokens' && (
+              <>
+                <div className="modal-title">💳 Recargar Tokens IMEI</div>
+
+                {/* Info de precios */}
+                <div style={{ background: 'rgba(255,159,10,0.1)', border: '1px solid rgba(255,159,10,0.3)', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
+                  <div style={{ fontWeight: 700, color: '#FF9F0A', marginBottom: 4, fontSize: 13 }}>💡 Cómo funciona</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    Deposita en <b style={{ color: 'var(--text)' }}>Yape o transferencia bancaria</b>, sube el comprobante y el SuperAdmin aprobará tu recarga.<br/>
+                    <span style={{ color: '#FF9F0A', fontWeight: 700 }}>S/1.00 = 1 token</span> (1 consulta IMEI completa)
+                  </div>
+                </div>
+
+                <form onSubmit={requestRecharge}>
+                  <div className="form-group">
+                    <label className="form-label">Método de pago</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {[
+                        { id: 'yape', label: '💜 Yape' },
+                        { id: 'transferencia', label: '🏦 Transferencia' },
+                      ].map(m => (
+                        <button
+                          key={m.id} type="button"
+                          onClick={() => setForm({ ...form, recharge_method: m.id })}
+                          style={{
+                            padding: '10px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                            background: form.recharge_method === m.id ? 'var(--blue)' : 'var(--surface)',
+                            color: form.recharge_method === m.id ? '#fff' : 'var(--text)',
+                          }}>
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Monto depositado (S/)</label>
+                    <input
+                      className="form-input"
+                      type="number"
+                      required
+                      min="1"
+                      step="1"
+                      placeholder="100"
+                      value={form.recharge_soles || ''}
+                      onChange={e => setForm({ ...form, recharge_soles: e.target.value })}
+                      style={{ fontSize: 22, fontWeight: 900, textAlign: 'center' }}
+                    />
+                    {form.recharge_soles > 0 && (
+                      <div style={{ textAlign: 'center', marginTop: 6, fontSize: 13, fontWeight: 700, color: '#FF9F0A' }}>
+                        = {Math.floor(parseFloat(form.recharge_soles) || 0)} tokens para consultas
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">📸 Comprobante de pago (screenshot)</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => setRechargeFile(e.target.files?.[0] || null)}
+                      style={{ display: 'none' }}
+                      id="recharge-file-input"
+                    />
+                    <label
+                      htmlFor="recharge-file-input"
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        padding: '14px', borderRadius: 12, border: '2px dashed var(--border)',
+                        cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)',
+                        background: rechargeFile ? 'rgba(48,209,88,0.08)' : 'transparent',
+                      }}>
+                      {rechargeFile
+                        ? <span style={{ color: '#30D158' }}>✅ {rechargeFile.name}</span>
+                        : <span>📷 Tocar para subir comprobante</span>}
+                    </label>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Notas (opcional)</label>
+                    <input
+                      className="form-input"
+                      placeholder="Referencia de pago, nombre titular..."
+                      value={form.recharge_notes || ''}
+                      onChange={e => setForm({ ...form, recharge_notes: e.target.value })}
+                    />
+                  </div>
+
+                  <button className="btn btn-primary" type="submit" style={{ background: 'linear-gradient(135deg,#FF9F0A,#FF6B00)' }}>
+                    📤 Enviar solicitud de recarga
+                  </button>
                 </form>
               </>
             )}

@@ -63,6 +63,7 @@ export default function SuperadminPage() {
   const [users,     setUsers]     = useState([]);
   const [featureFilter, setFeatureFilter] = useState('all');
   const [apiSettings,   setApiSettings]   = useState([]);
+  const [rechargeReqs,  setRechargeReqs]  = useState([]);
 
   useEffect(() => { init(); }, []);
 
@@ -140,7 +141,7 @@ export default function SuperadminPage() {
     if (t === 'bugs'      && bugs.length === 0)     loadBugs();
     if (t === 'qa'        && qaTests.length === 0)  loadQA();
     if (t === 'usuarios'  && users.length === 0)    loadUsers();
-    if (t === 'apis')                               loadApiSettings();
+    if (t === 'apis')                               { loadApiSettings(); loadRechargeReqs(); }
   }
 
   /* ── API Settings ── */
@@ -202,6 +203,56 @@ export default function SuperadminPage() {
     await supabase.from('api_settings').update({ is_active: !currentVal, updated_at: new Date().toISOString() }).eq('id', id);
     showToast(currentVal ? 'Acceso desactivado' : 'Acceso activado ✓');
     loadApiSettings();
+  }
+
+  /* ── Recargas de Tokens ── */
+  async function loadRechargeReqs() {
+    const { data } = await supabase
+      .from('token_recharge_requests')
+      .select('*, organizations(name)')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    setRechargeReqs(data || []);
+  }
+
+  async function approveRecharge(req) {
+    const tokensToGrant = req.tokens_requested;
+    // Buscar la api_setting de la org (primer proveedor activo)
+    const { data: apis } = await supabase
+      .from('api_settings')
+      .select('id, tokens_limit, org_id')
+      .eq('org_id', req.org_id)
+      .eq('service', 'imei')
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .limit(1);
+
+    if (apis && apis.length > 0) {
+      const api = apis[0];
+      await supabase.from('api_settings')
+        .update({ tokens_limit: (api.tokens_limit || 0) + tokensToGrant, updated_at: new Date().toISOString() })
+        .eq('id', api.id);
+    }
+    await supabase.from('token_recharge_requests').update({
+      status:        'approved',
+      tokens_granted: tokensToGrant,
+      approved_by:   me?.id,
+      approved_at:   new Date().toISOString(),
+    }).eq('id', req.id);
+    showToast(`✅ Recarga aprobada — +${tokensToGrant} tokens a ${req.organizations?.name}`);
+    loadRechargeReqs();
+    loadApiSettings();
+  }
+
+  async function rejectRecharge(id, reason) {
+    await supabase.from('token_recharge_requests').update({
+      status:           'rejected',
+      rejection_reason: reason || 'Rechazado por SuperAdmin',
+      approved_by:      me?.id,
+      approved_at:      new Date().toISOString(),
+    }).eq('id', id);
+    showToast('Solicitud rechazada');
+    loadRechargeReqs();
   }
 
   function showToast(msg, type = 'ok') {
@@ -736,6 +787,87 @@ export default function SuperadminPage() {
                 );
               })
             )}
+
+            {/* ── SOLICITUDES DE RECARGA DE TOKENS ── */}
+            <div style={{ marginTop: 28, marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div className="section-title" style={{ margin: 0 }}>💳 Solicitudes de Recarga</div>
+                <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 8, background: 'rgba(255,159,10,0.15)', color: '#FF9F0A' }}>
+                  {rechargeReqs.filter(r => r.status === 'pending').length} pendientes
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
+                Conversion: <b>S/1.00 = 1 token</b>. Al aprobar se suman los tokens al primer proveedor activo de la org.
+              </div>
+              {rechargeReqs.length === 0 ? (
+                <div className="empty-msg">Sin solicitudes</div>
+              ) : (
+                rechargeReqs.map(req => {
+                  const isPending  = req.status === 'pending';
+                  const isApproved = req.status === 'approved';
+                  const statusCfg  = { pending: { color:'#FF9F0A', bg:'rgba(255,159,10,0.15)', txt:'⏳ Pendiente' }, approved: { color:'#30D158', bg:'rgba(48,209,88,0.15)', txt:'✅ Aprobado' }, rejected: { color:'#FF453A', bg:'rgba(255,69,58,0.15)', txt:'❌ Rechazado' } };
+                  const sc = statusCfg[req.status] || statusCfg.pending;
+                  return (
+                    <div key={req.id} className="card" style={{ padding: '14px', marginBottom: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>
+                            {req.organizations?.name || req.org_id.substring(0,8)}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {req.payment_method === 'yape' ? '💜 Yape' : '🏦 Transferencia'} · {new Date(req.created_at).toLocaleDateString('es-PE', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                          </div>
+                          {req.notes && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>📝 {req.notes}</div>}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 900, fontSize: 20, color: '#FF9F0A' }}>S/{parseFloat(req.amount_soles).toFixed(2)}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{req.tokens_requested} tokens</div>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: sc.bg, color: sc.color }}>{sc.txt}</span>
+                        </div>
+                      </div>
+
+                      {/* Screenshot */}
+                      {req.screenshot_url && (
+                        <div style={{ marginBottom: 10 }}>
+                          <a href={req.screenshot_url} target="_blank" rel="noreferrer">
+                            <img
+                              src={req.screenshot_url}
+                              alt="Comprobante"
+                              style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 10, border: '1px solid var(--border)' }}
+                            />
+                          </a>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3, textAlign: 'center' }}>
+                            📷 Tocar para ver comprobante completo
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Botones acción */}
+                      {isPending && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <button
+                            onClick={() => approveRecharge(req)}
+                            style={{ padding: '10px', borderRadius: 10, border: 'none', background: 'rgba(48,209,88,0.2)', color: '#30D158', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+                            ✅ Aprobar +{req.tokens_requested} tokens
+                          </button>
+                          <button
+                            onClick={() => { const r = prompt('Motivo de rechazo (opcional):'); rejectRecharge(req.id, r); }}
+                            style={{ padding: '10px', borderRadius: 10, border: 'none', background: 'rgba(255,69,58,0.15)', color: '#FF453A', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                            ❌ Rechazar
+                          </button>
+                        </div>
+                      )}
+                      {isApproved && (
+                        <div style={{ fontSize: 12, color: '#30D158', fontWeight: 700, textAlign: 'center', padding: '6px' }}>
+                          ✅ Tokens otorgados: +{req.tokens_granted}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
           </div>
         )}
 
