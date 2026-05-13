@@ -191,6 +191,7 @@ export default function QRLoginPage() {
             await supabase.from('biometric_keys').upsert({
               user_id:       foundUser.id,
               credential_id: credIdBase64,
+              device_id:     credIdBase64.slice(0, 36),
               device_name:   dn,
               refresh_token: authData.session.refresh_token,
             }, { onConflict: 'user_id' });

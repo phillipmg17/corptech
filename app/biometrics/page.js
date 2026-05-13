@@ -312,6 +312,7 @@ export default function BiometricsPage() {
       const { error } = await supabase.from('biometric_keys').upsert({
         user_id:       userId,
         credential_id: credIdBase64,
+        device_id:     credIdBase64.slice(0, 36),
         device_name:   deviceName.trim(),
         refresh_token: session?.refresh_token || null,
       }, { onConflict: 'user_id' });
