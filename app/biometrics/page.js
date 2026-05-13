@@ -100,9 +100,9 @@ export default function BiometricsPage() {
   async function loadBiometrics(uid) {
     const { data } = await supabase
       .from('biometric_keys')
-      .select('id, device_name, credential_id, last_used, created_at')
+      .select('id, device_name, credential_id, last_used')
       .eq('user_id', uid)
-      .order('created_at', { ascending: false });
+      .order('last_used', { ascending: false, nullsFirst: false });
     setBiometrics(data || []);
   }
 
@@ -495,7 +495,7 @@ export default function BiometricsPage() {
                 <div className="list-item-body">
                   <div className="list-item-name">{b.device_name || 'Dispositivo'}</div>
                   <div className="list-item-sub">
-                    Registrado: {fmtDate(b.created_at)} · Último uso: {fmtDate(b.last_used)}
+                    Último uso: {fmtDate(b.last_used) || 'Nunca'}
                   </div>
                 </div>
                 <button onClick={() => deleteBiometric(b.id)} style={{

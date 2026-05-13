@@ -184,13 +184,15 @@ export default function DashboardPage() {
       {/* TOP BAR */}
       <div className="top-bar">
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <div style={{ width:36, height:36, borderRadius:10, background:'var(--surface)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
+          {/* Logo */}
+          <div style={{ width:40, height:40, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Corp Tech" style={{ width:28, height:28, objectFit:'contain' }} />
+            <img src="/logo.png" alt="Corp Tech" style={{ width:32, height:32, objectFit:'contain' }} />
           </div>
-          <div>
-            <div className="top-bar-title">{orgName}</div>
-            <div className="top-bar-sub">{profile?.full_name}</div>
+          {/* Nombre empresa arriba, usuario abajo */}
+          <div style={{ display:'flex', flexDirection:'column', lineHeight:1.2 }}>
+            <span style={{ fontSize:15, fontWeight:800, color:'var(--text)', letterSpacing:'-0.3px' }}>{orgName}</span>
+            <span style={{ fontSize:11, color:'var(--text3)', fontWeight:500 }}>{profile?.full_name}</span>
           </div>
         </div>
         <div className="top-bar-actions">
