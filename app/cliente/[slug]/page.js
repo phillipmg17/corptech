@@ -3,6 +3,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
+const SLUG_MAP = {
+  futurteck:  '00000000-0000-0000-0000-000000000002',
+  innovatech: '00000000-0000-0000-0000-000000000003',
+  wetech:     '00000000-0000-0000-0000-000000000004',
+};
 const SLUG_DEFAULTS = {
   futurteck:  { name: 'Futurteck',        primary: '#007AFF', emoji: '🔵', id: '00000000-0000-0000-0000-000000000002' },
   innovatech: { name: 'Innovatech Store',  primary: '#BF5AF2', emoji: '🟣', id: '00000000-0000-0000-0000-000000000003' },
@@ -50,7 +55,7 @@ export default function ClientePortalPage({ params }) {
   const [editPhone, setEditPhone] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
-  const P = store?.theme_color || def.primary;
+  const P = store?.color_primario || def.primary;
 
   useEffect(() => {
     const init = async () => {
@@ -71,19 +76,19 @@ export default function ClientePortalPage({ params }) {
       setUser(session.user);
 
       /* 3. Cargar tienda */
+      const orgId = SLUG_MAP[slug] || def.id;
       const { data: storeData } = await supabase
-        .from('stores').select('id,store_name,logo_url,theme_color,whatsapp,direccion')
-        .eq('slug', slug).maybeSingle();
+        .from('tiendas_config').select('org_id,store_name,logo_url,color_primario,whatsapp,direccion')
+        .eq('org_id', orgId).maybeSingle();
       setStore(storeData);
-      const storeId = storeData?.id || def.id;
 
       /* 4. Buscar cliente por email o auth_user_id */
       let cust = null;
-      if (storeId) {
+      if (orgId) {
         const { data: c1 } = await supabase
           .from('customers')
           .select('*')
-          .eq('store_id', storeId)
+          .eq('org_id', orgId)
           .eq('email', session.user.email)
           .maybeSingle();
         cust = c1;
@@ -94,9 +99,9 @@ export default function ClientePortalPage({ params }) {
           const { data: newCust } = await supabase
             .from('customers')
             .insert({
-              store_id: storeId,
-              name:  meta.full_name || session.user.email.split('@')[0],
-              email: session.user.email,
+              org_id:       orgId,
+              full_name:    meta.full_name || session.user.email.split('@')[0],
+              email:        session.user.email,
               auth_user_id: session.user.id,
             })
             .select().single();
@@ -108,7 +113,7 @@ export default function ClientePortalPage({ params }) {
         }
       }
       setCustomer(cust);
-      setEditName(cust?.name || '');
+      setEditName(cust?.full_name || '');
       setEditPhone(cust?.phone || '');
 
       /* 5. Cargar pedidos */
@@ -116,12 +121,12 @@ export default function ClientePortalPage({ params }) {
         const { data: salesData } = await supabase
           .from('sales')
           .select(`
-            id, total, status, payment_method, notes, created_at,
-            sale_items(qty, price, discount,
-              products(name, photo, brand, category)
+            id, total_amount, status, payment_method, notes, created_at,
+            sale_items(qty, unit_price, discount,
+              stock_items(products(name, photo, brand, category))
             )
           `)
-          .eq('store_id', storeId)
+          .eq('org_id', orgId)
           .eq('customer_id', cust.id)
           .order('created_at', { ascending: false });
         setOrders(salesData || []);
@@ -135,8 +140,8 @@ export default function ClientePortalPage({ params }) {
   async function saveProfile() {
     if (!customer) return;
     setSavingProfile(true);
-    await supabase.from('customers').update({ name: editName, phone: editPhone }).eq('id', customer.id);
-    setCustomer(prev => ({ ...prev, name: editName, phone: editPhone }));
+    await supabase.from('customers').update({ full_name: editName, phone: editPhone }).eq('id', customer.id);
+    setCustomer(prev => ({ ...prev, full_name: editName, phone: editPhone }));
     setSavingProfile(false);
     setEditMode(false);
   }
@@ -155,7 +160,7 @@ export default function ClientePortalPage({ params }) {
 
   const storeName = store?.store_name || def.name;
   const logoUrl   = store?.logo_url   || null;
-  const custName  = customer?.name    || user?.email?.split('@')[0] || 'Cliente';
+  const custName  = customer?.full_name || user?.email?.split('@')[0] || 'Cliente';
 
   return (
     <div style={{
@@ -238,7 +243,7 @@ export default function ClientePortalPage({ params }) {
             </div>
             <div style={{ flex:1, background:'rgba(255,255,255,0.04)', borderRadius:14, padding:'12px 14px', textAlign:'center' }}>
               <p style={{ fontSize:22, fontWeight:800, margin:0, color: P }}>
-                {fmt(orders.reduce((s,o) => s + (o.total || 0), 0))}
+                {fmt(orders.reduce((s,o) => s + (o.total_amount || 0), 0))}
               </p>
               <p style={{ fontSize:11, color:'rgba(255,255,255,0.4)', margin:'2px 0 0' }}>Total gastado</p>
             </div>
@@ -308,7 +313,7 @@ export default function ClientePortalPage({ params }) {
                             Pedido #{order.id.slice(-6).toUpperCase()} · {fmtDate(order.created_at)}
                           </p>
                           <p style={{ fontSize:16, fontWeight:700, margin:'0 0 6px' }}>
-                            {order.sale_items?.map(i => i.products?.name || 'Producto').slice(0,2).join(', ')}
+                            {order.sale_items?.map(i => i.stock_items?.products?.name || 'Producto').slice(0,2).join(', ')}
                             {order.sale_items?.length > 2 ? ` +${order.sale_items.length - 2} más` : ''}
                           </p>
                           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -324,7 +329,7 @@ export default function ClientePortalPage({ params }) {
                           </div>
                         </div>
                         <div style={{ textAlign:'right', flexShrink:0 }}>
-                          <p style={{ fontSize:18, fontWeight:800, margin:'0 0 4px', color: P }}>{fmt(order.total)}</p>
+                          <p style={{ fontSize:18, fontWeight:800, margin:'0 0 4px', color: P }}>{fmt(order.total_amount)}</p>
                           <span style={{ fontSize:18, color:'rgba(255,255,255,0.25)', transition:'transform .2s',
                             display:'inline-block', transform: exp ? 'rotate(180deg)' : 'none' }}>
                             ▾
@@ -349,21 +354,21 @@ export default function ClientePortalPage({ params }) {
                             padding:'10px 0',
                             borderBottom: i < order.sale_items.length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
                           }}>
-                            {item.products?.photo ? (
-                              <img src={item.products.photo} alt="" style={{ width:44, height:44, objectFit:'cover', borderRadius:10 }} />
+                            {item.stock_items?.products?.photo ? (
+                              <img src={item.stock_items.products.photo} alt="" style={{ width:44, height:44, objectFit:'cover', borderRadius:10 }} />
                             ) : (
                               <div style={{ width:44, height:44, borderRadius:10, background:'rgba(255,255,255,0.06)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📱</div>
                             )}
                             <div style={{ flex:1 }}>
                               <p style={{ fontSize:14, fontWeight:600, margin:'0 0 2px' }}>
-                                {item.products?.name || 'Producto'}
+                                {item.stock_items?.products?.name || 'Producto'}
                               </p>
                               <p style={{ fontSize:12, color:'rgba(255,255,255,0.35)', margin:0 }}>
-                                {item.products?.brand && `${item.products.brand} · `}Cant: {item.qty}
+                                {item.stock_items?.products?.brand && `${item.stock_items.products.brand} · `}Cant: {item.qty}
                               </p>
                             </div>
                             <p style={{ fontSize:14, fontWeight:700, margin:0 }}>
-                              {fmt((item.price || 0) * (item.qty || 1))}
+                              {fmt((item.unit_price || 0) * (item.qty || 1))}
                             </p>
                           </div>
                         ))}
@@ -430,7 +435,7 @@ export default function ClientePortalPage({ params }) {
 
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
               {[
-                { lbl:'Nombre', val: editMode ? editName : (customer?.name || '—'), key:'name' },
+                { lbl:'Nombre', val: editMode ? editName : (customer?.full_name || '—'), key:'name' },
                 { lbl:'Email',  val: user?.email || '—', key:'email', readOnly:true },
                 { lbl:'Teléfono', val: editMode ? editPhone : (customer?.phone || '—'), key:'phone' },
               ].map(f => (

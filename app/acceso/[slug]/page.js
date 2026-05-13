@@ -4,6 +4,11 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 /* ── Config por defecto de cada tienda (fallback si DB falla) ── */
+const SLUG_MAP = {
+  futurteck:  '00000000-0000-0000-0000-000000000002',
+  innovatech: '00000000-0000-0000-0000-000000000003',
+  wetech:     '00000000-0000-0000-0000-000000000004',
+};
 const SLUG_DEFAULTS = {
   futurteck:  { name: 'Futurteck',        primary: '#007AFF', emoji: '🔵', id: '00000000-0000-0000-0000-000000000002' },
   innovatech: { name: 'Innovatech Store',  primary: '#BF5AF2', emoji: '🟣', id: '00000000-0000-0000-0000-000000000003' },
@@ -42,15 +47,17 @@ export default function AccesoSlugPage({ params }) {
   const [regPass,   setRegPass]   = useState('');
   const [regPhone,  setRegPhone]  = useState('');
 
-  const P = store?.theme_color || def.primary;
+  const P = store?.color_primario || def.primary;
 
   /* ── Cargar datos de tienda ── */
   useEffect(() => {
     const loadStore = async () => {
+      const orgId = SLUG_MAP[slug];
+      if (!orgId) return;
       const { data } = await supabase
-        .from('stores')
-        .select('id, store_name, logo_url, theme_color, whatsapp')
-        .eq('slug', slug)
+        .from('tiendas_config')
+        .select('org_id, store_name, logo_url, color_primario, whatsapp')
+        .eq('org_id', orgId)
         .maybeSingle();
       setStore(data);
     };
@@ -126,15 +133,15 @@ export default function AccesoSlugPage({ params }) {
     }
 
     /* 2. Crear registro en tabla customers */
-    const storeId = store?.id || def.id;
-    if (storeId && authData.user) {
+    const orgId = store?.org_id || def.id;
+    if (orgId && authData.user) {
       await supabase.from('customers').upsert({
-        store_id: storeId,
-        name:     regName,
-        email:    regEmail,
-        phone:    regPhone || null,
+        org_id:       orgId,
+        full_name:    regName,
+        email:        regEmail,
+        phone:        regPhone || null,
         auth_user_id: authData.user.id,
-      }, { onConflict: 'store_id,email', ignoreDuplicates: false });
+      }, { onConflict: 'org_id,email', ignoreDuplicates: false });
     }
 
     setSuccess('¡Cuenta creada! Revisa tu correo para confirmar tu registro, luego inicia sesión.');

@@ -132,24 +132,43 @@ export default function TiendaPage({ params }) {
     setLoading(true);
     if (!orgId) { setLoading(false); return; }
 
-    const [{ data: storeData }, { data: prods }] = await Promise.all([
-      supabase.from('stores').select('*').eq('org_id', orgId).maybeSingle(),
-      supabase.from('store_inventory')
-        .select(`qty, price, products(id, name, brand, category, photo, description, colors, capacities, color_images, sku)`)
-        .eq('store_id', orgId).gt('qty', 0),
-    ]);
+    // Cargar config de tienda
+    const { data: storeData } = await supabase
+      .from('tiendas_config')
+      .select('*')
+      .eq('org_id', orgId)
+      .maybeSingle();
     if (storeData) setSettings(storeData);
-    const list = (prods || [])
-      .filter(r => r.products)
-      .map(r => ({
-        ...r.products,
-        price: r.price,
-        min_price: r.price,
-        colors: r.products.colors || [],
-        capacities: r.products.capacities || [],
-        color_images: r.products.color_images || {},
-      }));
-    setProducts(list.length > 0 ? list : DEMO_PRODUCTS);
+
+    // Cargar productos desde stock_items disponibles para esta tienda
+    const { data: stockData } = await supabase
+      .from('stock_items')
+      .select(`sale_price, products(id, name, brand, category, photo, description, colors, capacities, color_images)`)
+      .eq('owner_org_id', orgId)
+      .eq('status', 'available');
+
+    if (stockData && stockData.length > 0) {
+      // Agrupar por producto, precio mínimo
+      const productMap = {};
+      stockData.forEach(item => {
+        const p = item.products;
+        if (!p) return;
+        if (!productMap[p.id]) {
+          productMap[p.id] = {
+            ...p,
+            min_price: item.sale_price || 0,
+            colors: p.colors || [],
+            capacities: p.capacities || [],
+            color_images: p.color_images || {},
+          };
+        } else if ((item.sale_price || 0) < productMap[p.id].min_price) {
+          productMap[p.id].min_price = item.sale_price || 0;
+        }
+      });
+      setProducts(Object.values(productMap));
+    } else {
+      setProducts(DEMO_PRODUCTS);
+    }
     setLoading(false);
   }
 
