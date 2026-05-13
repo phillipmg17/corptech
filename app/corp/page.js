@@ -1484,134 +1484,105 @@ export default function CorpPage() {
                 ))}
               </div>
 
-              {/* Lista de productos */}
+              {/* Grid de productos */}
               {products.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                  <div style={{ fontSize: 48, marginBottom: 12 }}>📦</div>
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Sin productos aún</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>Agrega el primer modelo base al catálogo</div>
-                  <button className="section-action"
-                    onClick={() => { setModal('add-product'); setForm({ emoji: '📱', category: 'iphone' }); }}>
+                <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                  <div style={{ fontSize: 56, marginBottom: 14 }}>📦</div>
+                  <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 6 }}>Sin productos aún</div>
+                  <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Agrega el primer modelo base al catálogo</div>
+                  <button className="section-action" onClick={() => { setModal('add-product'); setForm({ emoji: '📱', category: 'iphone' }); }}>
                     + Crear primer producto
                   </button>
                 </div>
               ) : visible.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text-muted)' }}>
-                  Sin productos en esta categoría
-                </div>
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>Sin productos en esta categoría</div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                   {visible.map(p => {
                     const catColor = CAT_COLORS[p.category || 'otro'] || '#8E8E93';
+                    const catInfo  = CATS.find(c => c.id === (p.category || 'otro'));
                     return (
                       <div key={p.id} style={{
-                        background: 'var(--card, rgba(255,255,255,0.04))',
+                        background: 'var(--card)',
                         border: '1px solid var(--border)',
-                        borderRadius: 18, overflow: 'hidden',
-                      }}>
-                        {/* Fila principal */}
-                        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                          {/* Foto del producto */}
-                          <div style={{
-                            flexShrink: 0, width: 64, height: 64, borderRadius: 14,
-                            background: p.image_url ? '#fff' : `${catColor}14`,
-                            border: `1.5px solid ${catColor}30`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            overflow: 'hidden',
+                        borderRadius: 20, overflow: 'hidden',
+                        display: 'flex', flexDirection: 'column',
+                        transition: 'box-shadow .2s, transform .2s',
+                        boxShadow: 'var(--shadow-sm)',
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+                      >
+                        {/* Imagen / emoji centrado */}
+                        <div style={{
+                          height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: p.image_url ? 'var(--card2)' : `${catColor}0d`,
+                          borderBottom: `1px solid ${catColor}22`,
+                          position: 'relative',
+                        }}>
+                          {p.image_url
+                            ? <img src={p.image_url} alt={p.name} style={{ maxHeight: 120, maxWidth: '85%', objectFit: 'contain' }} />
+                            : <span style={{ fontSize: 56 }}>{p.emoji || '📦'}</span>
+                          }
+                          {/* Badge categoría */}
+                          <span style={{
+                            position: 'absolute', top: 10, right: 10,
+                            fontSize: 10, padding: '3px 8px', borderRadius: 20,
+                            background: `${catColor}22`, color: catColor, fontWeight: 700,
                           }}>
-                            {p.image_url
-                              ? <img
-                                  src={p.image_url}
-                                  alt={p.name}
-                                  style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }}
-                                  onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                                />
-                              : null
-                            }
-                            <span style={{
-                              fontSize: 32, lineHeight: 1,
-                              display: p.image_url ? 'none' : 'flex',
-                              alignItems: 'center', justifyContent: 'center',
-                              width: '100%', height: '100%',
-                            }}>
-                              {p.emoji || '📦'}
-                            </span>
-                          </div>
-
-                          {/* Info */}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                              <span style={{ fontWeight: 800, fontSize: 15 }}>{p.name}</span>
-                              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, background: `${catColor}18`, color: catColor, fontWeight: 700, flexShrink: 0 }}>
-                                {CATS.find(c => c.id === (p.category || 'otro'))?.ico} {CATS.find(c => c.id === (p.category || 'otro'))?.lbl || 'Otro'}
-                              </span>
-                            </div>
-                            {p.chip && (
-                              <div style={{ fontSize: 11, color: '#FF9F0A', fontWeight: 700, marginBottom: 2 }}>
-                                ⚡ {p.chip}
-                              </div>
-                            )}
-                            {p.description && (
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {p.description}
-                              </div>
-                            )}
-                            {p.sale_price > 0 && (
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#30D158', marginTop: 2 }}>
-                                Ref: S/ {parseFloat(p.sale_price).toFixed(2)}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Botones */}
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
-                            <button
-                              onClick={() => {
-                                setForm({
-                                  _edit_id:         p.id,
-                                  name:             p.name,
-                                  description:      p.description    || '',
-                                  emoji:            p.emoji          || '📦',
-                                  sale_price:       p.sale_price     || '',
-                                  category:         p.category       || 'otro',
-                                  chip:             p.chip           || '',
-                                  colors_text:      (p.default_colors     || []).join(', '),
-                                  capacities_text:  (p.default_capacities || []).join(', '),
-                                  image_url:        p.image_url      || '',
-                                  _cat_filter:      form._cat_filter,
-                                });
-                                setModal('add-product');
-                              }}
-                              style={{
-                                padding: '6px 12px', borderRadius: 9, border: 'none',
-                                background: 'rgba(10,132,255,0.14)', color: '#4DA8FF',
-                                fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                              }}>
-                              ✏️ Editar
-                            </button>
-                            <button
-                              onClick={() => deleteProduct(p.id, p.name)}
-                              style={{
-                                padding: '6px 12px', borderRadius: 9, border: 'none',
-                                background: 'rgba(255,69,58,0.1)', color: '#FF453A',
-                                fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                              }}>
-                              🗑 Borrar
-                            </button>
-                          </div>
+                            {catInfo?.ico} {catInfo?.lbl || 'Otro'}
+                          </span>
                         </div>
 
-                        {/* Chips de colores y capacidades */}
-                        {((p.default_colors && p.default_colors.length > 0) || (p.default_capacities && p.default_capacities.length > 0)) && (
-                          <div style={{ padding: '8px 16px 12px', borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                            {(p.default_capacities || []).map((cap, i) => (
-                              <span key={i} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'rgba(255,159,10,0.14)', color: '#FF9F0A', fontWeight: 700 }}>{cap}</span>
-                            ))}
-                            {(p.default_colors || []).map((col, i) => (
-                              <span key={i} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'rgba(191,90,242,0.14)', color: '#BF5AF2', fontWeight: 700 }}>{col}</span>
-                            ))}
-                          </div>
-                        )}
+                        {/* Info */}
+                        <div style={{ padding: '14px 16px', flex: 1 }}>
+                          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
+                          {p.chip && (
+                            <div style={{ fontSize: 11, color: '#FF9F0A', fontWeight: 700, marginBottom: 4 }}>⚡ {p.chip}</div>
+                          )}
+                          {p.description && (
+                            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              {p.description}
+                            </div>
+                          )}
+                          {p.sale_price > 0 && (
+                            <div style={{ fontSize: 14, fontWeight: 800, color: '#30D158' }}>
+                              S/ {parseFloat(p.sale_price).toFixed(2)}
+                            </div>
+                          )}
+
+                          {/* Chips colores/capacidades */}
+                          {((p.default_capacities?.length > 0) || (p.default_colors?.length > 0)) && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                              {(p.default_capacities || []).slice(0, 4).map((c, i) => (
+                                <span key={i} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 20, background: 'rgba(255,159,10,0.14)', color: '#FF9F0A', fontWeight: 700 }}>{c}</span>
+                              ))}
+                              {(p.default_colors || []).slice(0, 4).map((c, i) => (
+                                <span key={i} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 20, background: 'rgba(191,90,242,0.14)', color: '#BF5AF2', fontWeight: 700 }}>{c}</span>
+                              ))}
+                              {((p.default_capacities?.length || 0) + (p.default_colors?.length || 0)) > 8 && (
+                                <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 20, background: 'var(--card2)', color: 'var(--text3)', fontWeight: 700 }}>+más</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Acciones */}
+                        <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px' }}>
+                          <button
+                            onClick={() => {
+                              setForm({ _edit_id: p.id, name: p.name, description: p.description || '', emoji: p.emoji || '📦', sale_price: p.sale_price || '', category: p.category || 'otro', chip: p.chip || '', colors_text: (p.default_colors || []).join(', '), capacities_text: (p.default_capacities || []).join(', '), image_url: p.image_url || '', _cat_filter: form._cat_filter });
+                              setModal('add-product');
+                            }}
+                            style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: 'rgba(10,132,255,0.12)', color: '#4DA8FF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                            ✏️ Editar
+                          </button>
+                          <button
+                            onClick={() => deleteProduct(p.id, p.name)}
+                            style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: 'rgba(255,69,58,0.08)', color: '#FF453A', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                            🗑 Borrar
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

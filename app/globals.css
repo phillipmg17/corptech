@@ -328,22 +328,29 @@ html, body {
     justify-content: flex-start !important;
   }
 
-  /* Footer PMG Studio al fondo del sidebar */
+  /* Footer PMG Studio — fijo al fondo del sidebar, fuera del scroll */
   .sidebar-footer {
-    margin-top: auto;
-    padding-top: 16px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: var(--sidebar-w);
+    padding: 10px 12px 14px;
     text-align: center;
     font-size: 10px;
     color: var(--text4);
     font-weight: 500;
-    letter-spacing: 0.04em;
-    opacity: 0.6;
-    line-height: 1.5;
+    letter-spacing: 0.05em;
+    opacity: 0.55;
+    line-height: 1.6;
+    background: linear-gradient(to bottom, transparent, var(--sidebar-bg) 40%);
+    pointer-events: none;
+    z-index: 201;
   }
   .sidebar-footer a {
     color: inherit; text-decoration: none;
+    pointer-events: auto;
   }
-  .sidebar-footer a:hover { opacity: 1; }
+  .sidebar-footer a:hover { opacity: 1; color: var(--text3); }
 
   /* Ocultar top-bar en desktop (cuando el sidebar lleva la info) */
   .top-bar-desktop-hidden {
