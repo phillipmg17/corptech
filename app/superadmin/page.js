@@ -337,7 +337,7 @@ export default function SuperadminPage() {
     <div className="page-wrap">
 
       {/* TOP BAR */}
-      <div className="top-bar">
+      <div className="top-bar top-bar-desktop-hidden">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width:40, height:40, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -360,7 +360,7 @@ export default function SuperadminPage() {
       {toast && <div className="toast-wrap"><div className={`toast-msg ${toast.type}`}>{toast.msg}</div></div>}
 
       {/* CONTENT */}
-      <div className="content">
+      <div className="content content-no-topbar">
 
         {/* ── DASHBOARD ── */}
         {tab === 'dashboard' && (
@@ -877,7 +877,21 @@ export default function SuperadminPage() {
       </div>
 
       {/* TAB BAR */}
-      <div className="tab-bar">
+      <div className="tab-bar tab-bar-branded">
+        {/* SIDEBAR BRAND */}
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-logo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" />
+          </div>
+          <div className="sidebar-brand-company">Corp Tech</div>
+          <div className="sidebar-brand-user">{me?.name}</div>
+          <span className="badge" style={{ background:'#BF5AF2', color:'#fff', fontSize:10, marginBottom:6 }}>SUPERADMIN</span>
+          <div className="sidebar-brand-actions">
+            <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+            <button onClick={doLogout}>Salir</button>
+          </div>
+        </div>
         {[
           { id: 'dashboard', ico: '⚡', lbl: 'Dashboard' },
           { id: 'usuarios',  ico: '👥', lbl: 'Usuarios'  },
