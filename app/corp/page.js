@@ -1161,6 +1161,7 @@ export default function CorpPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Link href="/dashboard" className="top-btn">🏠</Link>
           <Link href="/pos"       className="top-btn">🛒</Link>
+          <Link href="/chat"      className="top-btn">💬</Link>
           <div>
             <div className="top-bar-title">🏢 Corp Tech</div>
             <div className="top-bar-sub">{me?.name}</div>
@@ -2104,41 +2105,41 @@ export default function CorpPage() {
         {tab === 'finanzas' && (
           <div style={{ padding: '16px' }}>
 
-            {/* ── HERO: Valorización total ── */}
+            {/* ── HERO: Valorización total — siempre fondo oscuro para contraste ── */}
             <div style={{
-              background: 'linear-gradient(135deg,rgba(10,132,255,0.12),rgba(94,92,230,0.12))',
-              border: '1px solid rgba(10,132,255,0.22)', borderRadius: 20,
-              padding: 24, marginBottom: 20,
+              background: 'linear-gradient(135deg,#0A2540,#1A1A3E)',
+              border: '1px solid rgba(10,132,255,0.30)',
+              borderRadius: 20, padding: 24, marginBottom: 20,
             }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.50)', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: 8 }}>
                 📊 Valorización Total del Inventario
               </div>
               {finLoading ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Calculando…</div>
+                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14 }}>Calculando…</div>
               ) : (
                 <>
-                  <div style={{ fontSize: 38, fontWeight: 900, color: '#fff', lineHeight: 1.1 }}>
+                  <div style={{ fontSize: 38, fontWeight: 900, color: '#FFFFFF', lineHeight: 1.1 }}>
                     S/ {finData.stockVal.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
                   </div>
-                  <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', marginTop: 4, marginBottom: 20 }}>
+                  <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.50)', marginTop: 4, marginBottom: 20 }}>
                     ≈ ${finData.stockValUSD.toLocaleString('en-US', { minimumFractionDigits: 0 })} USD
-                    {finFx && <span style={{ fontSize: 11, marginLeft: 8, background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: 6 }}>TC S/{finFx.toFixed(3)}</span>}
+                    {finFx && <span style={{ fontSize: 11, marginLeft: 8, background: 'rgba(255,255,255,0.10)', padding: '2px 8px', borderRadius: 6, color: 'rgba(255,255,255,0.70)' }}>TC S/{finFx.toFixed(3)}</span>}
                   </div>
 
                   {/* Sub-cards: Lima vs Tránsito */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div style={{ background: 'rgba(48,209,88,0.12)', border: '1px solid rgba(48,209,88,0.25)', borderRadius: 14, padding: '14px 16px' }}>
+                    <div style={{ background: 'rgba(48,209,88,0.14)', border: '1px solid rgba(48,209,88,0.30)', borderRadius: 14, padding: '14px 16px' }}>
                       <div style={{ fontSize: 10, color: '#30D158', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>📦 EN LIMA</div>
-                      <div style={{ fontSize: 26, fontWeight: 900, color: '#fff' }}>{finData.stockCount}</div>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>unidades disponibles</div>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF' }}>{finData.stockCount}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.50)', marginBottom: 6 }}>unidades disponibles</div>
                       <div style={{ fontSize: 15, fontWeight: 800, color: '#30D158' }}>
                         S/{finData.stockVal.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
                       </div>
                     </div>
-                    <div style={{ background: 'rgba(255,159,10,0.12)', border: '1px solid rgba(255,159,10,0.25)', borderRadius: 14, padding: '14px 16px' }}>
+                    <div style={{ background: 'rgba(255,159,10,0.14)', border: '1px solid rgba(255,159,10,0.30)', borderRadius: 14, padding: '14px 16px' }}>
                       <div style={{ fontSize: 10, color: '#FF9F0A', fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>✈️ EN TRÁNSITO</div>
-                      <div style={{ fontSize: 26, fontWeight: 900, color: '#fff' }}>{finData.transitCount}</div>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>unidades por llegar</div>
+                      <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF' }}>{finData.transitCount}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.50)', marginBottom: 6 }}>unidades por llegar</div>
                       <div style={{ fontSize: 15, fontWeight: 800, color: '#FF9F0A' }}>
                         S/{finData.inTransitVal.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
                       </div>
@@ -2152,7 +2153,7 @@ export default function CorpPage() {
             <div className="section-title">📍 Stock por empresa</div>
             <div className="card" style={{ marginBottom: 20 }}>
               {(finData.byStore || []).length === 0 ? (
-                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Sin stock registrado</div>
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Sin stock registrado</div>
               ) : (
                 (finData.byStore || []).map(s => (
                   <div key={s.id} className="list-item" style={{ padding: '12px 16px' }}>
@@ -2166,7 +2167,7 @@ export default function CorpPage() {
                         S/{s.valor.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
                       </div>
                       {finFx && (
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                           ≈${(s.valor / finFx).toLocaleString('en-US', { minimumFractionDigits: 0 })}
                         </div>
                       )}
@@ -2184,7 +2185,7 @@ export default function CorpPage() {
 
             {cashAccounts.length > 0 && (
               <>
-                {/* Mini KPIs */}
+                {/* Mini KPIs — siempre fondo sólido con texto legible */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
                   {[
                     { lbl: 'Bancos',      val: cashTotals.banks_pen,     color: '#0A84FF' },
@@ -2192,30 +2193,30 @@ export default function CorpPage() {
                     { lbl: 'Efectivo',    val: cashTotals.cash_pen,      color: '#30D158' },
                   ].map(k => (
                     <div key={k.lbl} style={{
-                      background: `${k.color}14`, border: `1px solid ${k.color}30`,
-                      borderRadius: 14, padding: '10px 10px', textAlign: 'center',
+                      background: `${k.color}18`, border: `1px solid ${k.color}35`,
+                      borderRadius: 14, padding: '10px 8px', textAlign: 'center',
                     }}>
                       <div style={{ fontSize: 9, color: k.color, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>{k.lbl}</div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>S/{k.val.toLocaleString('es-PE', { minimumFractionDigits: 0 })}</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>S/{k.val.toLocaleString('es-PE', { minimumFractionDigits: 0 })}</div>
                     </div>
                   ))}
                 </div>
 
-                {/* Total hero */}
+                {/* Total hero — siempre oscuro */}
                 <div style={{
                   background: 'linear-gradient(135deg,#0A84FF,#5E5CE6)',
                   borderRadius: 16, padding: '16px 20px', marginBottom: 16,
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}>
                   <div>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>TOTAL DISPONIBLE EN CAJA</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.70)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>TOTAL DISPONIBLE EN CAJA</div>
                     <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', lineHeight: 1.1 }}>
                       S/{cashTotals.total_pen.toLocaleString('es-PE', { minimumFractionDigits: 0 })}
                     </div>
                   </div>
                   {finFx && (
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>≈ USD</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.60)' }}>≈ USD</div>
                       <div style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>
                         ${cashTotals.total_usd.toLocaleString('en-US', { minimumFractionDigits: 0 })}
                       </div>
@@ -2245,7 +2246,7 @@ export default function CorpPage() {
                       </div>
                       <button
                         onClick={() => { setModal('edit-account'); setForm({ ca_id: acc.id, ca_nombre: acc.nombre, ca_tipo: acc.tipo, ca_moneda: acc.moneda, ca_saldo: acc.saldo }); }}
-                        style={{ fontSize: 11, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}
+                        style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}
                       >
                         ✏️ editar
                       </button>
@@ -2260,8 +2261,8 @@ export default function CorpPage() {
               disabled={finLoading}
               style={{
                 width: '100%', padding: '12px', borderRadius: 14,
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                color: 'var(--text-muted)', fontSize: 13, fontWeight: 600,
+                background: 'var(--card2)', border: '1px solid var(--border)',
+                color: 'var(--text2)', fontSize: 13, fontWeight: 600,
                 cursor: finLoading ? 'not-allowed' : 'pointer', marginBottom: 40,
               }}
             >

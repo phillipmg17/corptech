@@ -124,6 +124,11 @@ export default function NuevoProducto() {
   const [photos,    setPhotos]    = useState([]);      // {file, preview}
   const [boxPhotos, setBoxPhotos] = useState([]);      // {file, preview}
 
+  /* ── CATÁLOGO desde Supabase ── */
+  const [catalog,         setCatalog]         = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [catFilter,       setCatFilter]       = useState('todos');
+
   /* Costo Landed calculado en tiempo real */
   const landed = (
     (parseFloat(form.costo_origen)  || 0) +
@@ -153,7 +158,33 @@ export default function NuevoProducto() {
     }
     const { data: prof } = await supabase.from('users').select('full_name').eq('id', uid).single();
     setMe({ id: uid, name: prof?.full_name, role: r });
+    await loadCatalog();
     setLoading(false);
+  }
+
+  async function loadCatalog() {
+    const { data } = await supabase
+      .from('products')
+      .select('id, name, emoji, category, chip, default_colors, default_capacities, sale_price')
+      .order('category').order('name').limit(200);
+    setCatalog(data || []);
+  }
+
+  function pickProduct(prod) {
+    if (selectedProduct?.id === prod.id) {
+      // deselect
+      setSelectedProduct(null);
+      setForm(f => ({ ...f, model: '', chip: '', color: '', capacity: '' }));
+      return;
+    }
+    setSelectedProduct(prod);
+    setForm(f => ({
+      ...f,
+      model:    prod.name,
+      chip:     prod.chip || f.chip || '',
+      color:    '',
+      capacity: '',
+    }));
   }
 
   function toast_(msg, type = 'ok') {
@@ -199,9 +230,10 @@ export default function NuevoProducto() {
   /* ── SUBMIT ── */
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.model)     { toast_('Selecciona el modelo', 'err');    return; }
+    if (!form.model && !selectedProduct) { toast_('Selecciona el modelo o elige del catálogo', 'err'); return; }
     if (!form.condition) { toast_('Selecciona el estado', 'err');    return; }
     if (imeiErr)         { toast_('Corrige el IMEI primero', 'err'); return; }
+    const modelName = selectedProduct?.name || form.model;
 
     setSaving(true);
 
@@ -213,7 +245,7 @@ export default function NuevoProducto() {
 
     /* Construcción del payload → tabla stock_items */
     const notes = [
-      form.model, form.chip,
+      modelName, form.chip,
       form.capacity && `Capacidad: ${form.capacity}`,
       form.color    && `Color: ${form.color}`,
       CONDITIONS.find(c => c.value === form.condition)?.label,
@@ -231,10 +263,11 @@ export default function NuevoProducto() {
       imei:          form.imei   || null,
       status:        'available',
       sale_price:    landed || 0,
-      emoji:         '📱',
+      emoji:         selectedProduct?.emoji || '📱',
       model_number:  form.sku    || null,
       color_info:    form.color  || null,
       storage_info:  form.capacity || null,
+      product_id:    selectedProduct?.id || null,
       notes,
       created_by:    me?.id,
     });
@@ -249,6 +282,7 @@ export default function NuevoProducto() {
     setForm(EMPTY);
     setPhotos([]); setBoxPhotos([]);
     setImeiErr('');
+    // mantiene selectedProduct para registrar múltiples del mismo modelo
     setSuccess(true);
     setTimeout(() => setSuccess(false), 3200);
   }
@@ -257,7 +291,20 @@ export default function NuevoProducto() {
     <div className="auth-screen"><div className="loading-wrap"><div className="spinner" /></div></div>
   );
 
-  const modelColors = MODEL_COLORS[form.model] || [];
+  /* Colores y capacidades: primero del catálogo, luego del hardcode */
+  const modelColors     = selectedProduct?.default_colors?.length
+    ? selectedProduct.default_colors
+    : (MODEL_COLORS[form.model] || []);
+
+  const modelCapacities = selectedProduct?.default_capacities?.length
+    ? selectedProduct.default_capacities
+    : CAPACITIES;
+
+  /* Categorías únicas para filtro */
+  const catCategories = ['todos', ...new Set(catalog.map(p => p.category).filter(Boolean))];
+  const filteredCatalog = catFilter === 'todos'
+    ? catalog
+    : catalog.filter(p => p.category === catFilter);
 
   /* ══════════════════════════════════════════════════════════ */
   return (
@@ -304,7 +351,7 @@ export default function NuevoProducto() {
             <div style={{ fontSize:72, lineHeight:1, marginBottom:18 }}>✅</div>
             <div style={{ fontSize:22, fontWeight:900, marginBottom:8 }}>¡Registrado!</div>
             <div style={{ fontSize:13, color:'var(--text-muted)', lineHeight:1.6 }}>
-              {form.model || 'Equipo'} agregado al stock de Corp Tech con éxito.
+              {selectedProduct?.name || form.model || 'Equipo'} agregado al stock con éxito.
             </div>
           </div>
         </div>
@@ -314,6 +361,102 @@ export default function NuevoProducto() {
       <div className="content" style={{ paddingBottom:48 }}>
         <form onSubmit={handleSubmit}
           style={{ padding:16, display:'flex', flexDirection:'column', gap:14 }}>
+
+          {/* ═══════════════════════════════════
+              SELECTOR DE CATÁLOGO
+          ═══════════════════════════════════ */}
+          {catalog.length > 0 && (
+            <div style={{
+              background:'var(--card)', border:'1px solid var(--border)',
+              borderRadius:20, overflow:'hidden',
+            }}>
+              {/* Header */}
+              <div style={{
+                padding:'13px 18px',
+                background:'linear-gradient(135deg,rgba(94,92,230,0.18),rgba(94,92,230,0.06))',
+                borderBottom:'1px solid rgba(94,92,230,0.22)',
+                display:'flex', alignItems:'center', gap:10,
+              }}>
+                <div style={{ width:4, height:20, borderRadius:4, background:'#5E5CE6', flexShrink:0 }} />
+                <div style={{ flex:1, fontSize:14, fontWeight:800 }}>
+                  📋 Seleccionar del Catálogo
+                </div>
+                {selectedProduct && (
+                  <span style={{
+                    fontSize:11, padding:'3px 10px', borderRadius:20,
+                    background:'rgba(94,92,230,0.18)', color:'#5E5CE6',
+                    fontWeight:700, border:'1px solid rgba(94,92,230,0.35)',
+                  }}>
+                    ✓ {selectedProduct.name}
+                  </span>
+                )}
+              </div>
+
+              {/* Filtros de categoría */}
+              <div style={{ padding:'10px 14px 0', display:'flex', gap:6, flexWrap:'wrap' }}>
+                {catCategories.map(cat => (
+                  <button
+                    key={cat} type="button"
+                    onClick={() => setCatFilter(cat)}
+                    style={{
+                      padding:'5px 12px', borderRadius:20, fontWeight:700,
+                      fontSize:11, cursor:'pointer', transition:'all .15s',
+                      border:`1.5px solid ${catFilter === cat ? '#5E5CE6' : 'var(--border)'}`,
+                      background: catFilter === cat ? 'rgba(94,92,230,0.18)' : 'transparent',
+                      color: catFilter === cat ? '#5E5CE6' : 'var(--text3)',
+                      textTransform:'capitalize',
+                    }}>
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {/* Grid de productos */}
+              <div style={{ padding:'12px 14px 14px', display:'flex', gap:10, flexWrap:'wrap' }}>
+                {filteredCatalog.map(prod => {
+                  const active = selectedProduct?.id === prod.id;
+                  return (
+                    <button
+                      key={prod.id} type="button"
+                      onClick={() => pickProduct(prod)}
+                      style={{
+                        display:'flex', flexDirection:'column', alignItems:'center',
+                        gap:4, padding:'10px 12px', borderRadius:14, cursor:'pointer',
+                        transition:'all .15s', minWidth:90,
+                        border:`1.5px solid ${active ? '#5E5CE6' : 'var(--border)'}`,
+                        background: active ? 'rgba(94,92,230,0.14)' : 'transparent',
+                        color: active ? '#5E5CE6' : 'var(--text)',
+                      }}>
+                      <span style={{ fontSize:26 }}>{prod.emoji || '📦'}</span>
+                      <span style={{ fontSize:11, fontWeight:800, textAlign:'center', lineHeight:1.3 }}>
+                        {prod.name}
+                      </span>
+                      {prod.chip && (
+                        <span style={{ fontSize:9, color:'var(--text3)', fontWeight:600 }}>
+                          {prod.chip}
+                        </span>
+                      )}
+                      {(prod.default_capacities?.length > 0) && (
+                        <span style={{ fontSize:9, color:'var(--text3)' }}>
+                          {prod.default_capacities.length} opciones GB
+                        </span>
+                      )}
+                      {active && (
+                        <span style={{ fontSize:14 }}>✅</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {filteredCatalog.length === 0 && (
+                <div style={{ padding:'20px', textAlign:'center', color:'var(--text3)', fontSize:13 }}>
+                  No hay productos en esta categoría.{' '}
+                  <Link href="/corp" style={{ color:'#5E5CE6' }}>Agregar en Corp Panel →</Link>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ═══════════════════════════════════
               SECCIÓN 1 — IDENTIFICACIÓN
@@ -381,27 +524,62 @@ export default function NuevoProducto() {
             {/* Modelo */}
             <div className="form-group">
               <label className="form-label">Modelo *</label>
-              <select
-                required
-                className="form-select"
-                value={form.model}
-                onChange={e => setForm(f => ({ ...f, model: e.target.value }))}>
-                <option value="">— Selecciona modelo —</option>
-                {['11','12','13','14','15','16','17'].map(gen => (
-                  <optgroup key={gen} label={`iPhone ${gen}`}>
-                    {MODELS.filter(m => m.gen === gen).map(m => (
-                      <option key={m.v} value={m.v}>{m.v}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+
+              {/* Si hay producto del catálogo, mostrar chip de selección */}
+              {selectedProduct && (
+                <div style={{
+                  display:'flex', alignItems:'center', gap:10,
+                  padding:'10px 14px', borderRadius:12, marginBottom:8,
+                  background:'rgba(94,92,230,0.10)',
+                  border:'1.5px solid rgba(94,92,230,0.35)',
+                }}>
+                  <span style={{ fontSize:22 }}>{selectedProduct.emoji || '📦'}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:800, fontSize:14 }}>{selectedProduct.name}</div>
+                    {selectedProduct.chip && (
+                      <div style={{ fontSize:11, color:'var(--text3)' }}>{selectedProduct.chip}</div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedProduct(null); setForm(f => ({...f, model:'', chip:'', color:'', capacity:''})); }}
+                    style={{ background:'none', border:'none', cursor:'pointer', fontSize:16, color:'var(--text3)' }}>
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Dropdown solo si no hay catálogo seleccionado */}
+              {!selectedProduct && (
+                <select
+                  required
+                  className="form-select"
+                  value={form.model}
+                  onChange={e => setForm(f => ({ ...f, model: e.target.value }))}>
+                  <option value="">— Selecciona modelo o elige del catálogo arriba —</option>
+                  {['11','12','13','14','15','16','17'].map(gen => (
+                    <optgroup key={gen} label={`iPhone ${gen}`}>
+                      {MODELS.filter(m => m.gen === gen).map(m => (
+                        <option key={m.v} value={m.v}>{m.v}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              )}
             </div>
 
-            {/* Capacidad — pill buttons */}
+            {/* Capacidad — pill buttons (desde catálogo o hardcode) */}
             <div className="form-group">
-              <label className="form-label">Capacidad</label>
+              <label className="form-label">
+                Capacidad
+                {selectedProduct?.default_capacities?.length > 0 &&
+                  <span style={{ marginLeft:8, fontSize:10, color:'#5E5CE6', fontWeight:700 }}>
+                    📋 del catálogo
+                  </span>
+                }
+              </label>
               <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
-                {CAPACITIES.map(cap => (
+                {modelCapacities.map(cap => (
                   <PillBtn
                     key={cap}
                     label={cap}
@@ -415,7 +593,14 @@ export default function NuevoProducto() {
 
             {/* Color */}
             <div className="form-group">
-              <label className="form-label">Color</label>
+              <label className="form-label">
+                Color
+                {selectedProduct?.default_colors?.length > 0 &&
+                  <span style={{ marginLeft:8, fontSize:10, color:'#5E5CE6', fontWeight:700 }}>
+                    📋 del catálogo
+                  </span>
+                }
+              </label>
               {modelColors.length > 0 ? (
                 <div style={{ display:'flex', flexWrap:'wrap', gap:7 }}>
                   {modelColors.map(col => (
