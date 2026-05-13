@@ -153,10 +153,10 @@ export default function CorpPage() {
   async function loadProducts() {
     const { data } = await supabase
       .from('products')
-      .select('id, name, emoji, description, sale_price, category, chip, default_colors, default_capacities')
+      .select('id, name, emoji, description, sale_price, category, chip, default_colors, default_capacities, image_url')
       .order('category', { ascending: true })
       .order('name',     { ascending: true })
-      .limit(100);
+      .limit(200);
     setProducts(data || []);
   }
 
@@ -704,6 +704,7 @@ export default function CorpPage() {
       chip:                form.chip                || null,
       default_colors:      parseList(form.colors_text),
       default_capacities:  parseList(form.capacities_text),
+      image_url:           form.image_url           || null,
     };
 
     if (form._edit_id) {
@@ -1389,15 +1390,31 @@ export default function CorpPage() {
                       }}>
                         {/* Fila principal */}
                         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                          {/* Emoji */}
+                          {/* Foto del producto */}
                           <div style={{
-                            fontSize: 34, lineHeight: 1, flexShrink: 0,
-                            width: 52, height: 52, borderRadius: 14,
-                            background: `${catColor}14`,
+                            flexShrink: 0, width: 64, height: 64, borderRadius: 14,
+                            background: p.image_url ? '#fff' : `${catColor}14`,
                             border: `1.5px solid ${catColor}30`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            overflow: 'hidden',
                           }}>
-                            {p.emoji || '📦'}
+                            {p.image_url
+                              ? <img
+                                  src={p.image_url}
+                                  alt={p.name}
+                                  style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }}
+                                  onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                                />
+                              : null
+                            }
+                            <span style={{
+                              fontSize: 32, lineHeight: 1,
+                              display: p.image_url ? 'none' : 'flex',
+                              alignItems: 'center', justifyContent: 'center',
+                              width: '100%', height: '100%',
+                            }}>
+                              {p.emoji || '📦'}
+                            </span>
                           </div>
 
                           {/* Info */}
@@ -1439,6 +1456,7 @@ export default function CorpPage() {
                                   chip:             p.chip           || '',
                                   colors_text:      (p.default_colors     || []).join(', '),
                                   capacities_text:  (p.default_capacities || []).join(', '),
+                                  image_url:        p.image_url      || '',
                                   _cat_filter:      form._cat_filter,
                                 });
                                 setModal('add-product');
@@ -3188,6 +3206,36 @@ export default function CorpPage() {
                         value={form.sale_price || ''}
                         onChange={e => setForm({ ...form, sale_price: e.target.value })}
                       />
+                    </div>
+
+                    {/* Imagen del producto */}
+                    <div className="form-group">
+                      <label className="form-label">🖼 Foto del producto (URL)</label>
+                      <input className="form-input"
+                        placeholder="https://store.storeimages.cdn-apple.com/..."
+                        value={form.image_url || ''}
+                        onChange={e => setForm({ ...form, image_url: e.target.value })}
+                        style={{ fontSize: 12 }}
+                      />
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                        Pega la URL de la imagen del producto (Apple CDN, tu servidor, etc.)
+                      </div>
+                      {/* Preview de la imagen */}
+                      {form.image_url && (
+                        <div style={{
+                          marginTop: 10, borderRadius: 14, overflow: 'hidden',
+                          background: '#fff', border: '1px solid var(--border)',
+                          padding: 12, display: 'flex', justifyContent: 'center',
+                          maxHeight: 160,
+                        }}>
+                          <img
+                            src={form.image_url}
+                            alt="Preview"
+                            style={{ height: 130, objectFit: 'contain' }}
+                            onError={e => { e.target.style.opacity = 0.3; e.target.alt = '⚠️ URL inválida'; }}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <button className="btn btn-primary" type="submit">

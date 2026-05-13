@@ -181,7 +181,7 @@ export default function NuevoProducto() {
   async function loadCatalog() {
     const { data } = await supabase
       .from('products')
-      .select('id, name, emoji, category, chip, default_colors, default_capacities, sale_price')
+      .select('id, name, emoji, category, chip, default_colors, default_capacities, sale_price, image_url')
       .order('category').order('name').limit(200);
     setCatalog(data || []);
   }
@@ -447,7 +447,37 @@ export default function NuevoProducto() {
                         background: active ? 'rgba(94,92,230,0.14)' : 'transparent',
                         color: active ? '#5E5CE6' : 'var(--text)',
                       }}>
-                      <span style={{ fontSize:26 }}>{prod.emoji || '📦'}</span>
+                      {/* Imagen real o emoji fallback */}
+                      <div style={{
+                        width:56, height:56, borderRadius:12, overflow:'hidden',
+                        background: prod.image_url ? '#fff' : 'rgba(94,92,230,0.1)',
+                        border:'1px solid rgba(94,92,230,0.2)',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        flexShrink:0,
+                      }}>
+                        {prod.image_url ? (
+                          <>
+                            <img
+                              src={prod.image_url}
+                              alt={prod.name}
+                              style={{ width:'100%', height:'100%', objectFit:'contain', padding:4 }}
+                              onError={e => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                            <span style={{
+                              fontSize:26, display:'none',
+                              width:'100%', height:'100%',
+                              alignItems:'center', justifyContent:'center',
+                            }}>
+                              {prod.emoji || '📦'}
+                            </span>
+                          </>
+                        ) : (
+                          <span style={{ fontSize:26 }}>{prod.emoji || '📦'}</span>
+                        )}
+                      </div>
                       <span style={{ fontSize:11, fontWeight:800, textAlign:'center', lineHeight:1.3 }}>
                         {prod.name}
                       </span>
