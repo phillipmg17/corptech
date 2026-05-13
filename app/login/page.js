@@ -234,18 +234,21 @@ export default function AuthPage() {
             </div>
           </form>
         )}
-      </div>
 
-      {/* QR Login button */}
-      <a href="/login/qr" style={{
-        display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-        marginTop:16, padding:'13px 20px', borderRadius:14,
-        background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.10)',
-        color:'rgba(255,255,255,0.6)', fontSize:14, fontWeight:600, textDecoration:'none',
-        width:'100%', maxWidth:360, boxSizing:'border-box',
-      }}>
-        <span style={{fontSize:18}}>📷</span> Acceso con Carnet QR
-      </a>
+        {/* QR Login — dentro del card, al fondo */}
+        {mode === 'login' && (
+          <a href="/login/qr" style={{
+            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+            marginTop:12, padding:'12px 16px', borderRadius:12,
+            background:'var(--card)', border:'1px solid var(--border)',
+            color:'var(--text3)', fontSize:13, fontWeight:600, textDecoration:'none',
+            width:'100%', boxSizing:'border-box',
+          }}>
+            <span style={{fontSize:16}}>📷</span> Acceso con Carnet QR
+          </a>
+        )}
+
+      </div>
     </div>
   );
 }
