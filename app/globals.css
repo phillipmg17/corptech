@@ -226,11 +226,10 @@ html, body {
     color: var(--blue);
   }
 
-  /* Sidebar brand header — logo arriba + nombre empresa abajo */
+  /* Sidebar brand header — logo arriba + nombre empresa abajo (CSS fallback) */
   .tab-bar::before {
     content: 'Corp Tech';
     display: block;
-    /* Fondo detrás del logo (visible en dark y light) */
     background:
       url('/logo.png') no-repeat center 12px / 48px 48px,
       linear-gradient(180deg, var(--card2) 72px, transparent 72px);
@@ -243,6 +242,71 @@ html, body {
     letter-spacing: 0.06em;
     text-transform: uppercase;
     text-align: center;
+  }
+
+  /* Cuando el sidebar tiene brand HTML, suprimir el ::before CSS */
+  .tab-bar-branded::before {
+    content: none !important;
+    display: none !important;
+  }
+  .tab-bar-branded {
+    padding-top: 0 !important;
+  }
+
+  /* Ocultar top-bar en desktop (cuando el sidebar lleva la info) */
+  .top-bar-desktop-hidden {
+    display: none !important;
+  }
+
+  /* Sidebar brand HTML — logo + empresa + usuario + acciones */
+  .sidebar-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 12px 14px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+    gap: 2px;
+  }
+  .sidebar-brand-logo {
+    width: 56px; height: 56px;
+    border-radius: 16px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .sidebar-brand-logo img {
+    width: 44px; height: 44px; object-fit: contain;
+  }
+  .sidebar-brand-company {
+    font-size: 13px; font-weight: 800;
+    color: var(--text); letter-spacing: -0.3px;
+    text-align: center;
+  }
+  .sidebar-brand-user {
+    font-size: 11px; color: var(--text3); font-weight: 500;
+    text-align: center; margin-bottom: 10px;
+  }
+  .sidebar-brand-actions {
+    display: flex; gap: 6px; width: 100%;
+  }
+  .sidebar-brand-actions button {
+    flex: 1;
+    background: var(--card2); border: 1px solid var(--border);
+    border-radius: 9px; padding: 6px 4px;
+    color: var(--text3); font-size: 12px; cursor: pointer;
+    font-weight: 600; font-family: inherit;
+    transition: background .15s, color .15s;
+  }
+  .sidebar-brand-actions button:hover {
+    background: var(--card3); color: var(--text);
+  }
+
+  /* Quitar padding-top del content cuando no hay top-bar */
+  .content-no-topbar {
+    padding-top: 16px !important;
   }
 
   /* Content area ocupa el resto */
