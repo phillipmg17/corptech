@@ -59,17 +59,9 @@ export default function DashboardPage() {
     setOrgName(prof?.organizations?.name || 'Corp Tech');
 
     // Auto-redirect al panel correspondiente por rol
-    if (r === 'corp') { router.replace('/corp'); return; }
-    if (r === 'gerente' || r === 'store_manager') { router.replace('/store'); return; }
+    if (r === 'corp' || r === 'admin_corp') { router.replace('/corp'); return; }
+    if (r === 'gerente' || r === 'store_manager' || r === 'store_admin') { router.replace('/store'); return; }
     // superadmin y vendedor se quedan en dashboard
-
-    // Si es gerente de tienda y no ha hecho onboarding → redirigir a setup
-    if (r === 'store_manager' || r === 'admin_corp') {
-      const { data: stSettings } = await supabase.from('org_settings').select('onboarding_done').eq('org_id', oid).single();
-      if (!stSettings || !stSettings.onboarding_done) {
-        router.replace('/setup'); return;
-      }
-    }
 
     setLoading(false);
     loadFx();
