@@ -144,7 +144,15 @@ export default function AccesoSlugPage({ params }) {
       }, { onConflict: 'org_id,email', ignoreDuplicates: false });
     }
 
-    setSuccess('¡Cuenta creada! Revisa tu correo para confirmar tu registro, luego inicia sesión.');
+    /* 3. Si el email ya está confirmado (Supabase sin confirmación activada),
+          hay sesión directa → redirigir al portal */
+    if (authData.session) {
+      router.replace(`/cliente/${slug}`);
+      return;
+    }
+
+    /* 4. Si requiere confirmación, mostrar aviso */
+    setSuccess('¡Cuenta creada! Revisa tu correo para confirmar y luego inicia sesión aquí.');
     setLoading(false);
     setTab('login');
     setEmail(regEmail);
