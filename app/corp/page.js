@@ -33,7 +33,7 @@ export default function CorpPage() {
   const { theme, toggleTheme } = useTheme();
   const [me,             setMe]             = useState(null);
   const [loading,        setLoading]        = useState(true);
-  const [tab,            setTab]            = useState('global');
+  const [tab,            setTab]            = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [stocks,      setStocks]      = useState([]);
   const [sales,       setSales]       = useState([]);
@@ -68,6 +68,10 @@ export default function CorpPage() {
   const [cashAccounts,setCashAccounts]= useState([]);
   const [cashTotals,  setCashTotals]  = useState({ banks_pen: 0, platforms_pen: 0, cash_pen: 0, total_pen: 0, total_usd: 0 });
   const [finLoading,  setFinLoading]  = useState(false);
+
+  /* ── DASHBOARD ── */
+  const [dashData,    setDashData]    = useState(null);
+  const [dashLoading, setDashLoading] = useState(false);
 
   /* ── LIQUIDACIONES ── */
   const [liquidaciones, setLiquidaciones] = useState([]);
@@ -159,6 +163,110 @@ export default function CorpPage() {
     const { data: salesData }   = await supabase.from('sales').select('total_amount');
     const totalRevenue = (salesData || []).reduce((s, v) => s + (v.total_amount || 0), 0);
     setKpis({ totalStock: stockCount || 0, totalSales: (salesData || []).length, totalRevenue });
+  }
+
+  async function loadDashboard() {
+    setDashLoading(true);
+    try {
+      // Tipo de cambio USD→PEN
+      let fx = 3.75;
+      try {
+        const r = await fetch('https://api.frankfurter.app/latest?from=USD&to=PEN', { cache: 'no-store' });
+        const j = await r.json();
+        if (j?.rates?.PEN) fx = j.rates.PEN;
+      } catch {}
+
+      // Stock disponible + en tránsito
+      const { data: stockItems } = await supabase
+        .from('stock_items')
+        .select('id, status, sale_price, owner_org_id')
+        .in('status', ['available', 'in_transit']);
+
+      const available  = (stockItems || []).filter(s => s.status === 'available');
+      const inTransit  = (stockItems || []).filter(s => s.status === 'in_transit');
+      const stockTotal = available.reduce((s, x) => s + (x.sale_price || 0), 0);
+      const transitVal = inTransit.reduce((s, x) => s + (x.sale_price || 0), 0);
+
+      const stockByOrg = [
+        { id: CORP_ID, name: 'Almacén Corp', ico: '🏢', color: '#0A84FF' },
+        ...STORES.map(s => ({ ...s, color: s.id === STORES[0].id ? '#30D158' : s.id === STORES[1].id ? '#BF5AF2' : '#FF9F0A' })),
+      ].map(org => {
+        const items = available.filter(x => x.owner_org_id === org.id);
+        return { ...org, count: items.length, value: items.reduce((s, x) => s + (x.sale_price || 0), 0) };
+      });
+
+      // Cuentas de caja
+      const { data: cashRows } = await supabase.from('cash_accounts').select('*').eq('org_id', CORP_ID);
+      const toS = a => a.moneda === 'USD' ? (a.saldo || 0) * fx : (a.saldo || 0);
+      const cashAccs = cashRows || [];
+      const cashBanks = cashAccs.filter(a => a.tipo === 'banco').reduce((s, a) => s + toS(a), 0);
+      const cashPlats = cashAccs.filter(a => a.tipo === 'plataforma').reduce((s, a) => s + toS(a), 0);
+      const cashEfect = cashAccs.filter(a => a.tipo === 'efectivo').reduce((s, a) => s + toS(a), 0);
+      const cashTotal = cashBanks + cashPlats + cashEfect;
+
+      // Detalles por cuenta
+      const cashDetail = cashAccs.map(a => ({
+        id: a.id, nombre: a.nombre, tipo: a.tipo, moneda: a.moneda,
+        saldo: a.saldo || 0, saldoPEN: toS(a),
+      })).sort((a, b) => b.saldoPEN - a.saldoPEN);
+
+      // Liquidaciones pendientes por tienda
+      const { data: liqRows } = await supabase
+        .from('liquidaciones')
+        .select('store_org_id, monto_neto_pen, estado, periodo_inicio, periodo_fin')
+        .in('estado', ['enviada', 'pendiente'])
+        .order('created_at', { ascending: false });
+
+      const liqByStore = STORES.map(s => {
+        const items = (liqRows || []).filter(l => l.store_org_id === s.id);
+        return { ...s, items, total: items.reduce((sum, l) => sum + (l.monto_neto_pen || 0), 0) };
+      }).filter(s => s.items.length > 0);
+      const totalDeuda = liqByStore.reduce((s, st) => s + st.total, 0);
+
+      // Ventas del mes
+      const now   = new Date();
+      const y     = now.getFullYear();
+      const m     = String(now.getMonth() + 1).padStart(2, '0');
+      const start = `${y}-${m}-01T00:00:00`;
+      const { data: salesMonth } = await supabase
+        .from('sales')
+        .select('id, total_amount, payment_method, org_id, created_at')
+        .gte('created_at', start)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      const ventasMes  = (salesMonth || []).reduce((s, v) => s + (v.total_amount || 0), 0);
+      const ventasCount = (salesMonth || []).length;
+
+      const ventasByStore = STORES.map(s => ({
+        ...s,
+        total: (salesMonth || []).filter(v => v.org_id === s.id).reduce((sum, v) => sum + (v.total_amount || 0), 0),
+        count: (salesMonth || []).filter(v => v.org_id === s.id).length,
+      }));
+
+      // Importaciones activas
+      const { data: imBatches } = await supabase
+        .from('import_batches')
+        .select('id, descripcion, estado, num_unidades, costo_landed_pen, fecha_llegada_est')
+        .in('estado', ['en_transito', 'en_aduana', 'en_lima'])
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const importVal = (imBatches || []).reduce((s, b) => s + (b.costo_landed_pen || 0), 0);
+
+      // Total capital (stock disponible + caja + importaciones en tránsito)
+      const capitalTotal = stockTotal + cashTotal + importVal;
+
+      setDashData({
+        fx, stockTotal, transitVal, stockByOrg, stockCount: available.length,
+        cashBanks, cashPlats, cashEfect, cashTotal, cashDetail,
+        liqByStore, totalDeuda,
+        ventasMes, ventasCount, ventasByStore, recentSales: (salesMonth || []).slice(0, 8),
+        importVal, imBatches: imBatches || [],
+        capitalTotal,
+      });
+    } catch (err) { console.error('loadDashboard error:', err); }
+    setDashLoading(false);
   }
 
   async function loadGlobalStock() {
@@ -1205,6 +1313,12 @@ export default function CorpPage() {
   }
 
   useEffect(() => {
+    if (tab === 'dashboard') loadDashboard();
+    if (tab === 'global') loadGlobalStock();
+    if (tab === 'ventas') loadAllSales();
+  }, [tab]); // eslint-disable-line
+
+  useEffect(() => {
     if (tab === 'global') loadGlobalStock();
     if (tab === 'ventas') loadAllSales();
   }, [storeFilter]);
@@ -1234,6 +1348,7 @@ export default function CorpPage() {
   );
 
   const CORP_NAV = [
+    { id: 'dashboard',     ico: '📈', lbl: 'Dashboard'     },
     { id: 'tiendas',       ico: '🏪', lbl: 'Tiendas'       },
     { id: 'global',        ico: '📦', lbl: 'Stock'         },
     { id: 'finanzas',      ico: '💰', lbl: 'Finanzas'      },
@@ -1312,6 +1427,252 @@ export default function CorpPage() {
       )}
 
       <div className="content content-no-topbar">
+
+        {/* ══════════════════════════════════════
+            TAB: DASHBOARD EJECUTIVO
+        ══════════════════════════════════════ */}
+        {tab === 'dashboard' && (
+          <div style={{ padding: '16px', paddingBottom: 48 }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 22 }}>📈 Dashboard</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>Vista ejecutiva · {new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+              </div>
+              <button className="section-action" onClick={loadDashboard}>⟳ Actualizar</button>
+            </div>
+
+            {dashLoading && (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text3)' }}>
+                <div className="spinner" style={{ margin: '0 auto 12px' }} />
+                Cargando métricas...
+              </div>
+            )}
+
+            {!dashLoading && dashData && (() => {
+              const fmt  = (n) => `S/ ${parseFloat(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              const fmtU = (n) => `$ ${parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+              const fmtN = (n) => parseFloat(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              const d = dashData;
+
+              return (
+                <>
+                  {/* ── FILA 1: Capital total KPI banner ── */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, #0A84FF22 0%, #30D15822 100%)',
+                    border: '1px solid rgba(10,132,255,0.3)',
+                    borderRadius: 20, padding: '20px 24px', marginBottom: 16,
+                    display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>💎 Capital Total del Holding</div>
+                      <div style={{ fontSize: 32, fontWeight: 900, color: '#0A84FF', lineHeight: 1 }}>{fmt(d.capitalTotal)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{fmtU(d.capitalTotal / d.fx)} · TC: {d.fx.toFixed(3)}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <div style={{ textAlign: 'center', padding: '8px 16px', background: 'rgba(48,209,88,0.1)', borderRadius: 14, border: '1px solid rgba(48,209,88,0.2)' }}>
+                        <div style={{ fontSize: 10, color: '#30D158', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>📦 Stock</div>
+                        <div style={{ fontWeight: 800, fontSize: 16, color: '#30D158' }}>{fmt(d.stockTotal)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)' }}>{d.stockCount} equipos</div>
+                      </div>
+                      <div style={{ textAlign: 'center', padding: '8px 16px', background: 'rgba(255,214,10,0.1)', borderRadius: 14, border: '1px solid rgba(255,214,10,0.2)' }}>
+                        <div style={{ fontSize: 10, color: '#FFD60A', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>💵 Caja</div>
+                        <div style={{ fontWeight: 800, fontSize: 16, color: '#FFD60A' }}>{fmt(d.cashTotal)}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)' }}>{d.cashDetail.length} cuentas</div>
+                      </div>
+                      {d.importVal > 0 && (
+                        <div style={{ textAlign: 'center', padding: '8px 16px', background: 'rgba(191,90,242,0.1)', borderRadius: 14, border: '1px solid rgba(191,90,242,0.2)' }}>
+                          <div style={{ fontSize: 10, color: '#BF5AF2', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>✈️ Importando</div>
+                          <div style={{ fontWeight: 800, fontSize: 16, color: '#BF5AF2' }}>{fmt(d.importVal)}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text3)' }}>{d.imBatches.length} lotes</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── FILA 2: KPIs rápidos ── */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12, marginBottom: 20 }}>
+                    {[
+                      { ico: '📊', lbl: 'Ventas del Mes', val: fmt(d.ventasMes), sub: `${d.ventasCount} transacciones`, color: '#30D158' },
+                      { ico: '🔄', lbl: 'Stock en Tránsito', val: fmt(d.transitVal), sub: 'Entre almacenes', color: '#FF9F0A' },
+                      { ico: '⚠️', lbl: 'Deudas Tiendas', val: fmt(d.totalDeuda), sub: `${d.liqByStore.length} tiendas`, color: d.totalDeuda > 0 ? '#FF453A' : '#30D158' },
+                      { ico: '🏦', lbl: 'Bancos', val: fmt(d.cashBanks), sub: 'Total en bancos', color: '#0A84FF' },
+                      { ico: '📱', lbl: 'Plataformas', val: fmt(d.cashPlats), sub: 'Yape, Plin, etc.', color: '#5E5CE6' },
+                      { ico: '💵', lbl: 'Efectivo físico', val: fmt(d.cashEfect), sub: 'En caja', color: '#FFD60A' },
+                    ].map((k, i) => (
+                      <div key={i} style={{
+                        background: 'var(--card)', border: `1px solid var(--border)`,
+                        borderRadius: 16, padding: '14px 16px',
+                        borderLeft: `3px solid ${k.color}`,
+                      }}>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: .8, marginBottom: 4 }}>{k.ico} {k.lbl}</div>
+                        <div style={{ fontWeight: 900, fontSize: 17, color: k.color, lineHeight: 1.1 }}>{k.val}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>{k.sub}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── FILA 3: Stock por ubicación ── */}
+                  <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 18, padding: '16px', marginBottom: 16 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>📦 Stock por Ubicación</div>
+                    {d.stockByOrg.map((org, i) => {
+                      const pct = d.stockTotal > 0 ? (org.value / d.stockTotal) * 100 : 0;
+                      return (
+                        <div key={org.id} style={{ marginBottom: i < d.stockByOrg.length - 1 ? 14 : 0 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 18 }}>{org.ico}</span>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: 13 }}>{org.name}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{org.count} equipos</div>
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 800, fontSize: 14, color: org.color || '#0A84FF' }}>{fmt(org.value)}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text3)' }}>{pct.toFixed(1)}% del total</div>
+                            </div>
+                          </div>
+                          <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: org.color || '#0A84FF', borderRadius: 99, transition: 'width .5s ease' }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ── FILA 4: Cuentas de dinero detalladas ── */}
+                  {d.cashDetail.length > 0 && (
+                    <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 18, padding: '16px', marginBottom: 16 }}>
+                      <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>💰 Dinero por Cuenta / Ubicación</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 10 }}>
+                        {d.cashDetail.map(acc => {
+                          const tipoColor = acc.tipo === 'banco' ? '#0A84FF' : acc.tipo === 'plataforma' ? '#5E5CE6' : acc.tipo === 'efectivo' ? '#FFD60A' : '#8E8E93';
+                          const tipoLbl   = acc.tipo === 'banco' ? '🏦' : acc.tipo === 'plataforma' ? '📱' : acc.tipo === 'efectivo' ? '💵' : '🏷️';
+                          return (
+                            <div key={acc.id} style={{ background: 'var(--card2)', borderRadius: 14, padding: '12px 14px', border: `1px solid ${tipoColor}22` }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: tipoColor, textTransform: 'uppercase', marginBottom: 4 }}>{tipoLbl} {acc.tipo}</div>
+                              <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 2, lineHeight: 1.2 }}>{acc.nombre}</div>
+                              <div style={{ fontWeight: 900, fontSize: 16, color: tipoColor }}>
+                                {acc.moneda === 'USD' ? `$ ${fmtN(acc.saldo)}` : `S/ ${fmtN(acc.saldo)}`}
+                              </div>
+                              {acc.moneda === 'USD' && (
+                                <div style={{ fontSize: 10, color: 'var(--text3)' }}>≈ S/ {fmtN(acc.saldoPEN)}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── FILA 5: Deudas de tiendas ── */}
+                  {d.liqByStore.length > 0 ? (
+                    <div style={{ background: 'var(--card)', border: '1px solid rgba(255,69,58,0.3)', borderRadius: 18, padding: '16px', marginBottom: 16 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                        <div style={{ fontWeight: 800, fontSize: 15 }}>⚠️ Deudas Pendientes de Tiendas</div>
+                        <span style={{ background: 'rgba(255,69,58,0.15)', color: '#FF453A', fontWeight: 800, fontSize: 12, padding: '4px 10px', borderRadius: 20 }}>{fmt(d.totalDeuda)}</span>
+                      </div>
+                      {d.liqByStore.map(store => (
+                        <div key={store.id} style={{ marginBottom: 10 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(255,69,58,0.05)', border: '1px solid rgba(255,69,58,0.15)', borderRadius: 12 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 18 }}>{store.ico}</span>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: 13 }}>{store.name}</div>
+                                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{store.items.length} liquidación{store.items.length !== 1 ? 'es' : ''} pendiente{store.items.length !== 1 ? 's' : ''}</div>
+                              </div>
+                            </div>
+                            <div style={{ fontWeight: 900, fontSize: 16, color: '#FF453A' }}>{fmt(store.total)}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ background: 'var(--card)', border: '1px solid rgba(48,209,88,0.25)', borderRadius: 18, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 22 }}>✅</span>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#30D158' }}>Sin deudas pendientes</div>
+                        <div style={{ fontSize: 12, color: 'var(--text3)' }}>Todas las tiendas están al día</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── FILA 6: Ventas por tienda ── */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 12, marginBottom: 16 }}>
+                    {d.ventasByStore.map(s => (
+                      <div key={s.id} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: '14px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 22 }}>{s.ico}</span>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
+                        </div>
+                        <div style={{ fontWeight: 900, fontSize: 20, color: '#30D158', marginBottom: 2 }}>{fmt(s.total)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>{s.count} venta{s.count !== 1 ? 's' : ''} este mes</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── FILA 7: Importaciones activas ── */}
+                  {d.imBatches.length > 0 && (
+                    <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 18, padding: '16px', marginBottom: 16 }}>
+                      <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>✈️ Importaciones Activas</div>
+                      {d.imBatches.map(b => {
+                        const estadoColor = b.estado === 'en_transito' ? '#FF9F0A' : b.estado === 'en_aduana' ? '#BF5AF2' : '#30D158';
+                        const estadoLbl   = b.estado === 'en_transito' ? '✈️ En tránsito' : b.estado === 'en_aduana' ? '🛃 En aduana' : '📦 En Lima';
+                        return (
+                          <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 13 }}>{b.descripcion || 'Lote sin nombre'}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>{b.num_unidades} unid{b.fecha_llegada_est ? ` · Est: ${b.fecha_llegada_est}` : ''}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 800, fontSize: 14, color: '#BF5AF2' }}>{fmt(b.costo_landed_pen)}</div>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: estadoColor }}>{estadoLbl}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* ── FILA 8: Últimas ventas ── */}
+                  {d.recentSales.length > 0 && (
+                    <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 18, padding: '16px' }}>
+                      <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14 }}>🧾 Últimas Ventas</div>
+                      {d.recentSales.map(s => {
+                        const store   = ALL_ORGS.find(o => o.id === s.org_id);
+                        const hora    = new Date(s.created_at).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                        const pmColor = s.payment_method === 'efectivo' ? '#FFD60A' : s.payment_method === 'yape' ? '#BF5AF2' : s.payment_method === 'transferencia' ? '#0A84FF' : '#30D158';
+                        return (
+                          <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 16 }}>{store?.ico || '🏢'}</span>
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: 12 }}>{store?.name || 'Corp'}</div>
+                                <div style={{ fontSize: 10, color: 'var(--text3)' }}>{hora}</div>
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 800, fontSize: 14, color: '#30D158' }}>S/ {fmtN(s.total_amount)}</div>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: pmColor, textTransform: 'capitalize' }}>{s.payment_method}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {!dashLoading && !dashData && (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text3)' }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>📈</div>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>Dashboard vacío</div>
+                <button className="section-action" onClick={loadDashboard}>Cargar métricas</button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ══════════════════════════════════════
             TAB: STOCK GLOBAL
