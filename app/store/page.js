@@ -583,28 +583,71 @@ export default function StorePage() {
         )}
 
         {/* ── VENTAS ── */}
-        {tab === 'ventas' && (
-          <div style={{ padding: '16px' }}>
-            <div className="section-title">📊 Ventas</div>
-            {sales.length === 0 ? <div className="empty-msg">Sin ventas</div> : (
-              <div className="card">
-                {sales.map(s => (
-                  <div className="list-item" key={s.id}>
-                    <div className="list-item-ico">🧾</div>
-                    <div className="list-item-body">
-                      <div className="list-item-name">{s.customers?.full_name || 'Público general'}</div>
-                      <div className="list-item-sub">
-                        {s.payment_method} · {new Date(s.created_at).toLocaleDateString('es-PE')}
-                        {s.users?.full_name && ` · ${s.users.full_name}`}
-                      </div>
-                    </div>
-                    <div className="list-item-val">S/{(s.total_amount||0).toFixed(2)}</div>
+        {tab === 'ventas' && (() => {
+          const totalVentas = sales.reduce((s, v) => s + (v.total_amount || 0), 0);
+          const ventasHoy   = sales.filter(v => new Date(v.created_at).toDateString() === new Date().toDateString());
+          const totalHoy    = ventasHoy.reduce((s, v) => s + (v.total_amount || 0), 0);
+          const metodosCont = sales.reduce((acc, v) => { acc[v.payment_method] = (acc[v.payment_method]||0)+1; return acc; }, {});
+          return (
+            <div style={{ padding: '16px' }}>
+              <div className="section-header">
+                <div className="section-title">📊 Ventas</div>
+                <Link href="/pos" style={{
+                  background:'linear-gradient(135deg,#30D158,#34C759)',
+                  color:'#fff', fontWeight:700, fontSize:13,
+                  padding:'8px 16px', borderRadius:10, textDecoration:'none',
+                  boxShadow:'0 4px 14px rgba(48,209,88,0.3)',
+                }}>
+                  + Nueva Venta
+                </Link>
+              </div>
+
+              {/* Métricas rápidas solo de esta empresa */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                {[
+                  { lbl:'Hoy',          val:`S/${totalHoy.toFixed(2)}`,    ico:'☀️', col:'#30D158' },
+                  { lbl:'Total (50)',    val:`S/${totalVentas.toFixed(2)}`, ico:'📈', col:'#0A84FF' },
+                  { lbl:'Ventas hoy',   val:ventasHoy.length,              ico:'🧾', col:'#FF9F0A' },
+                  { lbl:'Total ventas', val:sales.length,                  ico:'📦', col:'#BF5AF2' },
+                ].map(m => (
+                  <div key={m.lbl} className="card" style={{ padding:'12px 14px' }}>
+                    <div style={{ fontSize:11, color:'var(--text3)', fontWeight:600, marginBottom:4 }}>{m.ico} {m.lbl}</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:m.col }}>{m.val}</div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Desglose por método de pago */}
+              {Object.keys(metodosCont).length > 0 && (
+                <div className="card" style={{ padding:'12px 14px', marginBottom:12, display:'flex', gap:8, flexWrap:'wrap' }}>
+                  {Object.entries(metodosCont).map(([m,n]) => (
+                    <span key={m} style={{ background:'var(--card2)', borderRadius:8, padding:'4px 10px', fontSize:12, fontWeight:600, color:'var(--text2)' }}>
+                      {m}: {n}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {sales.length === 0 ? <div className="empty-msg">Sin ventas registradas</div> : (
+                <div className="card">
+                  {sales.map(s => (
+                    <div className="list-item" key={s.id}>
+                      <div className="list-item-ico">🧾</div>
+                      <div className="list-item-body">
+                        <div className="list-item-name">{s.customers?.full_name || 'Público general'}</div>
+                        <div className="list-item-sub">
+                          {s.payment_method} · {new Date(s.created_at).toLocaleDateString('es-PE')}
+                          {s.users?.full_name && ` · Vendedor: ${s.users.full_name}`}
+                        </div>
+                      </div>
+                      <div className="list-item-val" style={{ color:'#30D158', fontWeight:700 }}>S/{(s.total_amount||0).toFixed(2)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── CAJA ── */}
         {tab === 'caja' && (

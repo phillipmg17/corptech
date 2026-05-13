@@ -89,21 +89,23 @@ export default function QRLoginPage() {
   async function lookupUser(uid) {
     setStep('loading');
 
-    // Intentar con usuario autenticado primero, si no usar anon
-    const { data: prof, error: profErr } = await supabase
+    /* ── Verificar si este dispositivo ya tiene sesión activa para este usuario ── */
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    if (currentSession?.user?.id === uid) {
+      /* Ya está logueado: redirigir directo sin pedir nada más */
+      const { data: roleRow } = await supabase
+        .from('user_roles').select('role').eq('user_id', uid).maybeSingle();
+      redirectByRole(roleRow?.role || 'vendedor');
+      return;
+    }
+
+    const { data: prof } = await supabase
       .from('users')
       .select('id, full_name, org_id, email, organizations(name)')
       .eq('id', uid)
       .maybeSingle();
 
     if (!prof) {
-      // Fallback: buscar directamente por auth user id
-      const { data: authUser } = await supabase.auth.getUser();
-      if (authUser?.user?.id === uid) {
-        // el usuario está logueado, redirigir directo
-        redirectByRole('vendedor');
-        return;
-      }
       setErrorMsg('Usuario no encontrado. Asegúrate de que la cuenta existe en el sistema.');
       setStep('error');
       return;
@@ -112,22 +114,24 @@ export default function QRLoginPage() {
     const { data: roleRow } = await supabase
       .from('user_roles').select('role').eq('user_id', uid).maybeSingle();
 
-    // Obtener TODOS los dispositivos registrados del usuario
+    /* Obtener TODOS los dispositivos registrados del usuario.
+       Nota: si RLS bloquea anon, bkList será null → paso 'register'.
+       Solución definitiva: correr el SQL de políticas anon en Supabase. */
     const { data: bkList } = await supabase
       .from('biometric_keys')
-      .select('id, credential_id, device_name, device_id')
+      .select('id, credential_id, device_name, device_id, refresh_token')
       .eq('user_id', uid)
       .order('last_used', { ascending: false, nullsFirst: false });
 
     stopCamera();
 
     const user = {
-      id:           prof.id,
-      full_name:    prof.full_name,
-      email:        prof.email || '',
-      org_name:     prof.organizations?.name || 'Corp Tech',
-      role:         roleRow?.role || 'vendedor',
-      biometrics:   bkList || [],   // todos los dispositivos
+      id:            prof.id,
+      full_name:     prof.full_name,
+      email:         prof.email || '',
+      org_name:      prof.organizations?.name || 'Corp Tech',
+      role:          roleRow?.role || 'vendedor',
+      biometrics:    bkList || [],
       credential_id: bkList?.[0]?.credential_id || null,
       device_name:   bkList?.[0]?.device_name   || null,
     };
@@ -152,97 +156,145 @@ export default function QRLoginPage() {
     setRegLoading(true);
     setErrorMsg('');
 
+    /* 1. Verificar identidad con contraseña */
+    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+      email: regEmail.trim(),
+      password: regPassword,
+    });
+
+    if (authErr || !authData?.session) {
+      setErrorMsg('Correo o contraseña incorrectos.');
+      setRegLoading(false);
+      return;
+    }
+
+    /* 2. Verificar que coincide con el QR escaneado */
+    if (authData.user.id !== foundUser.id) {
+      setErrorMsg('Las credenciales no corresponden a este carnet QR.');
+      await supabase.auth.signOut();
+      setRegLoading(false);
+      return;
+    }
+
+    /* Guardar valores antes de ops async (evita problemas de closure/estado) */
+    const sessToken = authData.session.refresh_token;
+    const uid       = foundUser.id;
+    const role      = foundUser.role;
+    const nombre    = foundUser.full_name || 'Usuario';
+
+    /* 2.5 Verificar si YA existen llaves para este usuario (como auth ya pasó, podemos leerlas) */
+    const { data: existingKeys } = await supabase
+      .from('biometric_keys')
+      .select('id')
+      .eq('user_id', uid)
+      .limit(1);
+
+    if (existingKeys && existingKeys.length > 0) {
+      /* Ya tenía llaves registradas — solo actualizar el refresh_token y redirigir */
+      await supabase.from('biometric_keys')
+        .update({ refresh_token: sessToken, last_used: new Date().toISOString() })
+        .eq('user_id', uid);
+      redirectByRole(role);
+      return;
+    }
+
+    /* 3. WebAuthn: intentar registrar huella/FaceID (totalmente opcional) */
     try {
-      /* 1. Verificar identidad con contraseña */
-      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-        email: regEmail, password: regPassword,
-      });
-
-      if (authErr || !authData.session) {
-        setErrorMsg('Correo o contraseña incorrectos.');
-        setRegLoading(false);
-        return;
-      }
-
-      /* 2. Verificar que coincide con el QR escaneado */
-      if (authData.user.id !== foundUser.id) {
-        setErrorMsg('Las credenciales no corresponden a este carnet QR.');
-        await supabase.auth.signOut();
-        setRegLoading(false);
-        return;
-      }
-
-      /* 3. Registrar WebAuthn si está disponible */
       if (window.PublicKeyCredential) {
-        try {
-          const challenge = crypto.getRandomValues(new Uint8Array(32));
-          const uid8      = new TextEncoder().encode(foundUser.id);
+        const challenge = crypto.getRandomValues(new Uint8Array(32));
+        const uid8      = new TextEncoder().encode(uid);
 
-          const cred = await navigator.credentials.create({
-            publicKey: {
-              challenge,
-              rp:   { name: 'Corp Tech ERP', id: window.location.hostname },
-              user: { id: uid8, name: regEmail, displayName: foundUser.full_name || 'Usuario' },
-              pubKeyCredParams: [
-                { type: 'public-key', alg: -7   },
-                { type: 'public-key', alg: -257 },
-              ],
-              authenticatorSelection: {
-                userVerification:        'required',
-                residentKey:             'preferred',
-                authenticatorAttachment: 'platform',
-              },
-              timeout: 60000,
+        const cred = await navigator.credentials.create({
+          publicKey: {
+            challenge,
+            rp:   { name: 'Corp Tech ERP', id: window.location.hostname },
+            user: { id: uid8, name: regEmail.trim(), displayName: nombre },
+            pubKeyCredParams: [
+              { type: 'public-key', alg: -7   },
+              { type: 'public-key', alg: -257 },
+            ],
+            authenticatorSelection: {
+              userVerification:        'required',
+              residentKey:             'preferred',
+              authenticatorAttachment: 'platform',
             },
-          });
+            timeout: 60000,
+          },
+        });
 
-          if (cred) {
-            const credIdBase64 = btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
-            const ua = navigator.userAgent;
-            let dn = 'Dispositivo';
-            if (/iPhone/.test(ua))       dn = 'iPhone';
-            else if (/iPad/.test(ua))    dn = 'iPad';
-            else if (/Mac/.test(ua))     dn = 'Mac';
-            else if (/Android/.test(ua)) dn = 'Android';
+        if (cred) {
+          const credId = btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
+          const ua = navigator.userAgent;
+          const dn = /iPhone/.test(ua) ? 'iPhone'
+                   : /iPad/.test(ua)   ? 'iPad'
+                   : /Mac/.test(ua)    ? 'Mac'
+                   : /Android/.test(ua)? 'Android'
+                   : 'Dispositivo';
 
-            // Extraer public key del response WebAuthn
-            let publicKeyB64 = credIdBase64; // fallback
-            try {
-              if (cred.response.getPublicKey) {
-                const pkBytes = cred.response.getPublicKey();
-                if (pkBytes) publicKeyB64 = btoa(String.fromCharCode(...new Uint8Array(pkBytes)));
-              }
-            } catch {}
+          let pk = credId; // fallback
+          try {
+            if (cred.response?.getPublicKey) {
+              const pkBytes = cred.response.getPublicKey();
+              if (pkBytes) pk = btoa(String.fromCharCode(...new Uint8Array(pkBytes)));
+            }
+          } catch {}
 
-            await supabase.from('biometric_keys').upsert({
-              user_id:       foundUser.id,
-              credential_id: credIdBase64,
-              device_id:     credIdBase64.slice(0, 36),
+          /* Verificar si ya existe una clave para este dispositivo (device_id) */
+          const deviceId = credId.slice(0, 36);
+          const { data: existing } = await supabase
+            .from('biometric_keys')
+            .select('id')
+            .eq('user_id', uid)
+            .eq('device_id', deviceId)
+            .maybeSingle();
+
+          if (existing?.id) {
+            /* Actualizar registro existente */
+            await supabase.from('biometric_keys').update({
+              credential_id: credId,
               device_name:   dn,
-              public_key:    publicKeyB64,
-              refresh_token: authData.session.refresh_token,
-            }, { onConflict: 'credential_id' }); // multi-dispositivo
+              public_key:    pk,
+              refresh_token: sessToken,
+              last_used:     new Date().toISOString(),
+            }).eq('id', existing.id);
+          } else {
+            /* Insertar nuevo dispositivo */
+            await supabase.from('biometric_keys').insert({
+              user_id:       uid,
+              credential_id: credId,
+              device_id:     deviceId,
+              device_name:   dn,
+              public_key:    pk,
+              refresh_token: sessToken,
+            });
           }
-        } catch (webAuthnErr) {
-          /* si el usuario cancela WebAuthn, igual lo logueamos */
-          if (webAuthnErr.name !== 'NotAllowedError') console.warn('WebAuthn:', webAuthnErr.message);
         }
       }
+    } catch (webAuthnErr) {
+      /* Si falla o el usuario cancela WebAuthn, igual continuamos con la sesión activa */
+      console.warn('WebAuthn (no crítico):', webAuthnErr.message);
 
-      /* 4. Redirigir */
-      redirectByRole(foundUser.role);
-
-    } catch (err) {
-      setErrorMsg('Error inesperado: ' + err.message);
+      /* Guardar al menos el refresh_token sin WebAuthn para futuros accesos */
+      try {
+        await supabase.from('biometric_keys').insert({
+          user_id:       uid,
+          credential_id: 'token-only-' + Date.now(),
+          device_id:     uid.slice(0, 36),
+          device_name:   'Sesión (sin biometría)',
+          public_key:    'none',
+          refresh_token: sessToken,
+        });
+      } catch {}
     }
-    setRegLoading(false);
+
+    /* 4. Redirigir SIEMPRE si llegamos aquí (sesión activa) */
+    redirectByRole(role);
   }
 
   /* ── LOGIN BIOMÉTRICO (ya tiene clave guardada) ── */
   async function confirmBiometric() {
     setStep('loading');
     try {
-      // Obtener todos los credentials del usuario para este dispositivo
       const allCreds = (foundUser.biometrics || []).map(b => {
         try {
           return { type: 'public-key', id: Uint8Array.from(atob(b.credential_id), c => c.charCodeAt(0)) };
@@ -273,7 +325,6 @@ export default function QRLoginPage() {
         if (!bk.refresh_token) continue;
         const { data: { session }, error } = await supabase.auth.refreshSession({ refresh_token: bk.refresh_token });
         if (!error && session) {
-          // Actualizar token renovado
           await supabase.from('biometric_keys')
             .update({ refresh_token: session.refresh_token, last_used: new Date().toISOString() })
             .eq('credential_id', bk.credential_id);
@@ -284,7 +335,7 @@ export default function QRLoginPage() {
       }
 
       if (!sessionOk) {
-        // Token expirado → pedir contraseña para renovar (no mostrar error, flujo suave)
+        // Token expirado → pedir contraseña para renovar
         setStep('register');
       }
 
@@ -293,7 +344,6 @@ export default function QRLoginPage() {
         setErrorMsg('Verificación biométrica cancelada. Intenta de nuevo.');
         setStep('confirm');
       } else {
-        // Cualquier otro error → ir a contraseña directamente
         setStep('register');
       }
     }

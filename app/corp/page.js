@@ -44,6 +44,7 @@ export default function CorpPage() {
   const [form,        setForm]        = useState({});
   const [products,    setProducts]    = useState([]);
   const [toast,       setToast]       = useState(null);
+  const [prodSearch,  setProdSearch]  = useState('');
 
   /* ── ALMACENES ── */
   const [warehouses,  setWarehouses]  = useState([]);
@@ -770,6 +771,7 @@ export default function CorpPage() {
   /* ── ADD STOCK ── */
   async function addStock(e) {
     e.preventDefault();
+    if (!form.product_id) { showToast('Selecciona un producto primero', 'err'); return; }
     const { error } = await supabase.from('stock_items').insert({
       owner_org_id:  form.owner_org_id || CORP_ID,
       product_id:    form.product_id,
@@ -3565,10 +3567,58 @@ export default function CorpPage() {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Producto</label>
-                    <select className="form-select" required value={form.product_id || ''} onChange={e => setForm({ ...form, product_id: e.target.value })}>
-                      <option value="">Seleccionar...</option>
-                      {products.map(p => <option key={p.id} value={p.id}>{p.emoji || '📦'} {p.name}</option>)}
-                    </select>
+                    {/* Input buscador */}
+                    <input
+                      className="form-input"
+                      placeholder="🔍 Buscar producto..."
+                      value={prodSearch}
+                      onChange={e => { setProdSearch(e.target.value); setForm(f => ({ ...f, product_id: '' })); }}
+                      autoComplete="off"
+                      style={{ borderColor: form.product_id ? '#30D158' : undefined }}
+                    />
+                    {/* Chip de producto seleccionado */}
+                    {form.product_id && (() => {
+                      const sel = products.find(p => p.id === form.product_id);
+                      return sel ? (
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6, padding:'6px 10px', background:'rgba(48,209,88,0.1)', border:'1px solid rgba(48,209,88,0.3)', borderRadius:8 }}>
+                          <span style={{ fontSize:18 }}>{sel.emoji || '📦'}</span>
+                          <span style={{ fontSize:13, fontWeight:600, color:'#30D158', flex:1 }}>{sel.name}</span>
+                          <button type="button" onClick={() => { setForm(f=>({...f,product_id:''})); setProdSearch(''); }}
+                            style={{ background:'none', border:'none', color:'#FF453A', cursor:'pointer', fontSize:16, lineHeight:1 }}>✕</button>
+                        </div>
+                      ) : null;
+                    })()}
+                    {/* Lista filtrada — solo cuando el usuario escribe Y no tiene producto seleccionado */}
+                    {prodSearch && !form.product_id && (() => {
+                      const filtered = products.filter(p =>
+                        p.name.toLowerCase().includes(prodSearch.toLowerCase())
+                      );
+                      return (
+                        <div style={{ border:'1px solid var(--border)', borderRadius:10, maxHeight:220, overflowY:'auto', marginTop:4, background:'var(--card)', boxShadow:'0 8px 24px rgba(0,0,0,0.2)', position:'relative', zIndex:10 }}>
+                          {filtered.length === 0 ? (
+                            <div style={{ padding:'12px 14px', fontSize:13, color:'var(--text3)' }}>
+                              Sin resultados para "{prodSearch}"
+                            </div>
+                          ) : filtered.map((p, i) => (
+                            <div
+                              key={p.id}
+                              onMouseDown={() => { setForm(f => ({ ...f, product_id: p.id })); setProdSearch(''); }}
+                              style={{
+                                padding:'10px 14px', cursor:'pointer',
+                                display:'flex', alignItems:'center', gap:10,
+                                fontSize:14, color:'var(--text)',
+                                borderBottom: i < filtered.length-1 ? '1px solid var(--border)' : 'none',
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background='rgba(10,132,255,0.08)'}
+                              onMouseLeave={e => e.currentTarget.style.background='transparent'}
+                            >
+                              <span style={{ fontSize:20 }}>{p.emoji || '📦'}</span>
+                              <span>{p.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="form-group">
                     <label className="form-label">IMEI</label>
@@ -4367,7 +4417,7 @@ export default function CorpPage() {
               </>
             )}
 
-            <button className="btn btn-outline btn-block" style={{ marginTop: 12 }} onClick={() => setModal(null)}>Cancelar</button>
+            <button className="btn btn-outline btn-block" style={{ marginTop: 12 }} onClick={() => { setModal(null); setProdSearch(''); }}>Cancelar</button>
           </div>
         </div>
       )}
