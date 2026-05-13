@@ -397,6 +397,10 @@ export default function DashboardPage() {
             {t.lbl}
           </button>
         ))}
+        <div className="sidebar-footer">
+          Desarrollado por<br />
+          <a href="https://pmg-studio.com" target="_blank" rel="noopener noreferrer">pmg-studio.com</a>
+        </div>
       </div>
     </div>
   );

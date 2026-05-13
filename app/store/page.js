@@ -59,11 +59,12 @@ const DEFAULT_CONFIG = {
 export default function StorePage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
-  const [me,         setMe]         = useState(null);
-  const [orgId,      setOrgId]      = useState(null);
-  const [orgName,    setOrgName]    = useState('');
-  const [loading,    setLoading]    = useState(true);
-  const [tab,        setTab]        = useState('stock');
+  const [me,             setMe]             = useState(null);
+  const [orgId,          setOrgId]          = useState(null);
+  const [orgName,        setOrgName]        = useState('');
+  const [loading,        setLoading]        = useState(true);
+  const [tab,            setTab]            = useState('stock');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [stocks,     setStocks]     = useState([]);
   const [products,   setProducts]   = useState([]);
   const [customers,  setCustomers]  = useState([]);
@@ -457,26 +458,64 @@ export default function StorePage() {
 
   const slug = SLUG_MAP[orgId] || '';
 
+  const STORE_NAV = [
+    { id: 'stock',    ico: '📦', lbl: 'Stock'    },
+    { id: 'clientes', ico: '👥', lbl: 'Clientes' },
+    { id: 'ventas',   ico: '📊', lbl: 'Ventas'   },
+    { id: 'deudas',   ico: '💳', lbl: 'Deudas'   },
+    { id: 'config',   ico: '⚙️', lbl: 'Config'   },
+  ];
+
   return (
     <div className="page-wrap">
-      {/* TOP BAR */}
-      <div className="top-bar">
+
+      {/* ── MOBILE NAV HEADER ── */}
+      <div className="mobile-nav-header">
+        <div className="mobile-nav-logo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Corp Tech" />
+          <div className="mobile-nav-title">
+            <span>{orgName || 'Tienda'}</span>
+            <span>{me?.name}</span>
+          </div>
+        </div>
+        <button className="mobile-nav-toggle" onClick={() => setMobileMenuOpen(o => !o)}>
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
+      </div>
+
+      {/* ── MOBILE DRAWER ── */}
+      <div className={`mobile-nav-drawer${mobileMenuOpen ? ' open' : ''}`}>
+        {STORE_NAV.map(t => (
+          <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
+            onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
+            <span className="ico">{t.ico}</span>{t.lbl}
+          </button>
+        ))}
+        <div style={{ display:'flex', gap:8, marginTop:4 }}>
+          <button onClick={toggleTheme} style={{ flex:1, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'10px 0', color:'var(--text2)', cursor:'pointer', fontSize:18 }}>
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button onClick={doLogout} style={{ flex:2, background:'var(--red-dim)', border:'1px solid var(--red)', borderRadius:12, padding:'10px 0', color:'var(--red)', cursor:'pointer', fontWeight:700, fontSize:13, fontFamily:'inherit' }}>
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+
+      {/* TOP BAR — oculto en desktop */}
+      <div className="top-bar top-bar-desktop-hidden">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {(me?.role === 'admin_corp' || me?.role === 'corp' || me?.role === 'superadmin') ? (
-            <Link href="/corp" className="top-btn" title="Volver a Corp Panel">‹ Corp</Link>
-          ) : (
-            <Link href="/dashboard" className="top-btn">🏠</Link>
-          )}
-          <Link href="/pos" className="top-btn">🛒</Link>
+          <div style={{ width:36, height:36, borderRadius:10, background:'var(--card2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" style={{ width:28, height:28, objectFit:'contain' }} />
+          </div>
           <div>
-            <div className="top-bar-title">🏪 {orgName}</div>
+            <div className="top-bar-title">{orgName}</div>
             <div className="top-bar-sub">{me?.name}</div>
           </div>
         </div>
         <div className="top-bar-actions">
-          <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
+          <button className="theme-toggle" onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
           <span className="badge badge-blue">{me?.role?.toUpperCase()}</span>
           <button className="top-btn-logout" onClick={doLogout}>Salir</button>
         </div>
@@ -484,7 +523,7 @@ export default function StorePage() {
 
       {toast && <div className="toast-wrap"><div className={`toast-msg ${toast.type}`}>{toast.msg}</div></div>}
 
-      <div className="content">
+      <div className="content content-no-topbar">
 
         {/* ── STOCK ── */}
         {tab === 'stock' && (
@@ -1282,19 +1321,30 @@ export default function StorePage() {
 
       </div>
 
-      {/* TAB BAR */}
-      <div className="tab-bar">
-        {[
-          { id: 'stock',    ico: '📦', lbl: 'Stock'    },
-          { id: 'clientes', ico: '👥', lbl: 'Clientes' },
-          { id: 'ventas',   ico: '📊', lbl: 'Ventas'   },
-          { id: 'deudas',   ico: '💳', lbl: 'Deudas'   },
-          { id: 'config',   ico: '⚙️', lbl: 'Config'   },
-        ].map(t => (
+      {/* TAB BAR — sidebar desktop */}
+      <div className="tab-bar tab-bar-branded">
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-logo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" />
+          </div>
+          <div className="sidebar-brand-company">{orgName || 'Tienda'}</div>
+          <div className="sidebar-brand-user">{me?.name}</div>
+          <span className="badge badge-blue" style={{ fontSize:10, marginBottom:6 }}>{me?.role?.toUpperCase()}</span>
+          <div className="sidebar-brand-actions">
+            <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+            <button onClick={doLogout}>Salir</button>
+          </div>
+        </div>
+        {STORE_NAV.map(t => (
           <button key={t.id} className={`tab-btn${tab===t.id?' active':''}`} onClick={() => switchTab(t.id)}>
             <span className="ico">{t.ico}</span>{t.lbl}
           </button>
         ))}
+        <div className="sidebar-footer">
+          Desarrollado por<br />
+          <a href="https://pmg-studio.com" target="_blank" rel="noopener noreferrer">pmg-studio.com</a>
+        </div>
       </div>
 
       {/* ── MODALS ── */}

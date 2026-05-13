@@ -31,9 +31,10 @@ const ALL_ORGS = [{ id: CORP_ID, name: 'Corp Tech', ico: '🏢' }, ...STORES];
 export default function CorpPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
-  const [me,          setMe]          = useState(null);
-  const [loading,     setLoading]     = useState(true);
-  const [tab,         setTab]         = useState('global');
+  const [me,             setMe]             = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [tab,            setTab]            = useState('global');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [stocks,      setStocks]      = useState([]);
   const [sales,       setSales]       = useState([]);
   const [users,       setUsers]       = useState([]);
@@ -1229,29 +1230,70 @@ export default function CorpPage() {
     <div className="auth-screen"><div className="loading-wrap"><div className="spinner" /></div></div>
   );
 
+  const CORP_NAV = [
+    { id: 'tiendas',       ico: '🏪', lbl: 'Tiendas'       },
+    { id: 'global',        ico: '📦', lbl: 'Stock'         },
+    { id: 'finanzas',      ico: '💰', lbl: 'Finanzas'      },
+    { id: 'liquidaciones', ico: '💳', lbl: 'Liquidaciones'  },
+    { id: 'almacenes',     ico: '🏭', lbl: 'Almacenes'     },
+    { id: 'traslados',     ico: '🔄', lbl: 'Traslados'     },
+    { id: 'importacion',   ico: '📥', lbl: 'Importación'   },
+    { id: 'imei',          ico: '🔍', lbl: 'IMEI'          },
+    { id: 'ventas',        ico: '📊', lbl: 'Ventas'        },
+    { id: 'productos',     ico: '🗂️', lbl: 'Catálogo'      },
+    { id: 'equipo',        ico: '👥', lbl: 'Equipo'        },
+  ];
+
   return (
     <div className="page-wrap">
-      {/* TOP BAR */}
-      <div className="top-bar">
+
+      {/* ── MOBILE NAV HEADER ── */}
+      <div className="mobile-nav-header">
+        <div className="mobile-nav-logo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Corp Tech" />
+          <div className="mobile-nav-title">
+            <span>Corp Tech</span>
+            <span>{me?.name}</span>
+          </div>
+        </div>
+        <button className="mobile-nav-toggle" onClick={() => setMobileMenuOpen(o => !o)}>
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
+      </div>
+
+      {/* ── MOBILE DRAWER ── */}
+      <div className={`mobile-nav-drawer${mobileMenuOpen ? ' open' : ''}`}>
+        {CORP_NAV.map(t => (
+          <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
+            onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
+            <span className="ico">{t.ico}</span>{t.lbl}
+          </button>
+        ))}
+        <div style={{ display:'flex', gap:8, marginTop:4 }}>
+          <button onClick={toggleTheme} style={{ flex:1, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'10px 0', color:'var(--text2)', cursor:'pointer', fontSize:18 }}>
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button onClick={doLogout} style={{ flex:2, background:'var(--red-dim)', border:'1px solid var(--red)', borderRadius:12, padding:'10px 0', color:'var(--red)', cursor:'pointer', fontWeight:700, fontSize:13, fontFamily:'inherit' }}>
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+
+      {/* TOP BAR — oculto en desktop */}
+      <div className="top-bar top-bar-desktop-hidden">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Logo → vuelve al inicio del corp panel */}
-          <Link href="/corp" style={{ display:'flex', alignItems:'center', textDecoration:'none', flexShrink:0 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:'var(--surface)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="Corp Tech" style={{ width:28, height:28, objectFit:'contain' }} />
-            </div>
-          </Link>
-          <Link href="/pos"  className="top-btn">🛒</Link>
-          <Link href="/chat" className="top-btn">💬</Link>
+          <div style={{ width:36, height:36, borderRadius:10, background:'var(--card2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" style={{ width:28, height:28, objectFit:'contain' }} />
+          </div>
           <div>
             <div className="top-bar-title">Corp Tech</div>
             <div className="top-bar-sub">{me?.name}</div>
           </div>
         </div>
         <div className="top-bar-actions">
-          <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
+          <button className="theme-toggle" onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
           <span className="badge" style={{ background: 'var(--purple)', color: '#fff' }}>CORP</span>
           <button className="top-btn-logout" onClick={doLogout}>Salir</button>
         </div>
@@ -1263,7 +1305,7 @@ export default function CorpPage() {
         </div>
       )}
 
-      <div className="content">
+      <div className="content content-no-topbar">
 
         {/* ══════════════════════════════════════
             TAB: STOCK GLOBAL
@@ -3176,25 +3218,30 @@ export default function CorpPage() {
 
       </div>{/* end .content */}
 
-      {/* TAB BAR — scrollable on mobile */}
-      <div className="tab-bar" style={{ overflowX: 'auto' }}>
-        {[
-          { id: 'tiendas',       ico: '🏪', lbl: 'Tiendas'      },
-          { id: 'global',        ico: '📦', lbl: 'Stock'        },
-          { id: 'finanzas',      ico: '💰', lbl: 'Finanzas'     },
-          { id: 'liquidaciones', ico: '💳', lbl: 'Liquidaciones' },
-          { id: 'almacenes',   ico: '🏭', lbl: 'Almacenes'  },
-          { id: 'traslados',   ico: '🔄', lbl: 'Traslados'  },
-          { id: 'importacion', ico: '📥', lbl: 'Importación' },
-          { id: 'imei',        ico: '🔍', lbl: 'IMEI'       },
-          { id: 'ventas',      ico: '📊', lbl: 'Ventas'     },
-          { id: 'productos',   ico: '🗂️', lbl: 'Catálogo'   },
-          { id: 'equipo',      ico: '👥', lbl: 'Equipo'     },
-        ].map(t => (
+      {/* TAB BAR — sidebar desktop con brand */}
+      <div className="tab-bar tab-bar-branded">
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-logo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" />
+          </div>
+          <div className="sidebar-brand-company">Corp Tech</div>
+          <div className="sidebar-brand-user">{me?.name}</div>
+          <span className="badge" style={{ background:'var(--purple)', color:'#fff', fontSize:10, marginBottom:6 }}>CORP</span>
+          <div className="sidebar-brand-actions">
+            <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+            <button onClick={doLogout}>Salir</button>
+          </div>
+        </div>
+        {CORP_NAV.map(t => (
           <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => switchTab(t.id)}>
             <span className="ico">{t.ico}</span>{t.lbl}
           </button>
         ))}
+        <div className="sidebar-footer">
+          Desarrollado por<br />
+          <a href="https://pmg-studio.com" target="_blank" rel="noopener noreferrer">pmg-studio.com</a>
+        </div>
       </div>
 
       {/* ══════════════════════════════════════

@@ -941,6 +941,10 @@ export default function SuperadminPage() {
             <span className="ico">{t.ico}</span>{t.lbl}
           </button>
         ))}
+        <div className="sidebar-footer">
+          Desarrollado por<br />
+          <a href="https://pmg-studio.com" target="_blank" rel="noopener noreferrer">pmg-studio.com</a>
+        </div>
       </div>
 
       {/* ── MODAL API SETTINGS ── */}
