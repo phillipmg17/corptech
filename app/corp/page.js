@@ -57,6 +57,7 @@ export default function CorpPage() {
   const [batches,     setBatches]     = useState([]);
   const [usdRate,     setUsdRate]     = useState('');
   const [loadingRate, setLoadingRate] = useState(false);
+  const [tcMode,      setTcMode]      = useState('auto'); // 'auto' | 'manual'
 
   /* ── FINANZAS ── */
   const [finFx,       setFinFx]       = useState(null);
@@ -1669,27 +1670,86 @@ export default function CorpPage() {
                 </div>
               </div>
 
-              {/* TC + botón nuevo lote */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                <input
-                  className="form-input"
-                  style={{ flex: 1 }}
-                  type="number" step="0.001"
-                  placeholder="Tipo de cambio USD→PEN"
-                  value={usdRate}
-                  onChange={e => setUsdRate(e.target.value)}
-                />
-                <button className="btn btn-outline btn-sm" onClick={fetchUsdRate} disabled={loadingRate}>
-                  {loadingRate ? '…' : '🔄 TC'}
-                </button>
-                <button className="btn btn-primary btn-sm" onClick={() => {
+              {/* ── TIPO DE CAMBIO USD → PEN ── */}
+              <div style={{
+                background: 'var(--card)', border: '1px solid var(--border)',
+                borderRadius: 16, padding: '14px 16px', marginBottom: 14,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                  💱 Tipo de Cambio — USD → Soles (PEN)
+                </div>
+
+                {/* Toggle Manual / Auto */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                  {['auto', 'manual'].map(mode => (
+                    <button key={mode} type="button"
+                      onClick={() => setTcMode(mode)}
+                      style={{
+                        flex: 1, padding: '8px', borderRadius: 10,
+                        fontWeight: 700, fontSize: 12, cursor: 'pointer',
+                        border: `1.5px solid ${tcMode === mode ? 'var(--blue)' : 'var(--border)'}`,
+                        background: tcMode === mode ? 'rgba(10,132,255,0.12)' : 'transparent',
+                        color: tcMode === mode ? 'var(--blue)' : 'var(--text3)',
+                        transition: 'all .15s',
+                      }}>
+                      {mode === 'auto' ? '🌐 Automático (API)' : '✏️ Ingresar Manual'}
+                    </button>
+                  ))}
+                </div>
+
+                {tcMode === 'auto' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button className="btn btn-outline btn-sm" onClick={fetchUsdRate} disabled={loadingRate}
+                      style={{ flexShrink: 0 }}>
+                      {loadingRate ? '⏳ Consultando…' : '🔄 Obtener TC del día'}
+                    </button>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.4 }}>
+                      {usdRate
+                        ? <span style={{ color: 'var(--green)', fontWeight: 700 }}>✓ S/ {usdRate} obtenido</span>
+                        : 'Consulta el tipo de cambio oficial en tiempo real'
+                      }
+                    </div>
+                  </div>
+                )}
+
+                {tcMode === 'manual' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input
+                      className="form-input"
+                      type="number" step="0.001" min="1"
+                      placeholder="Ej: 3.750"
+                      value={usdRate}
+                      onChange={e => setUsdRate(e.target.value)}
+                      style={{ flex: 1, fontFamily: 'monospace', fontWeight: 800, fontSize: 20, textAlign: 'center' }}
+                    />
+                    <div style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0, lineHeight: 1.5 }}>
+                      soles<br/>por $1 USD
+                    </div>
+                  </div>
+                )}
+
+                {usdRate && (
+                  <div style={{
+                    marginTop: 10, padding: '8px 12px', borderRadius: 10,
+                    background: 'rgba(48,209,88,0.08)', border: '1px solid rgba(48,209,88,0.25)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>TC activo para este lote:</span>
+                    <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--green)', fontVariantNumeric: 'tabular-nums' }}>
+                      $1 = S/ {parseFloat(usdRate).toFixed(3)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Botón nuevo lote */}
+              <button className="btn btn-primary btn-sm" style={{ width: '100%', marginBottom: 16 }}
+                onClick={() => {
                   setModal('add-batch');
                   setForm({ imp_igv: '18', imp_margen: '30', imp_unidades: '1', imp_arancel: '0' });
                 }}>
-                  + Lote
-                </button>
-              </div>
-              {usdRate && <div style={{ fontSize: 12, color: 'var(--green)', marginBottom: 14 }}>✓ TC: S/{usdRate} por $1 USD</div>}
+                + Nuevo Lote de Importación
+              </button>
 
               {/* Lista de lotes */}
               <div className="section-title" style={{ marginBottom: 12 }}>📥 Lotes de importación</div>
