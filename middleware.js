@@ -20,7 +20,20 @@ export function middleware(request) {
   if (!targetPath) return NextResponse.next();
 
   // Si ya está en la ruta correcta o en login/dashboard/pos → pasar sin cambiar
-  const PASS_THROUGH = ['/tienda', '/corp', '/store', '/dashboard', '/pos', '/api', '/_next', '/wallet', '/acceso', '/login', '/superadmin'];
+  // /acceso en dominio de tienda → mostrar login con logo de ESA tienda
+  if (pathname === '/acceso' && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    return NextResponse.rewrite(new URL(`/acceso/${slug}`, request.url));
+  }
+
+  // /cliente en dominio de tienda → portal de clientes de ESA tienda
+  if (pathname.startsWith('/cliente') && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    const rest = pathname.replace('/cliente', '');
+    return NextResponse.rewrite(new URL(`/cliente/${slug}${rest}`, request.url));
+  }
+
+  const PASS_THROUGH = ['/tienda', '/corp', '/store', '/dashboard', '/pos', '/api', '/_next', '/wallet', '/acceso', '/cliente', '/login', '/superadmin'];
   if (PASS_THROUGH.some(p => pathname.startsWith(p))) return NextResponse.next();
 
   // Si entra a /login en un dominio de tienda → mostrar login
