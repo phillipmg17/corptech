@@ -1234,11 +1234,17 @@ export default function CorpPage() {
       {/* TOP BAR */}
       <div className="top-bar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Link href="/dashboard" className="top-btn">🏠</Link>
-          <Link href="/pos"       className="top-btn">🛒</Link>
-          <Link href="/chat"      className="top-btn">💬</Link>
+          {/* Logo → vuelve al inicio del corp panel */}
+          <Link href="/corp" style={{ display:'flex', alignItems:'center', textDecoration:'none', flexShrink:0 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:'var(--surface)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Corp Tech" style={{ width:28, height:28, objectFit:'contain' }} />
+            </div>
+          </Link>
+          <Link href="/pos"  className="top-btn">🛒</Link>
+          <Link href="/chat" className="top-btn">💬</Link>
           <div>
-            <div className="top-bar-title">🏢 Corp Tech</div>
+            <div className="top-bar-title">Corp Tech</div>
             <div className="top-bar-sub">{me?.name}</div>
           </div>
         </div>

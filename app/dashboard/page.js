@@ -183,9 +183,15 @@ export default function DashboardPage() {
     <div className="page-wrap">
       {/* TOP BAR */}
       <div className="top-bar">
-        <div>
-          <div className="top-bar-title">🏢 {orgName}</div>
-          <div className="top-bar-sub">{profile?.full_name}</div>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <div style={{ width:36, height:36, borderRadius:10, background:'var(--surface)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" style={{ width:28, height:28, objectFit:'contain' }} />
+          </div>
+          <div>
+            <div className="top-bar-title">{orgName}</div>
+            <div className="top-bar-sub">{profile?.full_name}</div>
+          </div>
         </div>
         <div className="top-bar-actions">
           <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
