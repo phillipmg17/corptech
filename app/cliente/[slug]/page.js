@@ -32,11 +32,8 @@ function fmtDate(d) {
 const STATUS_STYLES = {
   completada:  { label:'✅ Completada',  bg:'rgba(48,209,88,0.12)',  color:'#30D158' },
   pendiente:   { label:'⏳ Pendiente',   bg:'rgba(255,159,10,0.12)', color:'#FF9F0A' },
-  cancelado:   { label:'❌ Cancelado',   bg:'rgba(255,59,48,0.12)',  color:'#FF3B30' },
   cancelada:   { label:'❌ Cancelada',   bg:'rgba(255,59,48,0.12)',  color:'#FF3B30' },
   procesando:  { label:'🔄 En proceso',  bg:'rgba(10,132,255,0.12)', color:'#0A84FF' },
-  confirmado:  { label:'✔️ Confirmado',  bg:'rgba(10,132,255,0.12)', color:'#0A84FF' },
-  entregado:   { label:'📦 Entregado',   bg:'rgba(48,209,88,0.12)',  color:'#30D158' },
   entregada:   { label:'📦 Entregada',   bg:'rgba(48,209,88,0.12)',  color:'#30D158' },
 };
 function getStatus(s) { return STATUS_STYLES[s] || { label: s || 'Pendiente', bg:'rgba(255,255,255,0.06)', color:'rgba(255,255,255,0.5)' }; }
@@ -119,15 +116,21 @@ export default function ClientePortalPage({ params }) {
       setEditName(cust?.full_name || '');
       setEditPhone(cust?.phone || '');
 
-      /* 5. Cargar pedidos online */
-      const email = session.user.email;
-      const { data: ordersData } = await supabase
-        .from('online_orders')
-        .select('id, total_amount, status, payment_method, items, notes, created_at')
-        .eq('org_id', orgId)
-        .or(`customer_id.eq.${cust?.id || '00000000-0000-0000-0000-000000000000'},contact_email.eq.${email}`)
-        .order('created_at', { ascending: false });
-      setOrders(ordersData || []);
+      /* 5. Cargar pedidos */
+      if (cust?.id) {
+        const { data: salesData } = await supabase
+          .from('sales')
+          .select(`
+            id, total_amount, status, payment_method, notes, created_at,
+            sale_items(qty, unit_price, discount,
+              stock_items(products(name, photo, brand, category))
+            )
+          `)
+          .eq('org_id', orgId)
+          .eq('customer_id', cust.id)
+          .order('created_at', { ascending: false });
+        setOrders(salesData || []);
+      }
 
       setLoading(false);
     };
@@ -246,7 +249,7 @@ export default function ClientePortalPage({ params }) {
             </div>
             <div style={{ flex:1, background:'rgba(255,255,255,0.04)', borderRadius:14, padding:'12px 14px', textAlign:'center' }}>
               <p style={{ fontSize:22, fontWeight:800, margin:0, color: P }}>
-                {orders.filter(o=>o.status==='entregado'||o.status==='entregada'||o.status==='confirmado').length}
+                {orders.filter(o=>o.status==='completada'||o.status==='entregada').length}
               </p>
               <p style={{ fontSize:11, color:'rgba(255,255,255,0.4)', margin:'2px 0 0' }}>Completados</p>
             </div>
@@ -310,8 +313,8 @@ export default function ClientePortalPage({ params }) {
                             Pedido #{order.id.slice(-6).toUpperCase()} · {fmtDate(order.created_at)}
                           </p>
                           <p style={{ fontSize:16, fontWeight:700, margin:'0 0 6px' }}>
-                            {(order.items || []).map(i => i.name || 'Producto').slice(0,2).join(', ')}
-                            {(order.items || []).length > 2 ? ` +${(order.items||[]).length - 2} más` : ''}
+                            {order.sale_items?.map(i => i.stock_items?.products?.name || 'Producto').slice(0,2).join(', ')}
+                            {order.sale_items?.length > 2 ? ` +${order.sale_items.length - 2} más` : ''}
                           </p>
                           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                             <span style={{
@@ -345,23 +348,27 @@ export default function ClientePortalPage({ params }) {
                         <p style={{ fontSize:11, color:'rgba(255,255,255,0.35)', margin:'0 0 12px', textTransform:'uppercase', letterSpacing:'0.5px' }}>
                           Artículos
                         </p>
-                        {(order.items || []).map((item, i) => (
+                        {order.sale_items?.map((item, i) => (
                           <div key={i} style={{
                             display:'flex', alignItems:'center', gap:12,
                             padding:'10px 0',
-                            borderBottom: i < (order.items||[]).length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                            borderBottom: i < order.sale_items.length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
                           }}>
-                            <div style={{ width:44, height:44, borderRadius:10, background:'rgba(255,255,255,0.06)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20, flexShrink:0 }}>📱</div>
+                            {item.stock_items?.products?.photo ? (
+                              <img src={item.stock_items.products.photo} alt="" style={{ width:44, height:44, objectFit:'cover', borderRadius:10 }} />
+                            ) : (
+                              <div style={{ width:44, height:44, borderRadius:10, background:'rgba(255,255,255,0.06)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📱</div>
+                            )}
                             <div style={{ flex:1 }}>
                               <p style={{ fontSize:14, fontWeight:600, margin:'0 0 2px' }}>
-                                {item.name || 'Producto'}
+                                {item.stock_items?.products?.name || 'Producto'}
                               </p>
                               <p style={{ fontSize:12, color:'rgba(255,255,255,0.35)', margin:0 }}>
-                                {item.variant ? `${item.variant} · ` : ''}Cant: {item.qty}
+                                {item.stock_items?.products?.brand && `${item.stock_items.products.brand} · `}Cant: {item.qty}
                               </p>
                             </div>
                             <p style={{ fontSize:14, fontWeight:700, margin:0 }}>
-                              {fmt((item.price || 0) * (item.qty || 1))}
+                              {fmt((item.unit_price || 0) * (item.qty || 1))}
                             </p>
                           </div>
                         ))}

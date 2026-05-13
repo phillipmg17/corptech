@@ -98,20 +98,6 @@ export default function TiendaPage({ params }) {
   const [orderForm,  setOrderForm]  = useState({ name:'', phone:'', email:'', address:'', notes:'' });
   const [payMethod,  setPayMethod]  = useState('whatsapp');
   const [orderSent,  setOrderSent]  = useState(false);
-  const [savedOrderId, setSavedOrderId] = useState(null);
-  const [session,    setSession]    = useState(null);
-
-  /* ── Verificar sesión del cliente ── */
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      if (s?.user?.email) {
-        setOrderForm(prev => ({ ...prev, email: s.user.email }));
-      }
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
-    return () => subscription.unsubscribe();
-  }, []);
 
   /* ── Colores dinámicos ── */
   const P   = settings?.color_primario || def.primary;
@@ -225,114 +211,23 @@ export default function TiendaPage({ params }) {
   }
   const cartTotal = cart.reduce((s,i) => s+i.price*i.qty, 0);
 
-  /* ── Guardar pedido en la base de datos ── */
-  async function saveOnlineOrder(paymentMethod) {
-    if (cart.length === 0 || !orgId) return null;
-    try {
-      const email = orderForm.email?.trim().toLowerCase();
-
-      /* 1. Buscar o crear cliente si hay email */
-      let customerId = null;
-      if (email) {
-        let { data: cust } = await supabase
-          .from('customers')
-          .select('id')
-          .eq('org_id', orgId)
-          .eq('email', email)
-          .maybeSingle();
-
-        if (!cust) {
-          const { data: newCust } = await supabase
-            .from('customers')
-            .insert({
-              org_id:    orgId,
-              full_name: orderForm.name || email.split('@')[0],
-              email:     email,
-              phone:     orderForm.phone || null,
-              auth_user_id: session?.user?.id || null,
-            })
-            .select('id')
-            .single();
-          cust = newCust;
-        } else if (session?.user?.id) {
-          /* Vincular cuenta si está logueado */
-          await supabase.from('customers')
-            .update({ auth_user_id: session.user.id })
-            .eq('id', cust.id);
-        }
-        customerId = cust?.id || null;
-      }
-
-      /* 2. Crear el pedido */
-      const items = cart.map(i => ({
-        name:    i.name,
-        variant: i.label,
-        qty:     i.qty,
-        price:   i.price,
-        subtotal: i.price * i.qty,
-      }));
-
-      const notes = [
-        orderForm.notes,
-        orderForm.address ? `Dirección: ${orderForm.address}` : '',
-      ].filter(Boolean).join(' | ');
-
-      const { data: order } = await supabase
-        .from('online_orders')
-        .insert({
-          org_id:          orgId,
-          customer_id:     customerId,
-          contact_name:    orderForm.name || null,
-          contact_email:   email || null,
-          contact_phone:   orderForm.phone || null,
-          delivery_address:orderForm.address || null,
-          items:           items,
-          total_amount:    cartTotal,
-          payment_method:  paymentMethod,
-          status:          'pendiente',
-          notes:           notes || null,
-        })
-        .select('id')
-        .single();
-
-      if (order?.id) setSavedOrderId(order.id);
-      return order?.id || null;
-    } catch (err) {
-      console.error('Error guardando pedido:', err);
-      return null;
-    }
-  }
-
   /* ── WhatsApp checkout ── */
   function buildWAMessage() {
     const items = cart.map(i => `• ${i.name} (${i.label}) x${i.qty} — ${fmt(i.price*i.qty)}`).join('\n');
     return encodeURIComponent(`Hola ${storeName}! Quiero hacer un pedido:\n\n${items}\n\n*TOTAL: ${fmt(cartTotal)}*\n\nMis datos:\nNombre: ${orderForm.name}\nTeléfono: ${orderForm.phone}\nEmail: ${orderForm.email}\n${orderForm.address?`Dirección: ${orderForm.address}\n`:''}${orderForm.notes?`Notas: ${orderForm.notes}`:''}`);
   }
-  async function handleWhatsApp() {
-    await saveOnlineOrder('whatsapp');
+  function handleWhatsApp() {
     const wa = (storeWA||'51999999999').replace(/\D/g,'');
     window.open(`https://wa.me/${wa}?text=${buildWAMessage()}`, '_blank');
     setOrderSent(true);
   }
-  async function handleIziPay() {
-    await saveOnlineOrder('izipay');
+  function handleIziPay() {
     if (izipayUrl) window.open(izipayUrl, '_blank');
     else alert('Pasarela IziPay no configurada. Configúrala en el panel admin → Configuración de tienda.');
-    setOrderSent(true);
   }
-  async function handleNiubiz() {
-    await saveOnlineOrder('niubiz');
+  function handleNiubiz() {
     if (niubizUrl) window.open(niubizUrl, '_blank');
     else alert('Pasarela Niubiz no configurada. Configúrala en el panel admin → Configuración de tienda.');
-    setOrderSent(true);
-  }
-  async function handleYape() {
-    await saveOnlineOrder('yape');
-    setOrderSent(true);
-  }
-  async function handleTransfer() {
-    await saveOnlineOrder('transferencia');
-    setOrderSent(true);
   }
 
   /* ── Imagen por color ── */
