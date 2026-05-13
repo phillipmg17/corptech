@@ -2,8 +2,8 @@ import './globals.css';
 import ChatBubble from './components/ChatBubble';
 
 export const metadata = {
-  title: 'Corp Tech ERP',
-  description: 'Sistema ERP Multi-Empresa — Corp Tech Holding',
+  title: 'Panel de Gestión',
+  description: 'Sistema de gestión empresarial',
   manifest: '/manifest.json',
   icons: {
     icon:  [
@@ -17,7 +17,7 @@ export const metadata = {
   appleWebApp: {
     capable:        true,
     statusBarStyle: 'black-translucent',
-    title:          'Corp Tech',
+    title:          'Panel',
   },
 };
 
@@ -44,7 +44,7 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable"        content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title"          content="Corp Tech" />
+        <meta name="apple-mobile-web-app-title"          content="Panel" />
         <meta name="mobile-web-app-capable"              content="yes" />
         <meta name="theme-color"                         content="#0A84FF" />
       </head>

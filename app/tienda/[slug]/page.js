@@ -229,7 +229,7 @@ export default function TiendaPage({ params }) {
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           {/* Botón acceso panel admin — discreto */}
-          <a href="/login" style={{
+          <a href="/acceso" style={{
             fontSize:11, color:'rgba(255,255,255,0.35)', textDecoration:'none', fontWeight:600,
             padding:'5px 8px', borderRadius:8, border:'1px solid rgba(255,255,255,0.10)',
             transition:'all .2s',
