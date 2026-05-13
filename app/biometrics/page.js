@@ -23,7 +23,8 @@ function useTheme() {
 export default function BiometricsPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
-  const cardRef = useRef(null);
+  const qrPreviewRef  = useRef(null);   // div donde va el QR preview
+  const qrLibLoaded   = useRef(false);
 
   const [loading,     setLoading]     = useState(true);
   const [profile,     setProfile]     = useState(null);
@@ -35,8 +36,18 @@ export default function BiometricsPage() {
   const [registering, setRegistering] = useState(false);
   const [deviceName,  setDeviceName]  = useState('');
   const [showForm,    setShowForm]    = useState(false);
-  const [qrUrl,       setQrUrl]       = useState('');
   const [savingImg,   setSavingImg]   = useState(false);
+  const [showWallet,  setShowWallet]  = useState(false);
+
+  /* ── cargar qrcodejs una sola vez ── */
+  useEffect(() => {
+    if (document.getElementById('qrcodejs')) { qrLibLoaded.current = true; return; }
+    const s = document.createElement('script');
+    s.id  = 'qrcodejs';
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload = () => { qrLibLoaded.current = true; };
+    document.head.appendChild(s);
+  }, []);
 
   useEffect(() => { init(); }, []);
 
@@ -61,12 +72,30 @@ export default function BiometricsPage() {
     else if (/Android/.test(ua)) dn = 'Android';
     setDeviceName(dn);
 
-    const qrData = encodeURIComponent(`corptech:uid:${uid}`);
-    setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${qrData}&color=0A0A0A&bgcolor=ffffff&qzone=2&format=png`);
-
     await loadBiometrics(uid);
     setLoading(false);
   }
+
+  /* ── generar QR en el preview ── */
+  useEffect(() => {
+    if (!userId || !qrPreviewRef.current) return;
+    const tryRender = () => {
+      if (!qrLibLoaded.current || !window.QRCode) {
+        setTimeout(tryRender, 200);
+        return;
+      }
+      qrPreviewRef.current.innerHTML = '';
+      new window.QRCode(qrPreviewRef.current, {
+        text:          `corptech:uid:${userId}`,
+        width:         150,
+        height:        150,
+        colorDark:     '#0a0a0a',
+        colorLight:    '#ffffff',
+        correctLevel:  window.QRCode.CorrectLevel.H,
+      });
+    };
+    tryRender();
+  }, [userId]);
 
   async function loadBiometrics(uid) {
     const { data } = await supabase
@@ -77,153 +106,174 @@ export default function BiometricsPage() {
     setBiometrics(data || []);
   }
 
-  /* ── Guardar carnet como imagen PNG ── */
+  /* ── Guardar carnet como imagen PNG (QR generado inline, sin CORS) ── */
   async function saveCardAsImage() {
-    if (!qrUrl || !profile) return;
+    if (!userId || !profile) return;
     setSavingImg(true);
     try {
-      // Crear canvas
-      const canvas  = document.createElement('canvas');
-      const W = 800, H = 480;
+      /* 1. Generar QR en div temporal con qrcodejs */
+      await waitForQRLib();
+      const tempDiv = document.createElement('div');
+      tempDiv.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+      document.body.appendChild(tempDiv);
+
+      await new Promise(resolve => {
+        new window.QRCode(tempDiv, {
+          text:         `corptech:uid:${userId}`,
+          width:        220,
+          height:       220,
+          colorDark:    '#0a0a0a',
+          colorLight:   '#ffffff',
+          correctLevel: window.QRCode.CorrectLevel.H,
+        });
+        setTimeout(resolve, 300); // esperar render
+      });
+
+      const qrCanvas = tempDiv.querySelector('canvas');
+
+      /* 2. Dibujar la tarjeta principal */
+      const canvas = document.createElement('canvas');
+      const W = 760, H = 440;
       canvas.width  = W;
       canvas.height = H;
       const ctx = canvas.getContext('2d');
 
-      /* fondo blanco con esquinas redondeadas */
+      /* fondo blanco */
       ctx.fillStyle = '#ffffff';
-      roundRect(ctx, 0, 0, W, H, 32);
-      ctx.fill();
-
-      /* barra superior azul */
-      ctx.fillStyle = '#0A84FF';
-      roundRect(ctx, 0, 0, W, 90, { tl:32, tr:32, bl:0, br:0 });
-      ctx.fill();
-
-      /* texto "CORP TECH" en la barra */
-      ctx.fillStyle = '#ffffff';
-      ctx.font      = 'bold 20px Urbanist,Inter,Arial';
-      ctx.textAlign = 'left';
-      ctx.fillText('🏢  CORP TECH', 40, 56);
-
-      /* rol en la esquina */
-      ctx.font      = '14px Urbanist,Inter,Arial';
-      ctx.textAlign = 'right';
-      ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      ctx.fillText(role?.toUpperCase() || 'EMPLEADO', W - 40, 56);
-
-      /* avatar círculo */
-      ctx.fillStyle = 'linear-gradient(135deg,#0A84FF,#5E5CE6)';
-      const avatarX = 60, avatarY = 150, avatarR = 50;
       ctx.beginPath();
-      ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
-      const grad = ctx.createLinearGradient(avatarX - avatarR, avatarY - avatarR, avatarX + avatarR, avatarY + avatarR);
+      rrect(ctx, 0, 0, W, H, 28);
+      ctx.fill();
+
+      /* franja superior azul */
+      ctx.fillStyle = '#0A84FF';
+      ctx.beginPath();
+      rrect(ctx, 0, 0, W, 82, { tl:28, tr:28, bl:0, br:0 });
+      ctx.fill();
+
+      /* logo + nombre empresa */
+      ctx.fillStyle = '#fff';
+      ctx.font      = 'bold 18px Arial,sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('CORP TECH', 32, 41);
+
+      /* rol */
+      ctx.font      = '13px Arial,sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText(role?.toUpperCase() || 'EMPLEADO', W - 32, 41);
+
+      /* avatar circle */
+      const ax = 68, ay = 82 + 90, ar = 48;
+      ctx.beginPath();
+      ctx.arc(ax, ay, ar, 0, Math.PI * 2);
+      const grad = ctx.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar);
       grad.addColorStop(0, '#0A84FF');
       grad.addColorStop(1, '#5E5CE6');
       ctx.fillStyle = grad;
       ctx.fill();
 
-      /* inicial en el avatar */
-      ctx.fillStyle   = '#fff';
-      ctx.font        = 'bold 40px Urbanist,Inter,Arial';
-      ctx.textAlign   = 'center';
+      ctx.fillStyle    = '#fff';
+      ctx.font         = 'bold 38px Arial,sans-serif';
+      ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(profile?.full_name?.charAt(0)?.toUpperCase() || '?', avatarX, avatarY);
-      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(
+        profile?.full_name?.charAt(0)?.toUpperCase() || '?',
+        ax, ay
+      );
 
       /* nombre */
-      ctx.fillStyle   = '#111111';
-      ctx.font        = 'bold 26px Urbanist,Inter,Arial';
-      ctx.textAlign   = 'left';
-      ctx.fillText(profile?.full_name || '—', 130, 130);
+      ctx.fillStyle    = '#111';
+      ctx.font         = 'bold 24px Arial,sans-serif';
+      ctx.textAlign    = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(profile?.full_name || '—', 140, 82 + 64);
 
       /* empresa */
       ctx.fillStyle = '#666';
-      ctx.font      = '16px Urbanist,Inter,Arial';
-      ctx.fillText(orgName, 130, 158);
+      ctx.font      = '15px Arial,sans-serif';
+      ctx.fillText(orgName, 140, 82 + 90);
 
-      /* ID */
+      /* ID corto */
       ctx.fillStyle = '#aaa';
-      ctx.font      = '13px monospace';
-      ctx.fillText('ID: ' + userId.slice(0,8).toUpperCase() + '...', 130, 182);
+      ctx.font      = '12px monospace';
+      ctx.fillText('ID: ' + userId.slice(0, 8).toUpperCase(), 140, 82 + 114);
 
-      /* línea separadora */
-      ctx.strokeStyle = '#eee';
+      /* línea */
+      ctx.strokeStyle = '#efefef';
       ctx.lineWidth   = 1;
       ctx.beginPath();
-      ctx.moveTo(40, 215);
-      ctx.lineTo(W - 40, 215);
+      ctx.moveTo(32, 82 + 148);
+      ctx.lineTo(W - 32, 82 + 148);
       ctx.stroke();
 
-      /* texto instrucción */
-      ctx.fillStyle   = '#999';
-      ctx.font        = '14px Urbanist,Inter,Arial';
-      ctx.textAlign   = 'left';
-      ctx.fillText('Presenta este carnet para acceder al sistema Corp Tech', 40, 250);
+      /* instrucción */
+      ctx.fillStyle    = '#999';
+      ctx.font         = '13px Arial,sans-serif';
+      ctx.textAlign    = 'left';
+      ctx.fillText('Presenta este carnet para ingresar al sistema Corp Tech', 32, 82 + 172);
 
-      /* cargar imagen QR */
-      const qrImg = await loadImage(qrUrl);
-      const qrSize = 200;
-      const qrX = W - qrSize - 50;
-      const qrY = 110;
+      /* QR desde canvas temporal */
+      if (qrCanvas) {
+        const qrX = W - 260, qrY = 100, qrS = 220;
+        ctx.fillStyle = '#f5f5f5';
+        ctx.beginPath();
+        rrect(ctx, qrX - 12, qrY - 12, qrS + 24, qrS + 24, 16);
+        ctx.fill();
+        ctx.drawImage(qrCanvas, qrX, qrY, qrS, qrS);
 
-      /* fondo blanco para QR */
-      ctx.fillStyle = '#f8f8f8';
-      roundRect(ctx, qrX - 10, qrY - 10, qrSize + 20, qrSize + 20, 16);
-      ctx.fill();
-
-      ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
-
-      /* "Escanea para acceder" */
-      ctx.fillStyle   = '#888';
-      ctx.font        = '12px Urbanist,Inter,Arial';
-      ctx.textAlign   = 'center';
-      ctx.fillText('Escanea para acceder', qrX + qrSize / 2, qrY + qrSize + 20);
+        ctx.fillStyle    = '#888';
+        ctx.font         = '12px Arial,sans-serif';
+        ctx.textAlign    = 'center';
+        ctx.fillText('Escanear para acceder', qrX + qrS / 2, qrY + qrS + 20);
+      }
 
       /* footer */
-      ctx.fillStyle   = '#ccc';
-      ctx.font        = '12px Urbanist,Inter,Arial';
-      ctx.textAlign   = 'center';
-      ctx.fillText('Corp Tech ERP · Sistema interno · No compartir con terceros', W / 2, H - 22);
+      ctx.fillStyle    = '#ccc';
+      ctx.font         = '11px Arial,sans-serif';
+      ctx.textAlign    = 'center';
+      ctx.fillText('Corp Tech ERP · Sistema interno · No compartir con terceros', W / 2, H - 18);
 
       /* descargar */
       const link = document.createElement('a');
       link.download = `carnet-${(profile?.full_name || 'empleado').replace(/\s+/g, '-').toLowerCase()}.png`;
-      link.href = canvas.toDataURL('image/png');
+      link.href = canvas.toDataURL('image/png', 1.0);
       link.click();
 
+      document.body.removeChild(tempDiv);
       showToast('✅ Carnet guardado como imagen', 'ok');
     } catch (err) {
       console.error(err);
-      showToast('Error al generar imagen. Intenta descargar solo el QR.', 'error');
+      showToast('Error al generar imagen: ' + err.message, 'error');
     }
     setSavingImg(false);
   }
 
-  function loadImage(src) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload  = () => resolve(img);
-      img.onerror = reject;
-      img.src = src;
+  function waitForQRLib() {
+    return new Promise(resolve => {
+      const check = () => (qrLibLoaded.current && window.QRCode) ? resolve() : setTimeout(check, 150);
+      check();
     });
   }
 
-  function roundRect(ctx, x, y, w, h, r) {
-    const radius = typeof r === 'number'
-      ? { tl: r, tr: r, bl: r, br: r }
-      : r;
-    ctx.beginPath();
-    ctx.moveTo(x + radius.tl, y);
-    ctx.lineTo(x + w - radius.tr, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + radius.tr);
-    ctx.lineTo(x + w, y + h - radius.br);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - radius.br, y + h);
-    ctx.lineTo(x + radius.bl, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - radius.bl);
-    ctx.lineTo(x, y + radius.tl);
-    ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+  /* roundedRect helper */
+  function rrect(ctx, x, y, w, h, r) {
+    const R = typeof r === 'number' ? { tl:r, tr:r, bl:r, br:r } : r;
+    ctx.moveTo(x + R.tl, y);
+    ctx.lineTo(x + w - R.tr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + R.tr);
+    ctx.lineTo(x + w, y + h - R.br);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - R.br, y + h);
+    ctx.lineTo(x + R.bl, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - R.bl);
+    ctx.lineTo(x, y + R.tl);
+    ctx.quadraticCurveTo(x, y, x + R.tl, y);
     ctx.closePath();
+  }
+
+  /* ── Abrir carnet en pantalla completa (para guardar en inicio / Wallet) ── */
+  function openWalletCard() {
+    window.open(`/carnet/${userId}`, '_blank');
   }
 
   /* ── Registrar biometría ── */
@@ -258,13 +308,12 @@ export default function BiometricsPage() {
 
       const credIdBase64 = btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
       const { data: { session } } = await supabase.auth.getSession();
-      const refreshToken = session?.refresh_token || null;
 
       const { error } = await supabase.from('biometric_keys').upsert({
         user_id:       userId,
         credential_id: credIdBase64,
         device_name:   deviceName.trim(),
-        refresh_token: refreshToken,
+        refresh_token: session?.refresh_token || null,
         created_at:    new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
@@ -305,7 +354,6 @@ export default function BiometricsPage() {
 
   return (
     <div className="page-wrap">
-      {/* TOP BAR */}
       <div className="top-bar">
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <Link href="/dashboard" style={{ background:'none', border:'none', color:'var(--text-muted)', fontSize:20, cursor:'pointer', textDecoration:'none' }}>←</Link>
@@ -321,7 +369,7 @@ export default function BiometricsPage() {
 
       <div className="content" style={{ padding:16 }}>
 
-        {/* CARNET VISUAL */}
+        {/* ─── CARNET VISUAL ─── */}
         <div style={{
           background:'linear-gradient(135deg,#0A84FF18,#5E5CE618)',
           border:'1px solid rgba(10,132,255,0.25)',
@@ -332,31 +380,27 @@ export default function BiometricsPage() {
             Tu Carnet Digital
           </div>
 
-          {/* Carnet preview */}
-          <div ref={cardRef} style={{
+          {/* Tarjeta preview */}
+          <div style={{
             background:'#fff', borderRadius:18, overflow:'hidden',
-            width:240, boxShadow:'0 10px 40px rgba(0,0,0,0.4)',
+            width:230, boxShadow:'0 12px 48px rgba(0,0,0,0.45)',
           }}>
-            {/* Header azul */}
             <div style={{
               background:'linear-gradient(135deg,#0A84FF,#5E5CE6)',
-              padding:'12px 16px',
+              padding:'11px 16px',
               display:'flex', alignItems:'center', justifyContent:'space-between',
             }}>
-              <div style={{ color:'#fff', fontWeight:800, fontSize:13 }}>🏢 CORP TECH</div>
-              <div style={{ color:'rgba(255,255,255,0.8)', fontSize:10, fontWeight:600 }}>
+              <div style={{ color:'#fff', fontWeight:800, fontSize:13, letterSpacing:'0.05em' }}>🏢 CORP TECH</div>
+              <div style={{ color:'rgba(255,255,255,0.85)', fontSize:10, fontWeight:700 }}>
                 {role?.toUpperCase()}
               </div>
             </div>
-
-            {/* Body */}
             <div style={{ padding:'16px', display:'flex', flexDirection:'column', alignItems:'center' }}>
-              {/* Avatar */}
               <div style={{
-                width:56, height:56, borderRadius:16,
+                width:52, height:52, borderRadius:14,
                 background:'linear-gradient(135deg,#0A84FF,#5E5CE6)',
                 display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:26, color:'#fff', fontWeight:800, marginBottom:8,
+                fontSize:24, color:'#fff', fontWeight:800, marginBottom:8,
               }}>
                 {profile?.full_name?.charAt(0)?.toUpperCase() || '?'}
               </div>
@@ -365,73 +409,83 @@ export default function BiometricsPage() {
               </div>
               <div style={{ fontSize:10, color:'#888', marginBottom:12 }}>{orgName}</div>
 
-              {qrUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={qrUrl} alt="QR Carnet" width={150} height={150} style={{ borderRadius:10 }} />
-              )}
+              {/* QR generado inline (sin red) */}
+              <div
+                ref={qrPreviewRef}
+                style={{ borderRadius:10, overflow:'hidden', background:'#fff', lineHeight:0 }}
+              />
+
               <div style={{ fontSize:9, color:'#bbb', marginTop:8 }}>
-                {userId.slice(0,8).toUpperCase()}
+                {userId.slice(0, 8).toUpperCase()}
               </div>
             </div>
           </div>
 
-          {/* Botones guardar */}
-          <div style={{ display:'flex', gap:10, marginTop:18, width:'100%', maxWidth:320 }}>
+          {/* ─── Botones ─── */}
+          <div style={{ display:'flex', flexDirection:'column', gap:10, marginTop:18, width:'100%', maxWidth:320 }}>
+
+            {/* Guardar en inicio / Wallet */}
             <button
-              onClick={saveCardAsImage}
-              disabled={savingImg}
+              onClick={openWalletCard}
               style={{
-                flex:1, padding:'12px', borderRadius:13,
-                background: savingImg ? 'rgba(10,132,255,0.3)' : 'rgba(10,132,255,0.15)',
-                border:'1px solid rgba(10,132,255,0.3)',
-                color:'#4DA8FF', fontSize:13, fontWeight:700,
-                cursor: savingImg ? 'not-allowed' : 'pointer',
-                display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                width:'100%', padding:'14px 16px', borderRadius:14,
+                background:'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+                border:'none', color:'#fff', fontSize:14, fontWeight:700,
+                cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                boxShadow:'0 6px 24px rgba(10,132,255,0.35)',
               }}
             >
-              {savingImg ? '⏳...' : '🖼️ Carnet completo'}
+              <span style={{ fontSize:18 }}>📲</span>
+              Abrir carnet (guardar en Inicio)
             </button>
 
-            <a
-              href={qrUrl}
-              download="qr-carnet.png"
-              style={{
-                flex:1, padding:'12px', borderRadius:13,
-                background:'rgba(255,255,255,0.05)',
-                border:'1px solid rgba(255,255,255,0.12)',
-                color:'rgba(255,255,255,0.6)', fontSize:13, fontWeight:700,
-                textDecoration:'none', textAlign:'center',
-                display:'flex', alignItems:'center', justifyContent:'center', gap:6,
-              }}
-            >
-              📷 Solo QR
-            </a>
+            <div style={{ display:'flex', gap:10 }}>
+              {/* Descargar imagen */}
+              <button
+                onClick={saveCardAsImage}
+                disabled={savingImg}
+                style={{
+                  flex:1, padding:'12px', borderRadius:13,
+                  background:'rgba(10,132,255,0.15)',
+                  border:'1px solid rgba(10,132,255,0.3)',
+                  color:'#4DA8FF', fontSize:13, fontWeight:700,
+                  cursor: savingImg ? 'not-allowed' : 'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                  opacity: savingImg ? 0.6 : 1,
+                }}
+              >
+                {savingImg ? '⏳...' : '🖼️ Guardar imagen'}
+              </button>
+            </div>
           </div>
 
-          {/* Nota wallet */}
+          {/* Instrucción wallet */}
           <div style={{
-            marginTop:14, padding:'10px 14px', borderRadius:12,
+            marginTop:12, padding:'12px 14px', borderRadius:12,
             background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.07)',
-            fontSize:12, color:'rgba(255,255,255,0.35)', textAlign:'center', lineHeight:1.6, width:'100%', maxWidth:320,
+            fontSize:12, color:'rgba(255,255,255,0.35)', lineHeight:1.7,
+            width:'100%', maxWidth:320, textAlign:'center',
           }}>
-            💡 En iPhone: descarga la imagen → guárdala en Fotos → desde Safari puedes agregarla a Wallet con Shortcuts.
+            <b style={{ color:'rgba(255,255,255,0.5)' }}>📲 Cómo guardarlo como acceso directo:</b><br/>
+            iPhone: abre el carnet → toca Compartir <b>⬆️</b> → <i>"Añadir a pantalla de inicio"</i><br/>
+            Android: toca Menú <b>⋮</b> → <i>"Añadir a pantalla de inicio"</i>
           </div>
         </div>
 
-        {/* DISPOSITIVOS REGISTRADOS */}
+        {/* ─── DISPOSITIVOS ─── */}
         <div className="section-title">🔐 Dispositivos registrados</div>
 
         {!webAuthnSupported && (
           <div style={{ background:'rgba(255,159,10,0.12)', border:'1px solid rgba(255,159,10,0.25)', borderRadius:12, padding:'12px 16px', color:'#FF9F0A', fontSize:13, marginBottom:16 }}>
-            ⚠️ Tu navegador no soporta biometría WebAuthn. Usa Safari en iPhone/Mac o Chrome actualizado.
+            ⚠️ Tu navegador no soporta biometría. Usa Safari en iPhone/Mac o Chrome actualizado.
           </div>
         )}
 
         {biometrics.length === 0 ? (
           <div style={{ background:'var(--card)', borderRadius:16, padding:20, textAlign:'center', marginBottom:16 }}>
             <div style={{ fontSize:32, marginBottom:8 }}>📵</div>
-            <div style={{ color:'var(--text-muted)', fontSize:14 }}>No tienes biometría registrada todavía.</div>
-            <div style={{ color:'var(--text-muted)', fontSize:12, marginTop:4 }}>Regístrala para poder acceder con QR + FaceID.</div>
+            <div style={{ color:'var(--text-muted)', fontSize:14 }}>No tienes biometría registrada.</div>
+            <div style={{ color:'var(--text-muted)', fontSize:12, marginTop:4 }}>Regístrala abajo para acceder con QR + FaceID.</div>
           </div>
         ) : (
           <div className="card" style={{ marginBottom:16 }}>
@@ -453,7 +507,7 @@ export default function BiometricsPage() {
           </div>
         )}
 
-        {/* REGISTRAR NUEVO */}
+        {/* Registrar nuevo dispositivo */}
         {!showForm ? (
           <button onClick={() => setShowForm(true)} disabled={!webAuthnSupported} style={{
             width:'100%', padding:'14px', borderRadius:16,
@@ -468,16 +522,11 @@ export default function BiometricsPage() {
           <div style={{ background:'var(--card)', borderRadius:16, padding:20, border:'1px solid var(--border)' }}>
             <div style={{ fontSize:15, fontWeight:700, color:'var(--text)', marginBottom:4 }}>Nuevo dispositivo</div>
             <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:16 }}>
-              Se abrirá FaceID o huella dactilar para verificar tu identidad.
+              Se abrirá FaceID o huella dactilar. Solo funciona en este dispositivo.
             </div>
             <div className="form-group">
               <label className="form-label">Nombre del dispositivo</label>
-              <input
-                className="form-input"
-                value={deviceName}
-                onChange={e => setDeviceName(e.target.value)}
-                placeholder="ej. iPhone de Phillip"
-              />
+              <input className="form-input" value={deviceName} onChange={e => setDeviceName(e.target.value)} placeholder="ej. iPhone de Phillip" />
             </div>
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={() => setShowForm(false)} style={{
@@ -489,23 +538,22 @@ export default function BiometricsPage() {
                 flex:2, padding:'12px', borderRadius:14,
                 background:'linear-gradient(135deg,#0A84FF,#5E5CE6)',
                 border:'none', color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer',
-                boxShadow:'0 4px 16px rgba(10,132,255,0.3)',
               }}>
-                {registering ? '⏳ Esperando biometría...' : '🔐 Registrar FaceID / Huella'}
+                {registering ? '⏳ Esperando...' : '🔐 Registrar FaceID / Huella'}
               </button>
             </div>
           </div>
         )}
 
-        {/* INSTRUCCIONES */}
+        {/* Instrucciones */}
         <div style={{ marginTop:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:16, padding:'16px 18px' }}>
           <div style={{ fontSize:14, fontWeight:700, color:'var(--text)', marginBottom:10 }}>¿Cómo funciona?</div>
           {[
-            ['1️⃣', 'Registra tu FaceID/huella en este dispositivo (botón de arriba).'],
-            ['2️⃣', 'Descarga tu carnet como imagen y guárdala en tu teléfono.'],
+            ['1️⃣', 'Registra tu FaceID/huella en este dispositivo.'],
+            ['2️⃣', 'Pulsa "Abrir carnet" y guárdalo en tu pantalla de inicio.'],
             ['3️⃣', 'En el login, elige "Acceso QR" y escanea tu carnet.'],
             ['4️⃣', 'La primera vez ingresa tu contraseña para vincular el dispositivo.'],
-            ['5️⃣', 'Desde la próxima vez, confirma con FaceID/huella — ¡sin contraseña!'],
+            ['5️⃣', 'Desde la próxima vez: solo QR + FaceID, sin contraseña.'],
           ].map(([n, t]) => (
             <div key={n} style={{ display:'flex', gap:10, marginBottom:8, alignItems:'flex-start' }}>
               <span style={{ fontSize:16, flexShrink:0 }}>{n}</span>

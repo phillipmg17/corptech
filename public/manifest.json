@@ -1,0 +1,29 @@
+{
+  "name": "Corp Tech ERP",
+  "short_name": "Corp Tech",
+  "description": "Sistema ERP Multi-Empresa — Corp Tech Holding",
+  "start_url": "/login",
+  "display": "standalone",
+  "background_color": "#050508",
+  "theme_color": "#0A84FF",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
