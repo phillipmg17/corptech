@@ -45,6 +45,7 @@ export default function CorpPage() {
   const [products,    setProducts]    = useState([]);
   const [toast,       setToast]       = useState(null);
   const [prodSearch,  setProdSearch]  = useState('');
+  const [stockCatFilter, setStockCatFilter] = useState('all');
 
   /* ── ALMACENES ── */
   const [warehouses,  setWarehouses]  = useState([]);
@@ -787,7 +788,7 @@ export default function CorpPage() {
     });
     if (error) { showToast('Error: ' + error.message, 'err'); return; }
     showToast('Stock agregado ✓');
-    setModal(null); setForm({});
+    setModal(null); setForm({}); setProdSearch(''); setStockCatFilter('all');
     loadGlobalStock();
     loadKpis();
   }
@@ -1465,6 +1466,40 @@ export default function CorpPage() {
               {/* Tip */}
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, padding: '10px 14px', background: 'rgba(10,132,255,0.07)', borderRadius: 12, border: '1px solid rgba(10,132,255,0.18)' }}>
                 💡 Cada producto es una <b>plantilla de modelo</b>. Al registrar un equipo eliges el modelo y solo ingresas IMEI, color, GB y condición.
+              </div>
+
+              {/* ── Agregar Rápido por Categoría ── */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                  ➕ Nuevo modelo por categoría
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+                  {[
+                    { id:'iphone',    lbl:'iPhone',    ico:'📱', color:'#0A84FF', emoji:'📱' },
+                    { id:'ipad',      lbl:'iPad',      ico:'📟', color:'#5E5CE6', emoji:'📟' },
+                    { id:'mac',       lbl:'Mac',       ico:'💻', color:'#636366', emoji:'💻' },
+                    { id:'airpods',   lbl:'AirPods',   ico:'🎧', color:'#30D158', emoji:'🎧' },
+                    { id:'samsung',   lbl:'Samsung',   ico:'📲', color:'#FF9F0A', emoji:'📲' },
+                    { id:'accesorio', lbl:'Accesorios',ico:'🔌', color:'#BF5AF2', emoji:'🔌' },
+                    { id:'otro',      lbl:'Otro',      ico:'📦', color:'#8E8E93', emoji:'📦' },
+                  ].map(c => (
+                    <button key={c.id} type="button"
+                      onClick={() => { setModal('add-product'); setForm({ emoji: c.emoji, category: c.id, _cat_filter: c.id }); }}
+                      style={{
+                        padding: '10px 6px', borderRadius: 14, border: `1.5px dashed ${c.color}55`,
+                        background: `${c.color}0d`, cursor: 'pointer', textAlign: 'center',
+                        color: c.color, fontWeight: 700, fontSize: 11, transition: 'all .15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background=`${c.color}22`; e.currentTarget.style.borderColor=c.color; }}
+                      onMouseLeave={e => { e.currentTarget.style.background=`${c.color}0d`; e.currentTarget.style.borderColor=`${c.color}55`; }}>
+                      <div style={{ fontSize: 20, marginBottom: 3 }}>{c.ico}</div>
+                      <div>{c.lbl}</div>
+                      <div style={{ fontSize: 10, opacity: 0.7, marginTop: 1 }}>
+                        {products.filter(p => (p.category||'otro') === c.id).length} modelos
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Filtro de categorías */}
@@ -3565,14 +3600,48 @@ export default function CorpPage() {
                       {STORES.map(s => <option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
                     </select>
                   </div>
+                  {/* ── Filtro de Categoría ── */}
+                  <div className="form-group">
+                    <label className="form-label">Categoría</label>
+                    <div style={{ display:'flex', gap:5, overflowX:'auto', paddingBottom:4, flexWrap:'nowrap' }}>
+                      {[
+                        { id:'all',       lbl:'Todos',    ico:'🗂️', color:'#636366' },
+                        { id:'iphone',    lbl:'iPhone',   ico:'📱', color:'#0A84FF' },
+                        { id:'ipad',      lbl:'iPad',     ico:'📟', color:'#5E5CE6' },
+                        { id:'mac',       lbl:'Mac',      ico:'💻', color:'#636366' },
+                        { id:'airpods',   lbl:'AirPods',  ico:'🎧', color:'#30D158' },
+                        { id:'samsung',   lbl:'Samsung',  ico:'📲', color:'#FF9F0A' },
+                        { id:'accesorio', lbl:'Acces.',   ico:'🔌', color:'#BF5AF2' },
+                        { id:'otro',      lbl:'Otro',     ico:'📦', color:'#8E8E93' },
+                      ].map(c => {
+                        const cnt   = c.id === 'all' ? products.length : products.filter(p => (p.category||'otro') === c.id).length;
+                        const active = stockCatFilter === c.id;
+                        return (
+                          <button key={c.id} type="button"
+                            onClick={() => { setStockCatFilter(c.id); setForm(f => ({ ...f, product_id:'' })); setProdSearch(''); }}
+                            style={{
+                              flexShrink:0, padding:'5px 10px', borderRadius:16, fontSize:11, fontWeight:700, cursor:'pointer',
+                              border:`1.5px solid ${active ? c.color : 'var(--border)'}`,
+                              background: active ? `${c.color}22` : 'transparent',
+                              color: active ? c.color : 'var(--text-muted)',
+                              transition:'all .15s',
+                            }}>
+                            {c.ico} {c.lbl}{cnt > 0 && c.id !== 'all' ? ` (${cnt})` : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* ── Buscador + Lista de Producto ── */}
                   <div className="form-group">
                     <label className="form-label">Producto</label>
                     {/* Input buscador */}
                     <input
                       className="form-input"
-                      placeholder="🔍 Buscar producto..."
+                      placeholder={stockCatFilter === 'all' ? '🔍 Buscar por nombre...' : `🔍 Buscar en ${stockCatFilter}...`}
                       value={prodSearch}
-                      onChange={e => { setProdSearch(e.target.value); setForm(f => ({ ...f, product_id: '' })); }}
+                      onChange={e => { setProdSearch(e.target.value); setForm(f => ({ ...f, product_id:'' })); }}
                       autoComplete="off"
                       style={{ borderColor: form.product_id ? '#30D158' : undefined }}
                     />
@@ -3588,32 +3657,36 @@ export default function CorpPage() {
                         </div>
                       ) : null;
                     })()}
-                    {/* Lista filtrada — solo cuando el usuario escribe Y no tiene producto seleccionado */}
-                    {prodSearch && !form.product_id && (() => {
-                      const filtered = products.filter(p =>
-                        p.name.toLowerCase().includes(prodSearch.toLowerCase())
-                      );
+                    {/* Lista filtrada por categoría + búsqueda */}
+                    {!form.product_id && (stockCatFilter !== 'all' || prodSearch) && (() => {
+                      const filtered = products.filter(p => {
+                        const catOk    = stockCatFilter === 'all' || (p.category||'otro') === stockCatFilter;
+                        const searchOk = !prodSearch || p.name.toLowerCase().includes(prodSearch.toLowerCase());
+                        return catOk && searchOk;
+                      });
                       return (
                         <div style={{ border:'1px solid var(--border)', borderRadius:10, maxHeight:220, overflowY:'auto', marginTop:4, background:'var(--card)', boxShadow:'0 8px 24px rgba(0,0,0,0.2)', position:'relative', zIndex:10 }}>
                           {filtered.length === 0 ? (
                             <div style={{ padding:'12px 14px', fontSize:13, color:'var(--text3)' }}>
-                              Sin resultados para "{prodSearch}"
+                              Sin productos{prodSearch ? ` para "${prodSearch}"` : ''} en esta categoría
                             </div>
                           ) : filtered.map((p, i) => (
-                            <div
-                              key={p.id}
-                              onMouseDown={() => { setForm(f => ({ ...f, product_id: p.id })); setProdSearch(''); }}
+                            <div key={p.id}
+                              onMouseDown={() => { setForm(f => ({ ...f, product_id:p.id, emoji:p.emoji||'📦', sale_price: p.sale_price||'' })); setProdSearch(''); }}
                               style={{
                                 padding:'10px 14px', cursor:'pointer',
                                 display:'flex', alignItems:'center', gap:10,
-                                fontSize:14, color:'var(--text)',
+                                fontSize:13, color:'var(--text)',
                                 borderBottom: i < filtered.length-1 ? '1px solid var(--border)' : 'none',
                               }}
                               onMouseEnter={e => e.currentTarget.style.background='rgba(10,132,255,0.08)'}
                               onMouseLeave={e => e.currentTarget.style.background='transparent'}
                             >
                               <span style={{ fontSize:20 }}>{p.emoji || '📦'}</span>
-                              <span>{p.name}</span>
+                              <div>
+                                <div style={{ fontWeight:700 }}>{p.name}</div>
+                                {p.sale_price > 0 && <div style={{ fontSize:11, color:'#30D158', fontWeight:600 }}>S/ {parseFloat(p.sale_price).toFixed(2)}</div>}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -4417,7 +4490,7 @@ export default function CorpPage() {
               </>
             )}
 
-            <button className="btn btn-outline btn-block" style={{ marginTop: 12 }} onClick={() => { setModal(null); setProdSearch(''); }}>Cancelar</button>
+            <button className="btn btn-outline btn-block" style={{ marginTop: 12 }} onClick={() => { setModal(null); setProdSearch(''); setStockCatFilter('all'); }}>Cancelar</button>
           </div>
         </div>
       )}
