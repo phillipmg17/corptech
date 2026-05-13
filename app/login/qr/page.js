@@ -5,31 +5,34 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
 export default function QRLoginPage() {
-  const router  = useRouter();
+  const router     = useRouter();
   const videoRef   = useRef(null);
   const canvasRef  = useRef(null);
   const streamRef  = useRef(null);
   const scannerRef = useRef(null);
 
-  const [step,       setStep]       = useState('scan');   // scan | confirm | loading | error
+  const [step,       setStep]       = useState('scan'); // scan | loading | confirm | register | error
   const [jsQRLoaded, setJsQRLoaded] = useState(false);
   const [cameraOk,   setCameraOk]   = useState(false);
-  const [foundUser,  setFoundUser]  = useState(null);     // { id, full_name, org_name, role }
+  const [foundUser,  setFoundUser]  = useState(null);
   const [errorMsg,   setErrorMsg]   = useState('');
   const [manualId,   setManualId]   = useState('');
   const [showManual, setShowManual] = useState(false);
-  const [scanPulse,  setScanPulse]  = useState(false);
 
-  /* ── Cargar jsQR desde CDN ── */
+  /* registro */
+  const [regEmail,    setRegEmail]    = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regLoading,  setRegLoading]  = useState(false);
+
+  /* ── cargar jsQR ── */
   useEffect(() => {
     const s = document.createElement('script');
-    s.src   = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-    s.onload= () => setJsQRLoaded(true);
+    s.src    = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+    s.onload = () => setJsQRLoaded(true);
     document.head.appendChild(s);
     return () => stopCamera();
   }, []);
 
-  /* ── Iniciar cámara cuando jsQR esté listo ── */
   useEffect(() => { if (jsQRLoaded) startCamera(); }, [jsQRLoaded]);
 
   async function startCamera() {
@@ -73,10 +76,8 @@ export default function QRLoginPage() {
   }
 
   async function handleQRData(raw) {
-    setScanPulse(true);
     try {
       let uid = raw;
-      // Formato: "corptech:uid:UUID" o directo UUID
       if (raw.startsWith('corptech:uid:')) uid = raw.split('corptech:uid:')[1];
       await lookupUser(uid);
     } catch {
@@ -89,33 +90,37 @@ export default function QRLoginPage() {
     setStep('loading');
     const { data: prof } = await supabase
       .from('users')
-      .select('id, full_name, org_id, organizations(name)')
+      .select('id, full_name, org_id, email, organizations(name)')
       .eq('id', uid)
-      .single();
+      .maybeSingle();
+
     if (!prof) { setErrorMsg('Usuario no encontrado.'); setStep('error'); return; }
 
     const { data: roleRow } = await supabase
-      .from('user_roles').select('role').eq('user_id', uid).single();
+      .from('user_roles').select('role').eq('user_id', uid).maybeSingle();
 
     const { data: bk } = await supabase
-      .from('biometric_keys').select('credential_id, device_name').eq('user_id', uid).single();
-
-    if (!bk?.credential_id) {
-      setErrorMsg('Este usuario no tiene biometría registrada en ningún dispositivo.');
-      setStep('error');
-      return;
-    }
+      .from('biometric_keys').select('credential_id, device_name').eq('user_id', uid).maybeSingle();
 
     stopCamera();
-    setFoundUser({
-      id:        prof.id,
-      full_name: prof.full_name,
-      org_name:  prof.organizations?.name || 'Corp Tech',
-      role:      roleRow?.role || 'vendedor',
-      credential_id: bk.credential_id,
-      device_name:   bk.device_name,
-    });
-    setStep('confirm');
+
+    const user = {
+      id:            prof.id,
+      full_name:     prof.full_name,
+      email:         prof.email || '',
+      org_name:      prof.organizations?.name || 'Corp Tech',
+      role:          roleRow?.role || 'vendedor',
+      credential_id: bk?.credential_id || null,
+      device_name:   bk?.device_name   || null,
+    };
+    setFoundUser(user);
+
+    /* si no tiene biometría registrada → paso de registro */
+    if (!bk?.credential_id) {
+      setStep('register');
+    } else {
+      setStep('confirm');
+    }
   }
 
   async function doManualSearch() {
@@ -123,28 +128,108 @@ export default function QRLoginPage() {
     await lookupUser(manualId.trim());
   }
 
-  /* ── WebAuthn Authentication ── */
+  /* ── REGISTRO: email+password → WebAuthn → guardar ── */
+  async function doRegisterBiometric(e) {
+    e.preventDefault();
+    if (!regEmail || !regPassword) return;
+    setRegLoading(true);
+    setErrorMsg('');
+
+    try {
+      /* 1. Verificar identidad con contraseña */
+      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+        email: regEmail, password: regPassword,
+      });
+
+      if (authErr || !authData.session) {
+        setErrorMsg('Correo o contraseña incorrectos.');
+        setRegLoading(false);
+        return;
+      }
+
+      /* 2. Verificar que coincide con el QR escaneado */
+      if (authData.user.id !== foundUser.id) {
+        setErrorMsg('Las credenciales no corresponden a este carnet QR.');
+        await supabase.auth.signOut();
+        setRegLoading(false);
+        return;
+      }
+
+      /* 3. Registrar WebAuthn si está disponible */
+      if (window.PublicKeyCredential) {
+        try {
+          const challenge = crypto.getRandomValues(new Uint8Array(32));
+          const uid8      = new TextEncoder().encode(foundUser.id);
+
+          const cred = await navigator.credentials.create({
+            publicKey: {
+              challenge,
+              rp:   { name: 'Corp Tech ERP', id: window.location.hostname },
+              user: { id: uid8, name: regEmail, displayName: foundUser.full_name || 'Usuario' },
+              pubKeyCredParams: [
+                { type: 'public-key', alg: -7   },
+                { type: 'public-key', alg: -257 },
+              ],
+              authenticatorSelection: {
+                userVerification:        'required',
+                residentKey:             'preferred',
+                authenticatorAttachment: 'platform',
+              },
+              timeout: 60000,
+            },
+          });
+
+          if (cred) {
+            const credIdBase64 = btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
+            const ua = navigator.userAgent;
+            let dn = 'Dispositivo';
+            if (/iPhone/.test(ua))       dn = 'iPhone';
+            else if (/iPad/.test(ua))    dn = 'iPad';
+            else if (/Mac/.test(ua))     dn = 'Mac';
+            else if (/Android/.test(ua)) dn = 'Android';
+
+            await supabase.from('biometric_keys').upsert({
+              user_id:       foundUser.id,
+              credential_id: credIdBase64,
+              device_name:   dn,
+              refresh_token: authData.session.refresh_token,
+              created_at:    new Date().toISOString(),
+            }, { onConflict: 'user_id' });
+          }
+        } catch (webAuthnErr) {
+          /* si el usuario cancela WebAuthn, igual lo logueamos */
+          if (webAuthnErr.name !== 'NotAllowedError') console.warn('WebAuthn:', webAuthnErr.message);
+        }
+      }
+
+      /* 4. Redirigir */
+      redirectByRole(foundUser.role);
+
+    } catch (err) {
+      setErrorMsg('Error inesperado: ' + err.message);
+    }
+    setRegLoading(false);
+  }
+
+  /* ── LOGIN BIOMÉTRICO (ya tiene clave guardada) ── */
   async function confirmBiometric() {
     setStep('loading');
     try {
-      const credId = foundUser.credential_id;
-      // Decodificar credential ID de base64
+      const credId      = foundUser.credential_id;
       const credIdBytes = Uint8Array.from(atob(credId), c => c.charCodeAt(0));
-
-      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const challenge   = crypto.getRandomValues(new Uint8Array(32));
 
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge,
           allowCredentials: [{ type: 'public-key', id: credIdBytes }],
-          userVerification: 'required',   // FaceID / huella obligatoria
+          userVerification: 'required',
           timeout: 60000,
         },
       });
 
       if (!assertion) { setErrorMsg('Verificación cancelada.'); setStep('confirm'); return; }
 
-      // Obtener refresh token guardado
       const { data: bk } = await supabase
         .from('biometric_keys')
         .select('refresh_token')
@@ -152,34 +237,27 @@ export default function QRLoginPage() {
         .single();
 
       if (!bk?.refresh_token) {
-        setErrorMsg('Sesión biométrica expirada. Inicia sesión normal una vez para renovarla.');
+        setErrorMsg('Sesión biométrica expirada. Escanea de nuevo e ingresa tu contraseña para renovarla.');
         setStep('error');
         return;
       }
 
-      // Restaurar sesión con refresh token
       const { data: { session }, error } = await supabase.auth.refreshSession({
         refresh_token: bk.refresh_token,
       });
 
       if (error || !session) {
-        setErrorMsg('Sesión expirada. Inicia sesión con contraseña una vez para renovar.');
+        setErrorMsg('Sesión expirada. Escanea de nuevo e ingresa tu contraseña para renovarla.');
         setStep('error');
         return;
       }
 
-      // Actualizar refresh token rotado
       await supabase.from('biometric_keys').update({
         refresh_token: session.refresh_token,
-        last_used: new Date().toISOString(),
+        last_used:     new Date().toISOString(),
       }).eq('user_id', foundUser.id);
 
-      // Redirigir según rol
-      const r = foundUser.role;
-      if (r === 'superadmin')                      router.replace('/superadmin');
-      else if (r === 'corp')                       router.replace('/corp');
-      else if (r === 'store_manager' || r === 'gerente') router.replace('/store');
-      else                                         router.replace('/pos');
+      redirectByRole(foundUser.role);
 
     } catch (err) {
       if (err.name === 'NotAllowedError') {
@@ -191,67 +269,80 @@ export default function QRLoginPage() {
     }
   }
 
+  function redirectByRole(r) {
+    if (r === 'superadmin')                                                      router.replace('/superadmin');
+    else if (r === 'corp' || r === 'admin_corp')                                 router.replace('/corp');
+    else if (r === 'store_manager' || r === 'gerente' || r === 'store_admin')   router.replace('/store');
+    else                                                                          router.replace('/pos');
+  }
+
   function retry() {
     setStep('scan');
     setFoundUser(null);
     setErrorMsg('');
-    setScanPulse(false);
+    setRegEmail('');
+    setRegPassword('');
     startCamera();
   }
 
   const ROLE_LABEL = {
-    superadmin: '⚡ Super Admin', corp: '🏢 Corporación', gerente: '👔 Gerente',
-    store_manager: '👔 Gerente', vendedor: '🛒 Vendedor', seller: '🛒 Vendedor',
-    cashier: '💰 Cajero', warehouse: '📦 Almacenero',
+    superadmin:    '⚡ Super Admin',
+    corp:          '🏢 Corporación',
+    admin_corp:    '🏢 Admin Corp',
+    gerente:       '👔 Gerente',
+    store_manager: '👔 Gerente',
+    store_admin:   '🏪 Admin Tienda',
+    vendedor:      '🛒 Vendedor',
+    seller:        '🛒 Vendedor',
   };
 
+  /* ─────────────────── RENDER ─────────────────── */
   return (
     <div style={{
-      minHeight: '100dvh', background: '#050508',
+      minHeight: '100dvh',
+      background: '#050508',
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      fontFamily: "'Urbanist','Inter',sans-serif", padding: '0 0 40px',
+      fontFamily: "'Urbanist','Inter',sans-serif",
+      padding: '0 0 40px',
       userSelect: 'none',
     }}>
       <style>{`
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        @keyframes slideUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes slideUp  { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
         @keyframes scanLine { 0%{top:10%} 100%{top:88%} }
-        @keyframes spin { to{transform:rotate(360deg)} }
-        @keyframes success { 0%{transform:scale(1)} 50%{transform:scale(1.08)} 100%{transform:scale(1)} }
+        @keyframes spin     { to{transform:rotate(360deg)} }
+        input::placeholder  { color: rgba(255,255,255,0.25); }
       `}</style>
 
       {/* Header */}
       <div style={{ position:'fixed', top:0, left:0, right:0, padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10 }}>
         <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>🏢 Corp Tech</div>
-        <Link href="/login" style={{ fontSize:13, color:'rgba(255,255,255,0.4)', textDecoration:'none' }}>
+        <Link href="/login" style={{ fontSize:13, color:'rgba(255,255,255,0.4)', textDecoration:'none', fontWeight:600 }}>
           Contraseña →
         </Link>
       </div>
 
-      {/* ── SCAN STEP ── */}
-      {(step === 'scan') && (
+      {/* ── SCAN ── */}
+      {step === 'scan' && (
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', width:'100%', padding:'60px 20px 0', animation:'slideUp 0.3s ease' }}>
-          <div style={{ fontSize:13, fontWeight:600, letterSpacing:'0.08em', color:'rgba(255,255,255,0.4)', textTransform:'uppercase', marginBottom:12 }}>
+          <div style={{ fontSize:12, fontWeight:700, letterSpacing:'0.1em', color:'rgba(255,255,255,0.35)', textTransform:'uppercase', marginBottom:10 }}>
             Acceso con Carnet QR
           </div>
           <div style={{ fontSize:26, fontWeight:800, color:'#fff', marginBottom:6 }}>Escanea tu carnet</div>
-          <div style={{ fontSize:14, color:'rgba(255,255,255,0.4)', marginBottom:32, textAlign:'center' }}>
-            Apunta la cámara al código QR de tu carnet de trabajo
+          <div style={{ fontSize:14, color:'rgba(255,255,255,0.4)', marginBottom:32, textAlign:'center', lineHeight:1.6 }}>
+            Apunta la cámara al código QR<br/>de tu carnet de trabajo
           </div>
 
-          {/* Visor de cámara */}
-          <div style={{ position:'relative', width:260, height:260, borderRadius:24, overflow:'hidden', background:'#111', boxShadow:'0 0 0 3px rgba(10,132,255,0.4)', marginBottom:28 }}>
+          <div style={{ position:'relative', width:264, height:264, borderRadius:24, overflow:'hidden', background:'#111', boxShadow:'0 0 0 3px rgba(10,132,255,0.35)', marginBottom:28 }}>
             <video ref={videoRef} playsInline muted style={{ width:'100%', height:'100%', objectFit:'cover' }} />
             <canvas ref={canvasRef} style={{ display:'none' }} />
 
-            {/* Esquinas decorativas */}
             {['tl','tr','bl','br'].map(c => (
               <div key={c} style={{
                 position:'absolute',
                 top:    c.startsWith('t') ? 12 : 'auto',
                 bottom: c.startsWith('b') ? 12 : 'auto',
-                left:   c.endsWith('l')  ? 12 : 'auto',
-                right:  c.endsWith('r')  ? 12 : 'auto',
+                left:   c.endsWith('l')   ? 12 : 'auto',
+                right:  c.endsWith('r')   ? 12 : 'auto',
                 width:28, height:28,
                 borderTop:    c.startsWith('t') ? '3px solid #0A84FF' : 'none',
                 borderBottom: c.startsWith('b') ? '3px solid #0A84FF' : 'none',
@@ -261,10 +352,9 @@ export default function QRLoginPage() {
               }} />
             ))}
 
-            {/* Línea de escaneo */}
             {cameraOk && (
               <div style={{
-                position:'absolute', left:16, right:16, height:2,
+                position:'absolute', left:20, right:20, height:2,
                 background:'linear-gradient(90deg,transparent,#0A84FF,transparent)',
                 animation:'scanLine 2s ease-in-out infinite alternate',
                 borderRadius:2,
@@ -273,19 +363,18 @@ export default function QRLoginPage() {
 
             {!cameraOk && (
               <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,0.3)', fontSize:13, textAlign:'center', padding:20 }}>
-                {jsQRLoaded ? 'Sin acceso a cámara' : 'Iniciando...'}
+                {jsQRLoaded ? 'Sin acceso a cámara' : 'Iniciando cámara...'}
               </div>
             )}
           </div>
 
-          {/* Manual fallback */}
           {showManual && (
             <div style={{ width:'100%', maxWidth:300, marginBottom:16 }}>
               <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)', marginBottom:8, textAlign:'center' }}>O ingresa tu ID de empleado:</div>
               <div style={{ display:'flex', gap:8 }}>
                 <input
                   value={manualId}
-                  onChange={e=>setManualId(e.target.value)}
+                  onChange={e => setManualId(e.target.value)}
                   placeholder="UUID del usuario..."
                   style={{ flex:1, padding:'10px 14px', borderRadius:12, border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.06)', color:'#fff', fontSize:13, outline:'none', fontFamily:'inherit' }}
                 />
@@ -296,13 +385,13 @@ export default function QRLoginPage() {
             </div>
           )}
 
-          <button onClick={()=>setShowManual(o=>!o)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.3)', fontSize:13, cursor:'pointer', padding:'4px 0' }}>
+          <button onClick={() => setShowManual(o => !o)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.3)', fontSize:13, cursor:'pointer', padding:'4px 0' }}>
             {showManual ? 'Ocultar entrada manual' : '¿Sin cámara? Ingresa manualmente'}
           </button>
         </div>
       )}
 
-      {/* ── LOADING STEP ── */}
+      {/* ── LOADING ── */}
       {step === 'loading' && (
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:20, animation:'slideUp 0.2s ease' }}>
           <div style={{ width:52, height:52, border:'3px solid rgba(255,255,255,0.1)', borderTopColor:'#0A84FF', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
@@ -310,10 +399,9 @@ export default function QRLoginPage() {
         </div>
       )}
 
-      {/* ── CONFIRM STEP ── */}
+      {/* ── CONFIRM (tiene biometría) ── */}
       {step === 'confirm' && foundUser && (
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'60px 24px 0', maxWidth:360, width:'100%', animation:'slideUp 0.3s ease' }}>
-          {/* Avatar */}
           <div style={{
             width:88, height:88, borderRadius:28,
             background:'linear-gradient(135deg,#0A84FF,#5E5CE6)',
@@ -339,7 +427,6 @@ export default function QRLoginPage() {
             </div>
           )}
 
-          {/* Botón FaceID / Huella */}
           <button onClick={confirmBiometric} style={{
             width:'100%', padding:'16px', borderRadius:16,
             background:'linear-gradient(135deg,#0A84FF,#5E5CE6)',
@@ -362,7 +449,115 @@ export default function QRLoginPage() {
         </div>
       )}
 
-      {/* ── ERROR STEP ── */}
+      {/* ── REGISTER (primera vez en este dispositivo) ── */}
+      {step === 'register' && foundUser && (
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'60px 24px 20px', maxWidth:360, width:'100%', animation:'slideUp 0.3s ease' }}>
+          <div style={{
+            width:78, height:78, borderRadius:24,
+            background:'linear-gradient(135deg,#30D158,#34C759)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:36, marginBottom:14,
+            boxShadow:'0 8px 28px rgba(48,209,88,0.35)',
+          }}>
+            {foundUser.full_name?.charAt(0)?.toUpperCase() || '👤'}
+          </div>
+
+          <div style={{ fontSize:20, fontWeight:800, color:'#fff', marginBottom:2 }}>{foundUser.full_name}</div>
+          <div style={{ fontSize:13, color:'rgba(255,255,255,0.5)', marginBottom:4 }}>{foundUser.org_name}</div>
+          <div style={{
+            padding:'4px 14px', borderRadius:20, fontSize:12, fontWeight:600,
+            background:'rgba(48,209,88,0.15)', color:'#30D158', marginBottom:16,
+          }}>
+            {ROLE_LABEL[foundUser.role] || foundUser.role}
+          </div>
+
+          <div style={{
+            background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)',
+            borderRadius:14, padding:'12px 16px', marginBottom:20, width:'100%',
+            fontSize:13, color:'rgba(255,255,255,0.5)', textAlign:'center', lineHeight:1.6,
+          }}>
+            📲 Primera vez en este dispositivo.<br/>
+            Ingresa tu contraseña para vincular tu FaceID o huella.
+          </div>
+
+          {errorMsg && (
+            <div style={{ background:'rgba(255,59,48,0.12)', border:'1px solid rgba(255,59,48,0.25)', borderRadius:12, padding:'10px 16px', color:'#FF6B60', fontSize:13, marginBottom:16, textAlign:'center', width:'100%' }}>
+              {errorMsg}
+            </div>
+          )}
+
+          <form onSubmit={doRegisterBiometric} style={{ width:'100%' }}>
+            <div style={{ marginBottom:12 }}>
+              <label style={{ fontSize:12, color:'rgba(255,255,255,0.4)', display:'block', marginBottom:6, fontWeight:600 }}>
+                Correo electrónico
+              </label>
+              <input
+                type="email"
+                value={regEmail}
+                onChange={e => { setRegEmail(e.target.value); setErrorMsg(''); }}
+                placeholder="tu@email.com"
+                required
+                style={{
+                  width:'100%', boxSizing:'border-box',
+                  padding:'13px 16px', borderRadius:14,
+                  border:'1px solid rgba(255,255,255,0.12)',
+                  background:'rgba(255,255,255,0.06)',
+                  color:'#fff', fontSize:15, outline:'none', fontFamily:'inherit',
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom:20 }}>
+              <label style={{ fontSize:12, color:'rgba(255,255,255,0.4)', display:'block', marginBottom:6, fontWeight:600 }}>
+                Contraseña
+              </label>
+              <input
+                type="password"
+                value={regPassword}
+                onChange={e => { setRegPassword(e.target.value); setErrorMsg(''); }}
+                placeholder="••••••••"
+                required
+                style={{
+                  width:'100%', boxSizing:'border-box',
+                  padding:'13px 16px', borderRadius:14,
+                  border:'1px solid rgba(255,255,255,0.12)',
+                  background:'rgba(255,255,255,0.06)',
+                  color:'#fff', fontSize:15, outline:'none', fontFamily:'inherit',
+                }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={regLoading}
+              style={{
+                width:'100%', padding:'16px', borderRadius:16,
+                background: regLoading ? 'rgba(48,209,88,0.3)' : 'linear-gradient(135deg,#30D158,#34C759)',
+                border:'none', color:'#fff', fontSize:15, fontWeight:700,
+                cursor: regLoading ? 'not-allowed' : 'pointer',
+                marginBottom:12,
+                display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+                boxShadow:'0 6px 24px rgba(48,209,88,0.3)',
+              }}
+            >
+              {regLoading
+                ? <><span style={{ display:'inline-block', width:18, height:18, border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} /> Verificando...</>
+                : <><span style={{ fontSize:20 }}>🔐</span> Ingresar y vincular FaceID</>
+              }
+            </button>
+          </form>
+
+          <button onClick={retry} style={{
+            background:'none', border:'1px solid rgba(255,255,255,0.1)',
+            borderRadius:14, padding:'11px', width:'100%',
+            color:'rgba(255,255,255,0.4)', fontSize:14, cursor:'pointer',
+          }}>
+            ← Escanear otro carnet
+          </button>
+        </div>
+      )}
+
+      {/* ── ERROR ── */}
       {step === 'error' && (
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', padding:'0 24px', maxWidth:340, width:'100%', textAlign:'center', animation:'slideUp 0.3s ease' }}>
           <div style={{ fontSize:52, marginBottom:16 }}>⚠️</div>
@@ -372,7 +567,9 @@ export default function QRLoginPage() {
             width:'100%', padding:'14px', borderRadius:14,
             background:'#0A84FF', border:'none', color:'#fff',
             fontSize:15, fontWeight:700, cursor:'pointer', marginBottom:14,
-          }}>Intentar de nuevo</button>
+          }}>
+            Intentar de nuevo
+          </button>
           <Link href="/login" style={{ color:'rgba(255,255,255,0.35)', fontSize:13, textDecoration:'none' }}>
             Iniciar sesión con contraseña
           </Link>

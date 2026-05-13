@@ -20,10 +20,10 @@ function useTheme() {
 }
 
 const ORGS = [
-  { id: '00000000-0000-0000-0000-000000000001', name: 'Corp Tech',     ico: '🏢', slug: 'corp' },
-  { id: '00000000-0000-0000-0000-000000000002', name: 'Futurteck',     ico: '🔵', slug: 'store' },
-  { id: '00000000-0000-0000-0000-000000000003', name: 'Innovatech',    ico: '🟣', slug: 'store' },
-  { id: '00000000-0000-0000-0000-000000000004', name: 'WeTech Peru',   ico: '🟢', slug: 'store' },
+  { id: '00000000-0000-0000-0000-000000000001', name: 'Corp Tech',   ico: '🏢' },
+  { id: '00000000-0000-0000-0000-000000000002', name: 'Futurteck',   ico: '🔵' },
+  { id: '00000000-0000-0000-0000-000000000003', name: 'Innovatech',  ico: '🟣' },
+  { id: '00000000-0000-0000-0000-000000000004', name: 'WeTech Peru', ico: '🟢' },
 ];
 
 const ROLE_OPTS = [
@@ -36,18 +36,19 @@ const ROLE_OPTS = [
 export default function AuthPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
-  const [mode, setMode]         = useState('login');  // login | register | recover
-  const [email, setEmail]       = useState('');
+  const [mode,     setMode]     = useState('login');   // login | register | recover
+  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName]         = useState('');
-  const [orgId, setOrgId]       = useState('');
-  const [role, setRole]         = useState('vendedor');
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
-  const [success, setSuccess]   = useState('');
+  const [name,     setName]     = useState('');
+  const [orgId,    setOrgId]    = useState('');
+  const [role,     setRole]     = useState('vendedor');
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
+  const [success,  setSuccess]  = useState('');
   const [checking, setChecking] = useState(true);
+  const [showPass, setShowPass] = useState(false);
 
-  /* ── Redirect if already logged in ── */
+  /* ── Redirect si ya está logueado ── */
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
@@ -61,16 +62,12 @@ export default function AuthPage() {
 
   async function getRedirectPath(userId) {
     const { data } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .limit(1)
-      .single();
+      .from('user_roles').select('role').eq('user_id', userId).limit(1).single();
     const r = data?.role || 'vendedor';
-    if (r === 'superadmin')                          return '/superadmin';
-    if (r === 'corp'      || r === 'admin_corp')     return '/corp';
+    if (r === 'superadmin')                         return '/superadmin';
+    if (r === 'corp'      || r === 'admin_corp')    return '/corp';
     if (r === 'gerente'   || r === 'store_manager'
-                          || r === 'store_admin')    return '/store';
+                          || r === 'store_admin')   return '/store';
     return '/pos';
   }
 
@@ -111,144 +108,369 @@ export default function AuthPage() {
     setLoading(false);
   }
 
+  function switchMode(m) {
+    setMode(m);
+    setError('');
+    setSuccess('');
+  }
+
   if (checking) {
     return (
-      <div className="auth-screen">
-        <div className="loading-wrap">
-          <div className="spinner" />
+      <div style={styles.screen}>
+        <div style={styles.spinnerWrap}>
+          <div style={styles.spinner} />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="auth-screen">
-      <button className="auth-theme-btn" onClick={toggleTheme} title="Cambiar tema">
+    <div style={styles.screen} data-theme={theme}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&display=swap');
+        * { box-sizing: border-box; }
+        [data-theme="light"] { --bg: #f0f2f5; --card: #ffffff; --border: rgba(0,0,0,0.08); --text: #111; --text2: #555; --input-bg: #f7f8fa; --input-border: rgba(0,0,0,0.1); --muted: #888; }
+        [data-theme="dark"]  { --bg: #0a0a0f; --card: #131318; --border: rgba(255,255,255,0.08); --text: #fff; --text2: rgba(255,255,255,0.6); --input-bg: rgba(255,255,255,0.05); --input-border: rgba(255,255,255,0.1); --muted: rgba(255,255,255,0.35); }
+        @keyframes fadeIn  { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin    { to{transform:rotate(360deg)} }
+        @keyframes shake   { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+        .auth-input { width:100%; padding:14px 16px; border-radius:14px; border:1.5px solid var(--input-border); background:var(--input-bg); color:var(--text); font-size:15px; font-family:inherit; outline:none; transition:border-color 0.2s; }
+        .auth-input:focus { border-color:#0A84FF; }
+        .auth-input::placeholder { color:var(--muted); }
+        .org-pill { flex:1; min-width:0; padding:10px 8px; border-radius:14px; border:1.5px solid var(--border); background:var(--input-bg); cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:4px; transition:all 0.15s; }
+        .org-pill:hover { border-color:rgba(10,132,255,0.4); }
+        .org-pill.sel { border-color:#0A84FF; background:rgba(10,132,255,0.1); }
+        .role-select { width:100%; padding:13px 16px; border-radius:14px; border:1.5px solid var(--input-border); background:var(--input-bg); color:var(--text); font-size:15px; font-family:inherit; outline:none; appearance:none; cursor:pointer; }
+        .btn-primary { width:100%; padding:15px; border-radius:15px; border:none; background:linear-gradient(135deg,#0A84FF,#5E5CE6); color:#fff; font-size:16px; font-weight:700; cursor:pointer; font-family:inherit; transition:opacity 0.15s,transform 0.1s; box-shadow:0 6px 24px rgba(10,132,255,0.3); }
+        .btn-primary:hover:not(:disabled) { opacity:0.92; transform:translateY(-1px); }
+        .btn-primary:active:not(:disabled) { transform:translateY(0); }
+        .btn-primary:disabled { opacity:0.5; cursor:not-allowed; box-shadow:none; }
+        .link-btn { background:none; border:none; color:#0A84FF; font-family:inherit; font-size:13px; cursor:pointer; padding:2px 0; font-weight:600; }
+        .link-btn:hover { opacity:0.8; }
+        .tab-btn { flex:1; padding:10px; border:none; background:none; font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; border-radius:10px; transition:all 0.15s; color:var(--text2); }
+        .tab-btn.active { background:var(--card); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,0.12); }
+      `}</style>
+
+      {/* Fondo decorativo */}
+      <div style={{
+        position:'fixed', inset:0, zIndex:0, overflow:'hidden', pointerEvents:'none',
+      }}>
+        <div style={{
+          position:'absolute', top:'-20%', left:'-10%',
+          width:'60vw', height:'60vw', maxWidth:500, maxHeight:500,
+          borderRadius:'50%',
+          background: theme==='dark'
+            ? 'radial-gradient(circle,rgba(10,132,255,0.12) 0%,transparent 70%)'
+            : 'radial-gradient(circle,rgba(10,132,255,0.08) 0%,transparent 70%)',
+        }} />
+        <div style={{
+          position:'absolute', bottom:'-15%', right:'-10%',
+          width:'50vw', height:'50vw', maxWidth:400, maxHeight:400,
+          borderRadius:'50%',
+          background: theme==='dark'
+            ? 'radial-gradient(circle,rgba(94,92,230,0.1) 0%,transparent 70%)'
+            : 'radial-gradient(circle,rgba(94,92,230,0.06) 0%,transparent 70%)',
+        }} />
+      </div>
+
+      {/* Theme toggle */}
+      <button
+        onClick={toggleTheme}
+        style={{
+          position:'fixed', top:16, right:16, zIndex:10,
+          width:40, height:40, borderRadius:12,
+          background: theme==='dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)',
+          border:'none', fontSize:18, cursor:'pointer',
+          display:'flex', alignItems:'center', justifyContent:'center',
+        }}
+      >
         {theme === 'dark' ? '☀️' : '🌙'}
       </button>
-      <div className="auth-card">
-        <div className="auth-logo">🏢</div>
-        <div className="auth-title">Corp Tech ERP</div>
-        <div className="auth-sub">
-          {mode === 'login'   && 'Ingresa a tu panel'}
-          {mode === 'register'&& 'Crear nueva cuenta'}
-          {mode === 'recover' && 'Recuperar contraseña'}
+
+      {/* Card */}
+      <div style={{
+        position:'relative', zIndex:1,
+        width:'100%', maxWidth:400,
+        margin:'0 auto',
+        padding:'0 16px',
+        animation:'fadeIn 0.4s ease',
+      }}>
+        <div style={{
+          background: 'var(--card)',
+          borderRadius:28,
+          padding:'32px 24px 28px',
+          border:'1px solid var(--border)',
+          boxShadow: theme==='dark'
+            ? '0 24px 64px rgba(0,0,0,0.5)'
+            : '0 12px 40px rgba(0,0,0,0.1)',
+        }}>
+          {/* Logo */}
+          <div style={{ textAlign:'center', marginBottom:24 }}>
+            <div style={{
+              width:64, height:64, borderRadius:20,
+              background:'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+              display:'inline-flex', alignItems:'center', justifyContent:'center',
+              fontSize:30, marginBottom:12,
+              boxShadow:'0 8px 24px rgba(10,132,255,0.35)',
+            }}>
+              🏢
+            </div>
+            <div style={{ fontSize:22, fontWeight:800, color:'var(--text)', lineHeight:1.2 }}>
+              Corp Tech ERP
+            </div>
+            <div style={{ fontSize:13, color:'var(--muted)', marginTop:4 }}>
+              {mode === 'login'    && 'Ingresa a tu panel'}
+              {mode === 'register' && 'Crear nueva cuenta'}
+              {mode === 'recover'  && 'Recuperar contraseña'}
+            </div>
+          </div>
+
+          {/* Tabs (solo login / register) */}
+          {mode !== 'recover' && (
+            <div style={{
+              display:'flex', gap:4,
+              background: theme==='dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+              borderRadius:14, padding:4, marginBottom:24,
+            }}>
+              <button className={`tab-btn${mode==='login' ? ' active' : ''}`} onClick={() => switchMode('login')}>
+                Iniciar sesión
+              </button>
+              <button className={`tab-btn${mode==='register' ? ' active' : ''}`} onClick={() => switchMode('register')}>
+                Registrarse
+              </button>
+            </div>
+          )}
+
+          {/* Alertas */}
+          {error && (
+            <div style={{
+              background:'rgba(255,59,48,0.1)', border:'1px solid rgba(255,59,48,0.2)',
+              borderRadius:12, padding:'11px 14px', color:'#FF453A',
+              fontSize:13, marginBottom:16, animation:'shake 0.3s ease',
+            }}>
+              ⚠️ {error}
+            </div>
+          )}
+          {success && (
+            <div style={{
+              background:'rgba(48,209,88,0.1)', border:'1px solid rgba(48,209,88,0.2)',
+              borderRadius:12, padding:'11px 14px', color:'#30D158',
+              fontSize:13, marginBottom:16,
+            }}>
+              ✅ {success}
+            </div>
+          )}
+
+          {/* ── LOGIN ── */}
+          {mode === 'login' && (
+            <form onSubmit={doLogin}>
+              <div style={{ marginBottom:14 }}>
+                <label style={{ fontSize:12, fontWeight:600, color:'var(--text2)', display:'block', marginBottom:6 }}>
+                  Correo electrónico
+                </label>
+                <input
+                  className="auth-input"
+                  type="email"
+                  placeholder="tu@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, fontWeight:600, color:'var(--text2)', display:'block', marginBottom:6 }}>
+                  Contraseña
+                </label>
+                <div style={{ position:'relative' }}>
+                  <input
+                    className="auth-input"
+                    type={showPass ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    style={{ paddingRight:48 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPass(v => !v)}
+                    style={{
+                      position:'absolute', right:14, top:'50%', transform:'translateY(-50%)',
+                      background:'none', border:'none', cursor:'pointer', fontSize:16, color:'var(--muted)',
+                    }}
+                  >
+                    {showPass ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              </div>
+              <button className="btn-primary" type="submit" disabled={loading}>
+                {loading ? '⏳ Ingresando...' : 'Ingresar →'}
+              </button>
+              <div style={{ textAlign:'center', marginTop:14 }}>
+                <button type="button" className="link-btn" onClick={() => switchMode('recover')}>
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ── REGISTER ── */}
+          {mode === 'register' && (
+            <form onSubmit={doRegister}>
+              <div style={{ marginBottom:12 }}>
+                <label style={{ fontSize:12, fontWeight:600, color:'var(--text2)', display:'block', marginBottom:6 }}>
+                  Nombre completo
+                </label>
+                <input
+                  className="auth-input"
+                  type="text"
+                  placeholder="Tu nombre"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom:12 }}>
+                <label style={{ fontSize:12, fontWeight:600, color:'var(--text2)', display:'block', marginBottom:6 }}>
+                  Correo electrónico
+                </label>
+                <input
+                  className="auth-input"
+                  type="email"
+                  placeholder="tu@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <label style={{ fontSize:12, fontWeight:600, color:'var(--text2)', display:'block', marginBottom:6 }}>
+                  Contraseña
+                </label>
+                <input
+                  className="auth-input"
+                  type="password"
+                  placeholder="Mínimo 6 caracteres"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <label style={{ fontSize:12, fontWeight:600, color:'var(--text2)', display:'block', marginBottom:8 }}>
+                  Empresa
+                </label>
+                <div style={{ display:'flex', gap:8 }}>
+                  {ORGS.map(o => (
+                    <div
+                      key={o.id}
+                      className={`org-pill${orgId===o.id ? ' sel' : ''}`}
+                      onClick={() => setOrgId(o.id)}
+                    >
+                      <span style={{ fontSize:22 }}>{o.ico}</span>
+                      <span style={{ fontSize:10, fontWeight:600, color:'var(--text2)', textAlign:'center', lineHeight:1.2 }}>
+                        {o.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, fontWeight:600, color:'var(--text2)', display:'block', marginBottom:6 }}>
+                  Rol
+                </label>
+                <select
+                  className="role-select"
+                  value={role}
+                  onChange={e => setRole(e.target.value)}
+                >
+                  {ROLE_OPTS.map(r => (
+                    <option key={r.val} value={r.val}>{r.lbl}</option>
+                  ))}
+                </select>
+              </div>
+              <button className="btn-primary" type="submit" disabled={loading}>
+                {loading ? '⏳ Creando cuenta...' : 'Crear cuenta'}
+              </button>
+            </form>
+          )}
+
+          {/* ── RECOVER ── */}
+          {mode === 'recover' && (
+            <form onSubmit={doRecover}>
+              <div style={{ marginBottom:20 }}>
+                <label style={{ fontSize:12, fontWeight:600, color:'var(--text2)', display:'block', marginBottom:6 }}>
+                  Correo electrónico
+                </label>
+                <input
+                  className="auth-input"
+                  type="email"
+                  placeholder="tu@email.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <button className="btn-primary" type="submit" disabled={loading}>
+                {loading ? '⏳ Enviando...' : 'Enviar enlace de recuperación'}
+              </button>
+              <div style={{ textAlign:'center', marginTop:14 }}>
+                <button type="button" className="link-btn" onClick={() => switchMode('login')}>
+                  ← Volver al inicio de sesión
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ── QR Login button ── */}
+          {mode === 'login' && (
+            <a
+              href="/login/qr"
+              style={{
+                display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+                marginTop:16, padding:'13px 16px', borderRadius:15,
+                background: theme==='dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                border: `1px solid var(--border)`,
+                color:'var(--text2)', fontSize:14, fontWeight:600, textDecoration:'none',
+                width:'100%', transition:'all 0.15s',
+              }}
+            >
+              <span style={{ fontSize:18 }}>📷</span>
+              Acceso con Carnet QR
+            </a>
+          )}
         </div>
 
-        {mode !== 'recover' && (
-          <div className="auth-tabs">
-            <button className={`auth-tab${mode==='login' ? ' active' : ''}`} onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>
-              Iniciar sesión
-            </button>
-            <button className={`auth-tab${mode==='register' ? ' active' : ''}`} onClick={() => { setMode('register'); setError(''); setSuccess(''); }}>
-              Registrarse
-            </button>
-          </div>
-        )}
-
-        {error   && <div className="auth-error">{error}</div>}
-        {success && <div className="auth-success">{success}</div>}
-
-        {/* ── LOGIN FORM ── */}
-        {mode === 'login' && (
-          <form onSubmit={doLogin}>
-            <div className="form-group">
-              <label className="form-label">Correo electrónico</label>
-              <input className="form-input" type="email" placeholder="tu@email.com"
-                value={email} onChange={e => setEmail(e.target.value)} required />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Contraseña</label>
-              <input className="form-input" type="password" placeholder="••••••••"
-                value={password} onChange={e => setPassword(e.target.value)} required />
-            </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>
-              {loading ? '...' : 'Ingresar →'}
-            </button>
-            <div className="auth-link">
-              <button type="button" onClick={() => { setMode('recover'); setError(''); setSuccess(''); }}>
-                ¿Olvidaste tu contraseña?
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* ── REGISTER FORM ── */}
-        {mode === 'register' && (
-          <form onSubmit={doRegister}>
-            <div className="form-group">
-              <label className="form-label">Nombre completo</label>
-              <input className="form-input" type="text" placeholder="Tu nombre"
-                value={name} onChange={e => setName(e.target.value)} required />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Correo electrónico</label>
-              <input className="form-input" type="email" placeholder="tu@email.com"
-                value={email} onChange={e => setEmail(e.target.value)} required />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Contraseña</label>
-              <input className="form-input" type="password" placeholder="Mínimo 6 caracteres"
-                value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Empresa</label>
-              <div className="org-grid">
-                {ORGS.map(o => (
-                  <div key={o.id} className={`org-card${orgId===o.id ? ' selected' : ''}`} onClick={() => setOrgId(o.id)}>
-                    <div className="org-card-ico">{o.ico}</div>
-                    <div className="org-card-name">{o.name}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Rol</label>
-              <select className="form-select" value={role} onChange={e => setRole(e.target.value)}>
-                {ROLE_OPTS.map(r => (
-                  <option key={r.val} value={r.val}>{r.lbl}</option>
-                ))}
-              </select>
-            </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>
-              {loading ? '...' : 'Crear cuenta'}
-            </button>
-          </form>
-        )}
-
-        {/* ── RECOVER FORM ── */}
-        {mode === 'recover' && (
-          <form onSubmit={doRecover}>
-            <div className="form-group">
-              <label className="form-label">Correo electrónico</label>
-              <input className="form-input" type="email" placeholder="tu@email.com"
-                value={email} onChange={e => setEmail(e.target.value)} required />
-            </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>
-              {loading ? '...' : 'Enviar enlace de recuperación'}
-            </button>
-            <div className="auth-link">
-              <button type="button" onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>
-                ← Volver a iniciar sesión
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* QR Login — dentro del card, al fondo */}
-        {mode === 'login' && (
-          <a href="/login/qr" style={{
-            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
-            marginTop:12, padding:'12px 16px', borderRadius:12,
-            background:'var(--card)', border:'1px solid var(--border)',
-            color:'var(--text3)', fontSize:13, fontWeight:600, textDecoration:'none',
-            width:'100%', boxSizing:'border-box',
-          }}>
-            <span style={{fontSize:16}}>📷</span> Acceso con Carnet QR
-          </a>
-        )}
-
+        {/* Footer */}
+        <div style={{
+          textAlign:'center', marginTop:20,
+          fontSize:12, color: theme==='dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.3)',
+        }}>
+          Corp Tech ERP · Sistema interno
+        </div>
       </div>
     </div>
   );
 }
+
+const styles = {
+  screen: {
+    minHeight:'100dvh', display:'flex', flexDirection:'column',
+    alignItems:'center', justifyContent:'center',
+    background:'var(--bg,#0a0a0f)',
+    fontFamily:"'Urbanist','Inter',sans-serif",
+    padding:'24px 0',
+  },
+  spinnerWrap: {
+    display:'flex', alignItems:'center', justifyContent:'center',
+    height:'100dvh',
+  },
+  spinner: {
+    width:40, height:40,
+    border:'3px solid rgba(255,255,255,0.1)',
+    borderTopColor:'#0A84FF',
+    borderRadius:'50%',
+    animation:'spin 0.8s linear infinite',
+  },
+};
