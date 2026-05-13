@@ -314,8 +314,14 @@ export default function QRLoginPage() {
       `}</style>
 
       {/* Header */}
-      <div style={{ position:'fixed', top:0, left:0, right:0, padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10 }}>
-        <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>🏢 Corp Tech</div>
+      <div style={{ position:'fixed', top:0, left:0, right:0, padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', zIndex:10, backdropFilter:'blur(12px)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <div style={{ width:32, height:32, borderRadius:9, background:'#fff', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" style={{ width:28, height:28, objectFit:'contain' }} />
+          </div>
+          <span style={{ fontSize:15, fontWeight:700, color:'#fff' }}>Corp Tech</span>
+        </div>
         <Link href="/login" style={{ fontSize:13, color:'rgba(255,255,255,0.4)', textDecoration:'none', fontWeight:600 }}>
           Contraseña →
         </Link>

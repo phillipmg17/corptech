@@ -51,6 +51,24 @@ export default function RootLayout({ children }) {
       <body>
         {children}
         <ChatBubble />
+        {/* Footer global — baja opacidad en todas las páginas */}
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          padding: '5px 0 env(safe-area-inset-bottom,6px)',
+          fontSize: 10,
+          color: 'rgba(150,150,160,0.22)',
+          fontFamily: "'Urbanist','Inter',sans-serif",
+          pointerEvents: 'none',
+          zIndex: 9999,
+          letterSpacing: '0.04em',
+          userSelect: 'none',
+        }}>
+          Desarrollado por pmg-studio.com
+        </div>
       </body>
     </html>
   );

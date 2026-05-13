@@ -159,12 +159,13 @@ export default function CarnetPage() {
             </div>
           </div>
           <div style={{
-            width:40, height:40, borderRadius:12,
-            background:'rgba(255,255,255,0.2)',
+            width:44, height:44, borderRadius:13,
+            background:'rgba(255,255,255,0.95)',
             display:'flex', alignItems:'center', justifyContent:'center',
-            fontSize:22,
+            overflow:'hidden',
           }}>
-            🏢
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" style={{ width:36, height:36, objectFit:'contain' }} />
           </div>
         </div>
 

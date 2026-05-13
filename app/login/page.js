@@ -207,16 +207,18 @@ export default function AuthPage() {
           {/* Logo */}
           <div style={{ textAlign:'center', marginBottom:24 }}>
             <div style={{
-              width:64, height:64, borderRadius:20,
-              background:'linear-gradient(135deg,#0A84FF,#5E5CE6)',
+              width:80, height:80, borderRadius:22,
+              background:'#fff',
               display:'inline-flex', alignItems:'center', justifyContent:'center',
-              fontSize:30, marginBottom:12,
-              boxShadow:'0 8px 24px rgba(10,132,255,0.35)',
+              marginBottom:12,
+              boxShadow:'0 8px 28px rgba(10,132,255,0.18)',
+              overflow:'hidden',
             }}>
-              🏢
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Corp Tech" style={{ width:72, height:72, objectFit:'contain' }} />
             </div>
             <div style={{ fontSize:22, fontWeight:800, color:'var(--text)', lineHeight:1.2 }}>
-              Corp Tech ERP
+              Corp Tech
             </div>
             <div style={{ fontSize:13, color:'var(--muted)', marginTop:4 }}>
               {mode === 'login'    && 'Ingresa a tu panel'}
