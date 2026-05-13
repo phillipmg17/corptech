@@ -87,11 +87,21 @@ const MODEL_COLORS = {
 };
 
 const CONDITIONS = [
-  { value:'nuevo',     label:'✨ Nuevo — sellado de fábrica',  color:'#30D158' },
-  { value:'excelente', label:'⭐ Excelente (A+) — sin marcas', color:'#0A84FF' },
-  { value:'bueno',     label:'👍 Bueno (A) — uso leve',        color:'#4DA8FF' },
-  { value:'regular',   label:'🔧 Regular (B) — marcas visibles',color:'#FF9F0A' },
-  { value:'reparado',  label:'🛠 Reparado — pieza cambiada',   color:'#BF5AF2' },
+  { value:'nuevo',     label:'✨ Nuevo — sellado de fábrica',    color:'#30D158' },
+  { value:'open_box',  label:'📦 Open Box — sin usar, sin caja', color:'#34C759' },
+  { value:'excelente', label:'⭐ Excelente (A+) — sin marcas',   color:'#0A84FF' },
+  { value:'bueno',     label:'👍 Bueno (A) — uso leve',          color:'#4DA8FF' },
+  { value:'regular',   label:'🔧 Regular (B) — marcas visibles', color:'#FF9F0A' },
+  { value:'reparado',  label:'🛠 Reparado — pieza cambiada',     color:'#BF5AF2' },
+];
+
+const REGIONS = [
+  { value:'LL/A', label:'🇺🇸 LL/A — USA',         desc:'Desbloqueado AT&T / unlocked' },
+  { value:'LZ/A', label:'🌎 LZ/A — LatAm',         desc:'Desbloqueado para Latam' },
+  { value:'LL/A-V', label:'🌐 LLA/V — Verizon',    desc:'Verizon USA' },
+  { value:'ZP/A', label:'🇭🇰 ZP/A — HK/APAC',      desc:'Hong Kong / Asia-Pacífico' },
+  { value:'AB/A', label:'🇦🇺 AB/A — Australia',     desc:'Australia' },
+  { value:'otro', label:'🏷 Otro / Sin región',     desc:'No especificada' },
 ];
 
 const ALL_CHIPS = [...new Set(MODELS.map(m => m.chip))];
@@ -100,6 +110,7 @@ const ALL_CHIPS = [...new Set(MODELS.map(m => m.chip))];
 const EMPTY = {
   imei:'', serial:'', sku:'',
   model:'', capacity:'', color:'', chip:'', condition:'',
+  region:'', battery_health:'',
   costo_origen:'', gastos_import:'', gastos_lima:'',
   negocio_id: CORP_ID,
 };
@@ -135,6 +146,11 @@ export default function NuevoProducto() {
     (parseFloat(form.gastos_import) || 0) +
     (parseFloat(form.gastos_lima)   || 0)
   );
+
+  /* Si hay producto del catálogo y no hay costos manuales, auto-sugerir base + 15% */
+  const catalogBasePEN   = selectedProduct?.sale_price || 0;   // ya es landed en PEN
+  const catalogBaseUSD   = catalogBasePEN / 3.75;              // convertir a USD
+  const catalogSuggestedBase = (catalogBaseUSD / 1.15).toFixed(2); // precio antes del 15%
 
   /* Auto-fill chip al cambiar modelo */
   useEffect(() => {
@@ -246,13 +262,17 @@ export default function NuevoProducto() {
     /* Construcción del payload → tabla stock_items */
     const notes = [
       modelName, form.chip,
-      form.capacity && `Capacidad: ${form.capacity}`,
-      form.color    && `Color: ${form.color}`,
+      form.capacity       && `Capacidad: ${form.capacity}`,
+      form.color          && `Color: ${form.color}`,
+      form.region         && `Región: ${form.region}`,
+      ['excelente','bueno','regular','reparado'].includes(form.condition) && form.battery_health
+        ? `Salud Batería: ${form.battery_health}%` : '',
       CONDITIONS.find(c => c.value === form.condition)?.label,
+      `Base: S/${(landed / 1.15).toFixed(2)} + 15% margen operativo`,
       `Costo Origen: S/${parseFloat(form.costo_origen  || 0).toFixed(2)}`,
       `Gastos Import: S/${parseFloat(form.gastos_import || 0).toFixed(2)}`,
       `Gastos Lima: S/${parseFloat(form.gastos_lima    || 0).toFixed(2)}`,
-      `Costo Landed: S/${landed.toFixed(2)}`,
+      `Costo Landed Total: S/${landed.toFixed(2)}`,
       photoUrls.length ? `Fotos dispositivo: ${photoUrls.join(' | ')}` : '',
       boxUrls.length   ? `Fotos caja: ${boxUrls.join(' | ')}`          : '',
     ].filter(Boolean).join('\n');
@@ -514,6 +534,29 @@ export default function NuevoProducto() {
                 onChange={e => setForm(f => ({ ...f, sku: e.target.value.toUpperCase() }))}
               />
             </div>
+
+            {/* Región */}
+            <div className="form-group">
+              <label className="form-label">🌍 Región del equipo</label>
+              <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
+                {REGIONS.map(r => (
+                  <button
+                    key={r.value} type="button"
+                    onClick={() => setForm(f => ({ ...f, region: f.region === r.value ? '' : r.value }))}
+                    style={{
+                      display:'flex', alignItems:'center', justifyContent:'space-between',
+                      padding:'10px 14px', borderRadius:12,
+                      border:`1.5px solid ${form.region === r.value ? '#0A84FF' : 'var(--border)'}`,
+                      background: form.region === r.value ? 'rgba(10,132,255,0.10)' : 'transparent',
+                      color: form.region === r.value ? 'var(--blue)' : 'var(--text)',
+                      cursor:'pointer', textAlign:'left', transition:'all .15s',
+                    }}>
+                    <span style={{ fontWeight:700, fontSize:13 }}>{r.label}</span>
+                    <span style={{ fontSize:11, color:'var(--text3)' }}>{r.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </CardSection>
 
           {/* ═══════════════════════════════════
@@ -655,12 +698,71 @@ export default function NuevoProducto() {
                 ))}
               </div>
             </div>
+
+            {/* Battery Health — solo para equipos usados */}
+            {['excelente','bueno','regular','reparado'].includes(form.condition) && (
+              <div className="form-group">
+                <label className="form-label">🔋 Salud de Batería (%)</label>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <input
+                    type="range" min="50" max="100" step="1"
+                    value={form.battery_health || 100}
+                    onChange={e => setForm(f => ({ ...f, battery_health: e.target.value }))}
+                    style={{ flex:1, accentColor: parseInt(form.battery_health||100) >= 85 ? '#30D158' : parseInt(form.battery_health||100) >= 70 ? '#FF9F0A' : '#FF453A' }}
+                  />
+                  <div style={{
+                    minWidth:56, textAlign:'center',
+                    fontSize:22, fontWeight:900, fontVariantNumeric:'tabular-nums',
+                    color: parseInt(form.battery_health||100) >= 85 ? '#30D158'
+                         : parseInt(form.battery_health||100) >= 70 ? '#FF9F0A' : '#FF453A',
+                  }}>
+                    {form.battery_health || 100}%
+                  </div>
+                </div>
+                <div style={{ fontSize:11, color:'var(--text3)', marginTop:4, display:'flex', justifyContent:'space-between' }}>
+                  <span>🔴 Baja (&lt;70%)</span><span>🟡 Regular (70–84%)</span><span>🟢 Buena (85%+)</span>
+                </div>
+              </div>
+            )}
           </CardSection>
 
           {/* ═══════════════════════════════════
               SECCIÓN 3 — CONTABILIDAD LANDED
           ═══════════════════════════════════ */}
           <CardSection title="💰 Contabilidad Landed" accent="#30D158">
+
+            {/* Sugerencia automática desde catálogo */}
+            {selectedProduct && catalogBasePEN > 0 && (
+              <div style={{
+                padding:'10px 14px', borderRadius:12, marginBottom:12,
+                background:'rgba(48,209,88,0.08)', border:'1px solid rgba(48,209,88,0.30)',
+                display:'flex', alignItems:'center', justifyContent:'space-between',
+              }}>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:800, color:'#30D158' }}>
+                    📋 Precio base del catálogo
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>
+                    Base ≈ ${catalogSuggestedBase} USD + 15% = S/{catalogBasePEN.toLocaleString()} PEN
+                  </div>
+                </div>
+                <button type="button"
+                  onClick={() => {
+                    const base = (catalogBasePEN * 0.70).toFixed(2);
+                    const import_ = (catalogBasePEN * 0.20).toFixed(2);
+                    const lima   = (catalogBasePEN * 0.10).toFixed(2);
+                    setForm(f => ({ ...f, costo_origen: base, gastos_import: import_, gastos_lima: lima }));
+                  }}
+                  style={{
+                    padding:'6px 12px', borderRadius:8, fontWeight:700, fontSize:11,
+                    border:'1.5px solid #30D158', background:'rgba(48,209,88,0.15)',
+                    color:'#30D158', cursor:'pointer',
+                  }}>
+                  Aplicar
+                </button>
+              </div>
+            )}
+
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
 
               <div className="form-group" style={{ margin:0 }}>
@@ -789,10 +891,14 @@ export default function NuevoProducto() {
                 📋 Resumen del registro
               </div>
               <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                {form.model     && <Tag label={form.model}    color="#0A84FF" />}
-                {form.capacity  && <Tag label={form.capacity} color="#FF9F0A" />}
-                {form.color     && <Tag label={form.color}    color="#BF5AF2" />}
-                {form.chip      && <Tag label={form.chip}     color="#FF9F0A" />}
+                {(selectedProduct?.name || form.model) && <Tag label={selectedProduct?.name || form.model} color="#0A84FF" />}
+                {form.capacity        && <Tag label={form.capacity}   color="#FF9F0A" />}
+                {form.color           && <Tag label={form.color}      color="#BF5AF2" />}
+                {form.chip            && <Tag label={form.chip}       color="#FF9F0A" />}
+                {form.region          && <Tag label={form.region}     color="#0A84FF" />}
+                {form.battery_health && ['excelente','bueno','regular','reparado'].includes(form.condition)
+                  && <Tag label={`🔋 ${form.battery_health}%`} color={parseInt(form.battery_health)>=85?'#30D158':parseInt(form.battery_health)>=70?'#FF9F0A':'#FF453A'} />
+                }
                 {form.condition && <Tag label={CONDITIONS.find(c=>c.value===form.condition)?.label.split(' — ')[0] || form.condition} color="#30D158" />}
                 {form.imei      && <Tag label={form.imei}     color="#4DA8FF" mono />}
                 {landed > 0     && <Tag label={`S/ ${landed.toFixed(2)} landed`} color="#30D158" />}
