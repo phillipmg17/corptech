@@ -47,6 +47,14 @@ export default function PosPage() {
     if (!session) { router.replace('/login'); return; }
     const uid = session.user.id;
     const { data: prof } = await supabase.from('users').select('org_id, full_name').eq('id', uid).single();
+    const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
+    const r = roleRow?.role;
+
+    // Roles administrativos no deben estar en el POS → redirigir a su panel
+    if (r === 'corp' || r === 'admin_corp') { router.replace('/corp'); return; }
+    if (r === 'superadmin')                 { router.replace('/superadmin'); return; }
+    if (r === 'store_admin' || r === 'gerente' || r === 'store_manager') { router.replace('/store'); return; }
+
     const oid = prof?.org_id;
     setMe({ id: uid, name: prof?.full_name });
     setOrgId(oid);
