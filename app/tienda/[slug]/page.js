@@ -228,6 +228,17 @@ export default function TiendaPage({ params }) {
           <span style={{ fontWeight:800, fontSize:16 }}>{storeName}</span>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          {/* Botón acceso panel admin — discreto */}
+          <a href="/login" style={{
+            fontSize:11, color:'rgba(255,255,255,0.35)', textDecoration:'none', fontWeight:600,
+            padding:'5px 8px', borderRadius:8, border:'1px solid rgba(255,255,255,0.10)',
+            transition:'all .2s',
+          }}
+            onMouseEnter={e=>{ e.target.style.color='rgba(255,255,255,0.7)'; e.target.style.borderColor='rgba(255,255,255,0.25)'; }}
+            onMouseLeave={e=>{ e.target.style.color='rgba(255,255,255,0.35)'; e.target.style.borderColor='rgba(255,255,255,0.10)'; }}
+          >
+            🔐 Admin
+          </a>
           {storeWA && (
             <a href={`https://wa.me/${storeWA.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer"
               style={{ background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.3)', color:'#25D366', borderRadius:10, padding:'6px 12px', fontSize:13, fontWeight:700, textDecoration:'none' }}>
