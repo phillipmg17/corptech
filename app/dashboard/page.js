@@ -32,7 +32,8 @@ export default function DashboardPage() {
   const [orgId,     setOrgId]     = useState('');
   const [loading,   setLoading]   = useState(true);
   const [tab,       setTab]       = useState('inicio');
-  const [kpis,      setKpis]      = useState({ ventas: 0, stock: 0, clientes: 0, ingresos: 0 });
+  const [kpis,          setKpis]          = useState({ ventas: 0, stock: 0, clientes: 0, ingresos: 0 });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [stocks,    setStocks]    = useState([]);
   const [customers, setCustomers] = useState([]);
   const [sales,     setSales]     = useState([]);
@@ -179,29 +180,64 @@ export default function DashboardPage() {
     </div>
   );
 
+  const NAV_ITEMS = [
+    { id: 'inicio',   ico: '🏠', lbl: 'Inicio'   },
+    { id: 'stock',    ico: '📦', lbl: 'Stock'    },
+    { id: 'clientes', ico: '👥', lbl: 'Clientes' },
+    { id: 'ventas',   ico: '📊', lbl: 'Ventas'   },
+  ];
+
   return (
     <div className="page-wrap">
-      {/* TOP BAR */}
-      <div className="top-bar">
+
+      {/* ── MOBILE NAV HEADER (acordeón) — solo mobile/tablet ── */}
+      <div className="mobile-nav-header">
+        <div className="mobile-nav-logo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Corp Tech" />
+          <div className="mobile-nav-title">
+            <span>{orgName}</span>
+            <span>{profile?.full_name}</span>
+          </div>
+        </div>
+        <button className="mobile-nav-toggle" onClick={() => setMobileMenuOpen(o => !o)}>
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
+      </div>
+
+      {/* ── MOBILE DRAWER ── */}
+      <div className={`mobile-nav-drawer${mobileMenuOpen ? ' open' : ''}`}>
+        {NAV_ITEMS.map(t => (
+          <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
+            onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
+            <span className="ico">{t.ico}</span>{t.lbl}
+          </button>
+        ))}
+        <div style={{ display:'flex', gap:8, marginTop:4 }}>
+          <button onClick={toggleTheme} style={{ flex:1, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'10px 0', color:'var(--text2)', cursor:'pointer', fontSize:18 }}>
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button onClick={doLogout} style={{ flex:2, background:'var(--red-dim)', border:'1px solid var(--red)', borderRadius:12, padding:'10px 0', color:'var(--red)', cursor:'pointer', fontWeight:700, fontSize:13, fontFamily:'inherit' }}>
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+
+      {/* TOP BAR — oculto en desktop, solo mobile fallback */}
+      <div className="top-bar top-bar-desktop-hidden">
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          {/* Logo */}
           <div style={{ width:40, height:40, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="Corp Tech" style={{ width:32, height:32, objectFit:'contain' }} />
           </div>
-          {/* Nombre empresa arriba, usuario abajo */}
           <div style={{ display:'flex', flexDirection:'column', lineHeight:1.2 }}>
             <span style={{ fontSize:15, fontWeight:800, color:'var(--text)', letterSpacing:'-0.3px' }}>{orgName}</span>
             <span style={{ fontSize:11, color:'var(--text3)', fontWeight:500 }}>{profile?.full_name}</span>
           </div>
         </div>
         <div className="top-bar-actions">
-          <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-          <span className="badge" style={{ background: BADGE_COLOR[role], color: '#fff' }}>
-            {role?.toUpperCase()}
-          </span>
+          <button className="theme-toggle" onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+          <span className="badge" style={{ background: BADGE_COLOR[role], color: '#fff' }}>{role?.toUpperCase()}</span>
           <button className="top-btn-logout" onClick={doLogout}>Salir</button>
         </div>
       </div>
@@ -210,7 +246,7 @@ export default function DashboardPage() {
       {toast && <div className="toast-wrap"><div className={`toast-msg ${toast.type}`}>{toast.msg}</div></div>}
 
       {/* CONTENT */}
-      <div className="content">
+      <div className="content content-no-topbar">
 
         {/* ── INICIO ── */}
         {tab === 'inicio' && (
@@ -339,14 +375,23 @@ export default function DashboardPage() {
 
       </div>
 
-      {/* TAB BAR */}
-      <div className="tab-bar">
-        {[
-          { id: 'inicio',   ico: '🏠', lbl: 'Inicio'   },
-          { id: 'stock',    ico: '📦', lbl: 'Stock'    },
-          { id: 'clientes', ico: '👥', lbl: 'Clientes' },
-          { id: 'ventas',   ico: '📊', lbl: 'Ventas'   },
-        ].map(t => (
+      {/* TAB BAR — sidebar en desktop con brand arriba */}
+      <div className="tab-bar tab-bar-branded">
+        {/* BRAND al tope del sidebar */}
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-logo">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" />
+          </div>
+          <div className="sidebar-brand-company">{orgName}</div>
+          <div className="sidebar-brand-user">{profile?.full_name}</div>
+          <span className="badge" style={{ background: BADGE_COLOR[role] || '#0A84FF', color:'#fff', fontSize:10, marginBottom:6 }}>{role?.toUpperCase()}</span>
+          <div className="sidebar-brand-actions">
+            <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+            <button onClick={doLogout}>Salir</button>
+          </div>
+        </div>
+        {NAV_ITEMS.map(t => (
           <button key={t.id} className={`tab-btn${tab===t.id ? ' active' : ''}`} onClick={() => switchTab(t.id)}>
             <span className="ico">{t.ico}</span>
             {t.lbl}
