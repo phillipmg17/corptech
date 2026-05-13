@@ -26,18 +26,19 @@ export default function BiometricsPage() {
   const qrPreviewRef  = useRef(null);   // div donde va el QR preview
   const qrLibLoaded   = useRef(false);
 
-  const [loading,     setLoading]     = useState(true);
-  const [profile,     setProfile]     = useState(null);
-  const [userId,      setUserId]      = useState('');
-  const [orgName,     setOrgName]     = useState('');
-  const [role,        setRole]        = useState('');
-  const [biometrics,  setBiometrics]  = useState([]);
-  const [toast,       setToast]       = useState(null);
-  const [registering, setRegistering] = useState(false);
-  const [deviceName,  setDeviceName]  = useState('');
-  const [showForm,    setShowForm]    = useState(false);
-  const [savingImg,   setSavingImg]   = useState(false);
-  const [showWallet,  setShowWallet]  = useState(false);
+  const [loading,        setLoading]        = useState(true);
+  const [profile,        setProfile]        = useState(null);
+  const [userId,         setUserId]         = useState('');
+  const [orgName,        setOrgName]        = useState('');
+  const [role,           setRole]           = useState('');
+  const [biometrics,     setBiometrics]     = useState([]);
+  const [toast,          setToast]          = useState(null);
+  const [registering,    setRegistering]    = useState(false);
+  const [deviceName,     setDeviceName]     = useState('');
+  const [showForm,       setShowForm]       = useState(false);
+  const [savingImg,      setSavingImg]      = useState(false);
+  const [showWallet,     setShowWallet]     = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   /* ── cargar qrcodejs una sola vez ── */
   useEffect(() => {
@@ -362,22 +363,84 @@ export default function BiometricsPage() {
 
   const webAuthnSupported = typeof window !== 'undefined' && !!window.PublicKeyCredential;
 
+  /* Nav del panel biometría — volver al panel correcto según rol */
+  const BACK_HREF = { superadmin:'/superadmin', corp:'/corp', admin_corp:'/corp', gerente:'/store', store_manager:'/store', store_admin:'/store' };
+  const backHref  = BACK_HREF[role] || '/dashboard';
+  const BADGE_COLOR = { superadmin:'#BF5AF2', corp:'#0A84FF', admin_corp:'#0A84FF', gerente:'#30D158', store_manager:'#30D158', store_admin:'#30D158', vendedor:'#FF9F0A' };
+
+  const BIO_NAV = [
+    { href: backHref,    ico: '←',  lbl: 'Volver al panel' },
+    { id:   'carnet',    ico: '🔐', lbl: 'Mi Carnet QR'    },
+    { href: '/login/qr', ico: '📷', lbl: 'Login con QR'    },
+  ];
+
   return (
     <div className="page-wrap">
-      <div className="top-bar">
-        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <Link href="/dashboard" style={{ background:'none', border:'none', color:'var(--text-muted)', fontSize:20, cursor:'pointer', textDecoration:'none' }}>←</Link>
-          <div>
-            <div className="top-bar-title">🔐 Biometría y Carnet</div>
-            <div className="top-bar-sub">{orgName}</div>
+
+      {/* ── MOBILE NAV HEADER ── */}
+      <div className="mobile-nav-header">
+        <div className="mobile-nav-logo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Corp Tech" />
+          <div className="mobile-nav-title">
+            <span>{orgName}</span>
+            <span>Mi Carnet QR</span>
           </div>
         </div>
-        <button className="theme-toggle" onClick={toggleTheme}>{theme==='dark'?'☀️':'🌙'}</button>
+        <button className="mobile-nav-toggle" onClick={() => setMobileMenuOpen(o => !o)}>
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
+      </div>
+
+      {/* ── MOBILE DRAWER ── */}
+      <div className={`mobile-nav-drawer${mobileMenuOpen ? ' open' : ''}`}>
+        {BIO_NAV.map(t => (
+          t.href
+            ? <Link key={t.href} href={t.href} className="tab-btn" onClick={() => setMobileMenuOpen(false)}><span className="ico">{t.ico}</span>{t.lbl}</Link>
+            : <button key={t.id} className="tab-btn active" onClick={() => setMobileMenuOpen(false)}><span className="ico">{t.ico}</span>{t.lbl}</button>
+        ))}
+        <div style={{ display:'flex', gap:8, marginTop:4 }}>
+          <button onClick={toggleTheme} style={{ flex:1, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'10px 0', color:'var(--text2)', cursor:'pointer', fontSize:18 }}>
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
       </div>
 
       {toast && <div className="toast-wrap"><div className={`toast-msg ${toast.type}`}>{toast.msg}</div></div>}
 
-      <div className="content" style={{ padding:16 }}>
+      {/* ── SIDEBAR DESKTOP ── */}
+      <div className="tab-bar tab-bar-branded">
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-top">
+            <div className="sidebar-brand-logo">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Corp Tech" />
+            </div>
+            <div className="sidebar-brand-info">
+              <div className="sidebar-brand-name-row">
+                <div className="sidebar-brand-company">{orgName}</div>
+                <span className="sidebar-brand-badge" style={{ background: BADGE_COLOR[role] || '#0A84FF' }}>{role?.toUpperCase()?.slice(0,4)}</span>
+              </div>
+              <div className="sidebar-brand-user">{profile?.full_name}</div>
+            </div>
+          </div>
+          <div className="sidebar-brand-actions">
+            <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+            <button onClick={() => router.push(backHref)}>← Panel</button>
+          </div>
+        </div>
+        {BIO_NAV.map(t => (
+          t.href
+            ? <Link key={t.href} href={t.href} className="tab-btn"><span className="ico">{t.ico}</span>{t.lbl}</Link>
+            : <button key={t.id} className="tab-btn active"><span className="ico">{t.ico}</span>{t.lbl}</button>
+        ))}
+        <div className="sidebar-footer">
+          Desarrollado por<br />
+          <a href="https://pmg-studio.com" target="_blank" rel="noopener noreferrer">pmg-studio.com</a>
+        </div>
+      </div>
+
+      <div className="content-no-topbar" style={{ padding:24, maxWidth:680, margin:'0 auto' }}>
 
         {/* ─── CARNET VISUAL ─── */}
         <div style={{
@@ -573,6 +636,7 @@ export default function BiometricsPage() {
         </div>
 
       </div>
+
     </div>
   );
 }
