@@ -363,15 +363,51 @@ export default function BiometricsPage() {
 
   const webAuthnSupported = typeof window !== 'undefined' && !!window.PublicKeyCredential;
 
-  /* Nav del panel biometría — volver al panel correcto según rol */
-  const BACK_HREF = { superadmin:'/superadmin', corp:'/corp', admin_corp:'/corp', gerente:'/store', store_manager:'/store', store_admin:'/store' };
-  const backHref  = BACK_HREF[role] || '/dashboard';
+  /* Nav completo según rol — mismo menú que el panel principal */
   const BADGE_COLOR = { superadmin:'#BF5AF2', corp:'#0A84FF', admin_corp:'#0A84FF', gerente:'#30D158', store_manager:'#30D158', store_admin:'#30D158', vendedor:'#FF9F0A' };
 
+  const NAV_BY_ROLE = {
+    superadmin: [
+      { href:'/superadmin', ico:'⚡', lbl:'Dashboard'    },
+      { href:'/superadmin', ico:'👥', lbl:'Usuarios'     },
+      { href:'/superadmin', ico:'💎', lbl:'Créditos'     },
+      { href:'/superadmin', ico:'🔑', lbl:'APIs'         },
+      { href:'/superadmin', ico:'🧩', lbl:'Funciones'    },
+    ],
+    corp: [
+      { href:'/corp', ico:'🏪', lbl:'Tiendas'      },
+      { href:'/corp', ico:'📦', lbl:'Stock'        },
+      { href:'/corp', ico:'💰', lbl:'Finanzas'     },
+      { href:'/corp', ico:'💳', lbl:'Liquidaciones'},
+      { href:'/corp', ico:'🏭', lbl:'Almacenes'    },
+      { href:'/corp', ico:'🔄', lbl:'Traslados'    },
+      { href:'/corp', ico:'📥', lbl:'Importación'  },
+      { href:'/corp', ico:'🔍', lbl:'IMEI'         },
+      { href:'/corp', ico:'📊', lbl:'Ventas'       },
+      { href:'/corp', ico:'🗂️', lbl:'Catálogo'     },
+      { href:'/corp', ico:'👥', lbl:'Equipo'       },
+    ],
+    store: [
+      { href:'/store', ico:'📦', lbl:'Stock'    },
+      { href:'/store', ico:'👥', lbl:'Clientes' },
+      { href:'/store', ico:'📊', lbl:'Ventas'   },
+      { href:'/store', ico:'💳', lbl:'Deudas'   },
+      { href:'/store', ico:'⚙️', lbl:'Config'   },
+    ],
+    dashboard: [
+      { href:'/dashboard', ico:'🏠', lbl:'Inicio'   },
+      { href:'/dashboard', ico:'📦', lbl:'Stock'    },
+      { href:'/dashboard', ico:'👥', lbl:'Clientes' },
+      { href:'/dashboard', ico:'📊', lbl:'Ventas'   },
+    ],
+  };
+  const roleGroup = ['corp','admin_corp'].includes(role) ? 'corp'
+                  : ['gerente','store_manager','store_admin'].includes(role) ? 'store'
+                  : role === 'superadmin' ? 'superadmin'
+                  : 'dashboard';
   const BIO_NAV = [
-    { href: backHref,    ico: '←',  lbl: 'Volver al panel' },
-    { id:   'carnet',    ico: '🔐', lbl: 'Mi Carnet QR'    },
-    { href: '/login/qr', ico: '📷', lbl: 'Login con QR'    },
+    ...NAV_BY_ROLE[roleGroup],
+    { id:'carnet', ico:'🔐', lbl:'Mi Carnet QR' },  // activo
   ];
 
   return (
@@ -426,7 +462,7 @@ export default function BiometricsPage() {
           </div>
           <div className="sidebar-brand-actions">
             <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
-            <button onClick={() => router.push(backHref)}>← Panel</button>
+            <button onClick={() => router.push(BIO_NAV[0]?.href || '/dashboard')}>← Salir</button>
           </div>
         </div>
         {BIO_NAV.map(t => (
