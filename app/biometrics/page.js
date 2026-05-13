@@ -326,7 +326,7 @@ export default function BiometricsPage() {
         device_name:   deviceName.trim(),
         public_key:    publicKeyB64,
         refresh_token: session?.refresh_token || null,
-      }, { onConflict: 'user_id' });
+      }, { onConflict: 'credential_id' }); // multi-dispositivo: conflicto por credential, no por user
 
       if (error) throw error;
 

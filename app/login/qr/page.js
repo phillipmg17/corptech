@@ -88,35 +88,52 @@ export default function QRLoginPage() {
 
   async function lookupUser(uid) {
     setStep('loading');
-    const { data: prof } = await supabase
+
+    // Intentar con usuario autenticado primero, si no usar anon
+    const { data: prof, error: profErr } = await supabase
       .from('users')
       .select('id, full_name, org_id, email, organizations(name)')
       .eq('id', uid)
       .maybeSingle();
 
-    if (!prof) { setErrorMsg('Usuario no encontrado.'); setStep('error'); return; }
+    if (!prof) {
+      // Fallback: buscar directamente por auth user id
+      const { data: authUser } = await supabase.auth.getUser();
+      if (authUser?.user?.id === uid) {
+        // el usuario está logueado, redirigir directo
+        redirectByRole('vendedor');
+        return;
+      }
+      setErrorMsg('Usuario no encontrado. Asegúrate de que la cuenta existe en el sistema.');
+      setStep('error');
+      return;
+    }
 
     const { data: roleRow } = await supabase
       .from('user_roles').select('role').eq('user_id', uid).maybeSingle();
 
-    const { data: bk } = await supabase
-      .from('biometric_keys').select('credential_id, device_name').eq('user_id', uid).maybeSingle();
+    // Obtener TODOS los dispositivos registrados del usuario
+    const { data: bkList } = await supabase
+      .from('biometric_keys')
+      .select('id, credential_id, device_name, device_id')
+      .eq('user_id', uid)
+      .order('last_used', { ascending: false, nullsFirst: false });
 
     stopCamera();
 
     const user = {
-      id:            prof.id,
-      full_name:     prof.full_name,
-      email:         prof.email || '',
-      org_name:      prof.organizations?.name || 'Corp Tech',
-      role:          roleRow?.role || 'vendedor',
-      credential_id: bk?.credential_id || null,
-      device_name:   bk?.device_name   || null,
+      id:           prof.id,
+      full_name:    prof.full_name,
+      email:        prof.email || '',
+      org_name:     prof.organizations?.name || 'Corp Tech',
+      role:         roleRow?.role || 'vendedor',
+      biometrics:   bkList || [],   // todos los dispositivos
+      credential_id: bkList?.[0]?.credential_id || null,
+      device_name:   bkList?.[0]?.device_name   || null,
     };
     setFoundUser(user);
 
-    /* si no tiene biometría registrada → paso de registro */
-    if (!bk?.credential_id) {
+    if (!bkList || bkList.length === 0) {
       setStep('register');
     } else {
       setStep('confirm');
@@ -204,7 +221,7 @@ export default function QRLoginPage() {
               device_name:   dn,
               public_key:    publicKeyB64,
               refresh_token: authData.session.refresh_token,
-            }, { onConflict: 'user_id' });
+            }, { onConflict: 'credential_id' }); // multi-dispositivo
           }
         } catch (webAuthnErr) {
           /* si el usuario cancela WebAuthn, igual lo logueamos */
