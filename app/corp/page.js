@@ -3201,12 +3201,12 @@ export default function CorpPage() {
               <img src="/logo.png" alt="Corp Tech" />
             </div>
             <div className="sidebar-brand-info">
-              <div className="sidebar-brand-company">Corp Tech</div>
+              <div className="sidebar-brand-name-row">
+                <div className="sidebar-brand-company">Corp Tech</div>
+                <span className="sidebar-brand-badge" style={{ background:'var(--purple)' }}>CORP</span>
+              </div>
               <div className="sidebar-brand-user">{me?.name}</div>
             </div>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span className="badge" style={{ background:'var(--purple)', color:'#fff', fontSize:10 }}>CORP</span>
           </div>
           <div className="sidebar-brand-actions">
             <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>

@@ -388,12 +388,12 @@ export default function DashboardPage() {
               <img src="/logo.png" alt="Corp Tech" />
             </div>
             <div className="sidebar-brand-info">
-              <div className="sidebar-brand-company">{orgName}</div>
+              <div className="sidebar-brand-name-row">
+                <div className="sidebar-brand-company">{orgName}</div>
+                <span className="sidebar-brand-badge" style={{ background: BADGE_COLOR[role] || '#0A84FF' }}>{role?.toUpperCase()}</span>
+              </div>
               <div className="sidebar-brand-user">{profile?.full_name}</div>
             </div>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span className="badge" style={{ background: BADGE_COLOR[role] || '#0A84FF', color:'#fff', fontSize:10 }}>{role?.toUpperCase()}</span>
           </div>
           <div className="sidebar-brand-actions">
             <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>

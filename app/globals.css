@@ -361,10 +361,10 @@ html, body {
   .sidebar-brand {
     display: flex;
     flex-direction: column;
-    padding: 16px 12px 14px;
+    padding: 14px 12px 12px;
     border-bottom: 1px solid var(--border);
     margin-bottom: 8px;
-    gap: 10px;
+    gap: 8px;
   }
   /* Fila superior: logo izquierda + info derecha */
   .sidebar-brand-top {
@@ -374,8 +374,8 @@ html, body {
     gap: 10px;
   }
   .sidebar-brand-logo {
-    width: 42px; height: 42px;
-    border-radius: 12px;
+    width: 40px; height: 40px;
+    border-radius: 11px;
     background: var(--card2);
     border: 1px solid var(--border);
     display: flex; align-items: center; justify-content: center;
@@ -383,33 +383,59 @@ html, body {
     flex-shrink: 0;
   }
   .sidebar-brand-logo img {
-    width: 34px; height: 34px; object-fit: contain;
+    width: 32px; height: 32px; object-fit: contain;
   }
   .sidebar-brand-info {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+  /* Fila: nombre empresa + badge inline */
+  .sidebar-brand-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     min-width: 0;
   }
   .sidebar-brand-company {
-    font-size: 14px; font-weight: 800;
+    font-size: 13px; font-weight: 800;
     color: var(--text); letter-spacing: -0.3px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .sidebar-brand-badge {
+    font-size: 9px; font-weight: 800;
+    padding: 2px 6px; border-radius: 5px;
+    color: #fff; flex-shrink: 0;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.85;
   }
   .sidebar-brand-user {
     font-size: 11px; color: var(--text3); font-weight: 500;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  /* Acciones: barra sutil, no flotante */
   .sidebar-brand-actions {
-    display: flex; gap: 6px; width: 100%;
+    display: flex;
+    gap: 0;
+    width: 100%;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
   }
   .sidebar-brand-actions button {
     flex: 1;
-    background: var(--card2); border: 1px solid var(--border);
-    border-radius: 9px; padding: 6px 4px;
+    background: none; border: none;
+    padding: 7px 4px;
     color: var(--text3); font-size: 12px; cursor: pointer;
     font-weight: 600; font-family: inherit;
     transition: background .15s, color .15s;
+  }
+  .sidebar-brand-actions button:first-child {
+    border-right: 1px solid var(--border);
   }
   .sidebar-brand-actions button:hover {
     background: var(--card3); color: var(--text);
@@ -418,6 +444,9 @@ html, body {
   /* Quitar padding-top del content cuando no hay top-bar */
   .content-no-topbar {
     padding-top: 16px !important;
+    flex: 1;
+    min-width: 0;
+    width: calc(100% - var(--sidebar-w));
   }
 
   /* En desktop, ocultar la barra mobile de acordeón */
@@ -428,6 +457,9 @@ html, body {
     margin-left: var(--sidebar-w);
     padding-bottom: 40px;
     padding-top: var(--topbar-h);
+    flex: 1;
+    min-width: 0;
+    width: calc(100% - var(--sidebar-w));
   }
 
   /* Centrar y limitar el contenido en desktop */
