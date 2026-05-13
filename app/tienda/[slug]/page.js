@@ -52,8 +52,9 @@ export default function TiendaPage({ params }) {
   const [catFilter,   setCatFilter]   = useState('all');
   const [priceFilter, setPriceFilter] = useState('all');
   const [heroSlide,   setHeroSlide]   = useState(0);
-  const [selColor,    setSelColor]    = useState('');
-  const [selCap,      setSelCap]      = useState('');
+  const [selColor,     setSelColor]     = useState('');
+  const [selCap,       setSelCap]       = useState('');
+  const [selCondition, setSelCondition] = useState('');
   const heroTimer = useRef(null);
 
   /* ── COLORES ── */
@@ -105,7 +106,7 @@ export default function TiendaPage({ params }) {
   async function loadProducts() {
     const { data } = await supabase
       .from('stock_items')
-      .select('id, product_id, sale_price, emoji, color_info, storage_info, products(id, name, description, emoji, brand, category, photo_url, image_url, default_colors, default_capacities)')
+      .select('id, product_id, sale_price, emoji, color_info, storage_info, products(id, name, description, emoji, brand, category, photo_url, image_url, default_colors, default_capacities, color_images)')
       .eq('status', 'available')
       .in('owner_org_id', [orgId, CORP_ID]);
     if (!data) return;
@@ -118,8 +119,9 @@ export default function TiendaPage({ params }) {
         description: pr.description || '', brand: pr.brand || '',
         category: pr.category || 'Otros',
         photo: pr.image_url || pr.photo_url || null,
-        colors:     pr.default_colors     || [],
-        capacities: pr.default_capacities || [],
+        colors:       pr.default_colors  || [],
+        capacities:   pr.default_capacities || [],
+        color_images: pr.color_images    || {},
         units: [], minPrice: Infinity, maxPrice: 0,
       };
       map[pid].units.push({ id: item.id, price: item.sale_price || 0, color: item.color_info || '', storage: item.storage_info || '' });
@@ -144,10 +146,11 @@ export default function TiendaPage({ params }) {
     setSelected(p);
     setSelColor(p.colors?.[0] || '');
     setSelCap(p.capacities?.[0] || '');
+    setSelCondition('Nuevo');
   }
 
   function addToCart(p) {
-    const label = [selColor, selCap].filter(Boolean).join(' · ');
+    const label = [selColor, selCap, selCondition].filter(Boolean).join(' · ');
     setCart(prev => {
       const key = p.id + label;
       const ex  = prev.find(i => i._key === key);
@@ -155,7 +158,7 @@ export default function TiendaPage({ params }) {
       return [...prev, { ...p, qty: 1, price: p.minPrice, _key: key, label }];
     });
     setSelected(null);
-    setSelColor(''); setSelCap('');
+    setSelColor(''); setSelCap(''); setSelCondition('');
   }
   function removeFromCart(id) { setCart(prev => prev.filter(i => i.id !== id)); }
   function changeQty(id, d) { setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(1, i.qty + d) } : i)); }
@@ -535,10 +538,24 @@ export default function TiendaPage({ params }) {
         <div onClick={()=>setSelected(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:200, display:'flex', alignItems:'flex-end' }}>
           <div onClick={e=>e.stopPropagation()} style={{ background:'#111', width:'100%', maxHeight:'88vh', overflowY:'auto', borderRadius:'24px 24px 0 0', border:`1px solid ${C.border}`, borderBottom:'none', animation:'fadeUp .25s ease' }}>
             <div style={{ width:40, height:4, background:C.border, borderRadius:99, margin:'16px auto 0' }} />
-            <div style={{ height:240, background:hexAlpha(P,0.1), display:'flex', alignItems:'center', justifyContent:'center', margin:'16px 16px 0', borderRadius:16, overflow:'hidden' }}>
-              {selected.photo && <img src={selected.photo} alt={selected.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e=>{e.target.style.display='none';e.target.nextSibling.style.display='flex'}} />}
-              <div style={{ display:selected.photo?'none':'flex', alignItems:'center', justifyContent:'center', width:'100%', height:'100%', fontSize:88 }}>{selected.emoji}</div>
-            </div>
+            {/* Imagen dinámica: cambia si hay foto para el color seleccionado */}
+            {(() => {
+              const colorImg = selColor && selected.color_images?.[selColor];
+              const displayImg = colorImg || selected.photo;
+              return (
+                <div style={{ height:240, background:hexAlpha(P,0.1), display:'flex', alignItems:'center', justifyContent:'center', margin:'16px 16px 0', borderRadius:16, overflow:'hidden', position:'relative', transition:'all .3s' }}>
+                  {displayImg
+                    ? <img key={displayImg} src={displayImg} alt={selected.name} style={{ width:'100%', height:'100%', objectFit:'contain', padding:8, transition:'opacity .3s' }} onError={e=>{e.target.style.display='none';}} />
+                    : <div style={{ fontSize:88 }}>{selected.emoji}</div>
+                  }
+                  {colorImg && selColor && (
+                    <span style={{ position:'absolute', bottom:10, right:10, background:'rgba(0,0,0,0.55)', color:'#fff', fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:20, backdropFilter:'blur(6px)' }}>
+                      {selColor}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
             <div style={{ padding:'20px 20px 32px' }}>
               {selected.brand && <span style={{ background:hexAlpha(P,0.15), color:P, fontSize:11, fontWeight:800, borderRadius:8, padding:'3px 10px', textTransform:'uppercase', letterSpacing:'0.06em' }}>{selected.brand}</span>}
               <div style={{ fontWeight:900, fontSize:24, margin:'10px 0 8px', lineHeight:1.2 }}>{selected.name}</div>
@@ -588,9 +605,36 @@ export default function TiendaPage({ params }) {
                 </div>
               )}
 
+              {/* ── Condición ── */}
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:'rgba(255,255,255,0.5)', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.06em' }}>Condición{selCondition ? `: ${selCondition}` : ''}</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                  {[
+                    { id:'Nuevo',           ico:'✨', color:'#30D158' },
+                    { id:'Como Nuevo',      ico:'💚', color:'#34C759' },
+                    { id:'Usado',           ico:'🔄', color:'#FF9F0A' },
+                    { id:'Reacondicionado', ico:'🔧', color:'#BF5AF2' },
+                  ].map(cd => (
+                    <button key={cd.id} type="button" onClick={()=>setSelCondition(cd.id)}
+                      style={{ padding:'8px 14px', borderRadius:20, fontSize:13, fontWeight:700, cursor:'pointer',
+                        border:`2px solid ${selCondition===cd.id ? cd.color : 'rgba(255,255,255,0.18)'}`,
+                        background: selCondition===cd.id ? `${cd.color}22` : 'rgba(255,255,255,0.05)',
+                        color: selCondition===cd.id ? cd.color : 'rgba(255,255,255,0.7)',
+                        transition:'all .15s',
+                      }}>
+                      {cd.ico} {cd.id}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <button onClick={()=>addToCart(selected)} style={{ width:'100%', padding:'16px', borderRadius:16, border:'none', background:P, color:'#fff', fontWeight:800, fontSize:16, cursor:'pointer', marginBottom:10 }}>🛒 Agregar al carrito</button>
               {storeWA && (
-                <a href={`https://wa.me/${storeWA.replace(/\D/g,'')}?text=${encodeURIComponent(`Hola, me interesa: ${selected.name} — S/${selected.minPrice.toFixed(2)}`)}`} target="_blank" rel="noopener noreferrer"
+                <a href={(() => {
+                  const specs = [selColor, selCap, selCondition].filter(Boolean).join(' · ');
+                  const msg = `Hola, me interesa: ${selected.name}${specs ? ` (${specs})` : ''} — S/${selected.minPrice.toFixed(2)}`;
+                  return `https://wa.me/${storeWA.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`;
+                })()} target="_blank" rel="noopener noreferrer"
                   style={{ display:'block', width:'100%', padding:'14px', borderRadius:16, border:'1px solid rgba(37,211,102,0.4)', background:'rgba(37,211,102,0.08)', color:'#25D366', fontWeight:700, fontSize:15, textAlign:'center', textDecoration:'none', marginBottom:10 }}>
                   💬 Preguntar por WhatsApp
                 </a>

@@ -1068,6 +1068,7 @@ export default function CorpPage() {
       default_colors:      parseList(form.colors_text),
       default_capacities:  parseList(form.capacities_text),
       image_url:           form.image_url           || null,
+      color_images:        form.color_images        || {},
     };
 
     if (form._edit_id) {
@@ -2207,7 +2208,7 @@ export default function CorpPage() {
                         <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px' }}>
                           <button
                             onClick={() => {
-                              setForm({ _edit_id: p.id, name: p.name, description: p.description || '', emoji: p.emoji || '📦', sale_price: p.sale_price || '', category: p.category || 'otro', chip: p.chip || '', colors_text: (p.default_colors || []).join(', '), capacities_text: (p.default_capacities || []).join(', '), image_url: p.image_url || '', _cat_filter: form._cat_filter });
+                              setForm({ _edit_id: p.id, name: p.name, description: p.description || '', emoji: p.emoji || '📦', sale_price: p.sale_price || '', category: p.category || 'otro', chip: p.chip || '', colors_text: (p.default_colors || []).join(', '), capacities_text: (p.default_capacities || []).join(', '), image_url: p.image_url || '', color_images: p.color_images || {}, _cat_filter: form._cat_filter });
                               setModal('add-product');
                             }}
                             style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: 'rgba(10,132,255,0.12)', color: '#4DA8FF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
@@ -4426,6 +4427,76 @@ export default function CorpPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* ── Fotos por color ── */}
+                    {(form.colors_text || '').split(',').map(s => s.trim()).filter(Boolean).length > 0 && (
+                      <div className="form-group">
+                        <label className="form-label">📸 Foto por color (opcional)</label>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+                          Al escoger un color en la tienda, la foto cambiará automáticamente ✨
+                        </div>
+                        {(form.colors_text || '').split(',').map(s => s.trim()).filter(Boolean).map((col) => {
+                          const imgUrl = (form.color_images || {})[col] || '';
+                          return (
+                            <div key={col} style={{ marginBottom: 12, padding: '10px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                <span style={{ fontSize: 12, fontWeight: 800, color: '#BF5AF2' }}>🎨 {col}</span>
+                                {imgUrl && (
+                                  <span style={{ fontSize: 10, color: '#30D158', fontWeight: 700 }}>✓ Foto cargada</span>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                {/* URL input */}
+                                <input
+                                  className="form-input"
+                                  placeholder="Pega URL de la foto..."
+                                  value={imgUrl}
+                                  onChange={e => setForm(f => ({ ...f, color_images: { ...(f.color_images || {}), [col]: e.target.value } }))}
+                                  style={{ fontSize: 11, flex: 1 }}
+                                />
+                                {/* File upload button */}
+                                <label style={{
+                                  padding: '8px 12px', borderRadius: 10, fontWeight: 700, fontSize: 11,
+                                  border: '1.5px solid #0A84FF', color: '#4DA8FF',
+                                  background: 'rgba(10,132,255,0.10)', cursor: 'pointer', whiteSpace: 'nowrap',
+                                }}>
+                                  📁 Subir
+                                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      const ext  = file.name.split('.').pop() || 'jpg';
+                                      const path = `colors/${Date.now()}_${col.replace(/\s+/g,'_')}.${ext}`;
+                                      const { error: upErr } = await supabase.storage.from('product-images').upload(path, file, { contentType: file.type, upsert: true });
+                                      if (upErr) { showToast('Error subiendo imagen: ' + upErr.message, 'err'); return; }
+                                      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+                                      const publicUrl = urlData?.publicUrl || '';
+                                      setForm(f => ({ ...f, color_images: { ...(f.color_images || {}), [col]: publicUrl } }));
+                                      showToast(`Foto de "${col}" subida ✓`);
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                              {/* Preview */}
+                              {imgUrl && (
+                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                                  <div style={{ borderRadius: 10, overflow: 'hidden', background: '#fff', padding: 6, border: '1px solid var(--border)' }}>
+                                    <img src={imgUrl} alt={col} style={{ height: 70, objectFit: 'contain' }}
+                                      onError={e => { e.target.style.opacity = 0.3; }}
+                                    />
+                                  </div>
+                                  <button type="button"
+                                    onClick={() => setForm(f => { const ci = { ...(f.color_images || {}) }; delete ci[col]; return { ...f, color_images: ci }; })}
+                                    style={{ fontSize: 11, color: '#FF453A', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 8px', fontWeight: 700 }}>
+                                    🗑 Quitar
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Descripción */}
                     <div className="form-group">
