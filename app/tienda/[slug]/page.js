@@ -52,6 +52,8 @@ export default function TiendaPage({ params }) {
   const [catFilter,   setCatFilter]   = useState('all');
   const [priceFilter, setPriceFilter] = useState('all');
   const [heroSlide,   setHeroSlide]   = useState(0);
+  const [selColor,    setSelColor]    = useState('');
+  const [selCap,      setSelCap]      = useState('');
   const heroTimer = useRef(null);
 
   /* ── COLORES ── */
@@ -103,7 +105,7 @@ export default function TiendaPage({ params }) {
   async function loadProducts() {
     const { data } = await supabase
       .from('stock_items')
-      .select('id, product_id, sale_price, emoji, products(id, name, description, emoji, brand, category, photo_url)')
+      .select('id, product_id, sale_price, emoji, color_info, storage_info, products(id, name, description, emoji, brand, category, photo_url, image_url, default_colors, default_capacities)')
       .eq('status', 'available')
       .in('owner_org_id', [orgId, CORP_ID]);
     if (!data) return;
@@ -114,10 +116,13 @@ export default function TiendaPage({ params }) {
       if (!map[pid]) map[pid] = {
         id: pid, name: pr.name || 'Producto', emoji: pr.emoji || item.emoji || '📦',
         description: pr.description || '', brand: pr.brand || '',
-        category: pr.category || 'Otros', photo: pr.photo_url || null,
+        category: pr.category || 'Otros',
+        photo: pr.image_url || pr.photo_url || null,
+        colors:     pr.default_colors     || [],
+        capacities: pr.default_capacities || [],
         units: [], minPrice: Infinity, maxPrice: 0,
       };
-      map[pid].units.push({ id: item.id, price: item.sale_price || 0 });
+      map[pid].units.push({ id: item.id, price: item.sale_price || 0, color: item.color_info || '', storage: item.storage_info || '' });
       if ((item.sale_price || 0) < map[pid].minPrice) map[pid].minPrice = item.sale_price || 0;
       if ((item.sale_price || 0) > map[pid].maxPrice) map[pid].maxPrice = item.sale_price || 0;
     });
@@ -135,13 +140,22 @@ export default function TiendaPage({ params }) {
   });
 
   /* ── CARRITO ── */
+  function openProduct(p) {
+    setSelected(p);
+    setSelColor(p.colors?.[0] || '');
+    setSelCap(p.capacities?.[0] || '');
+  }
+
   function addToCart(p) {
+    const label = [selColor, selCap].filter(Boolean).join(' · ');
     setCart(prev => {
-      const ex = prev.find(i => i.id === p.id);
-      if (ex) return prev.map(i => i.id === p.id ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { ...p, qty: 1, price: p.minPrice }];
+      const key = p.id + label;
+      const ex  = prev.find(i => i._key === key);
+      if (ex) return prev.map(i => i._key === key ? { ...i, qty: i.qty + 1 } : i);
+      return [...prev, { ...p, qty: 1, price: p.minPrice, _key: key, label }];
     });
     setSelected(null);
+    setSelColor(''); setSelCap('');
   }
   function removeFromCart(id) { setCart(prev => prev.filter(i => i.id !== id)); }
   function changeQty(id, d) { setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(1, i.qty + d) } : i)); }
@@ -151,7 +165,10 @@ export default function TiendaPage({ params }) {
   /* ── CHECKOUT ── */
   function sendOrder(e) {
     e.preventDefault();
-    const lines = cart.map(i => `• ${i.emoji} ${i.name} x${i.qty} — S/${(i.price*i.qty).toFixed(2)}`).join('\n');
+    const lines = cart.map(i => {
+      const spec = i.label ? ` (${i.label})` : '';
+      return `• ${i.emoji} ${i.name}${spec} x${i.qty} — S/${(i.price*i.qty).toFixed(2)}`;
+    }).join('\n');
     const msg   = `¡Hola ${storeName}! 👋\n\nSoy *${orderForm.name}*.\n\nPedido:\n${lines}\n\n*Total: S/${cartTotal.toFixed(2)}*\n\nTel: ${orderForm.phone}${orderForm.notes?`\nNotas: ${orderForm.notes}`:''}`;
     if (storeWA) window.open(`https://wa.me/${storeWA.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
     setOrderSent(true);
@@ -337,7 +354,7 @@ export default function TiendaPage({ params }) {
               <div style={{ color:C.muted, fontSize:13, marginBottom:14 }}>{filtered.length} producto{filtered.length!==1?'s':''}</div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:14 }}>
                 {filtered.map(p => (
-                  <div key={p.id} className="pcard" onClick={()=>setSelected(p)}
+                  <div key={p.id} className="pcard" onClick={()=>openProduct(p)}
                     style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:18, overflow:'hidden', cursor:'pointer' }}>
                     <div style={{ position:'relative', height:160, background:hexAlpha(P,0.08), display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
                       {p.photo && <img src={p.photo} alt={p.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e=>{e.target.style.display='none';e.target.nextSibling.style.display='flex'}} />}
@@ -529,7 +546,48 @@ export default function TiendaPage({ params }) {
               <div style={{ color:P, fontWeight:900, fontSize:32, marginBottom:4 }}>
                 {selected.minPrice===selected.maxPrice ? `S/${selected.minPrice.toFixed(2)}` : `S/${selected.minPrice.toFixed(0)} – S/${selected.maxPrice.toFixed(0)}`}
               </div>
-              <div style={{ color:C.muted, fontSize:13, marginBottom:20 }}>{selected.units.length} unidad{selected.units.length!==1?'es':''} disponible{selected.units.length!==1?'s':''}{selected.category&&` · ${selected.category}`}</div>
+              <div style={{ color:C.muted, fontSize:13, marginBottom:16 }}>{selected.units.length} unidad{selected.units.length!==1?'es':''} disponible{selected.units.length!==1?'s':''}{selected.category&&` · ${selected.category}`}</div>
+
+              {/* ── Capacidades ── */}
+              {selected.capacities?.length > 0 && (
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'rgba(255,255,255,0.5)', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.06em' }}>Capacidad</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                    {selected.capacities.map(c => (
+                      <button key={c} type="button" onClick={()=>setSelCap(selCap===c?'':c)}
+                        style={{ padding:'8px 16px', borderRadius:20, fontSize:13, fontWeight:700, cursor:'pointer',
+                          border:`2px solid ${selCap===c?'#FF9F0A':'rgba(255,255,255,0.18)'}`,
+                          background: selCap===c?'rgba(255,159,10,0.15)':'rgba(255,255,255,0.05)',
+                          color: selCap===c?'#FF9F0A':'rgba(255,255,255,0.7)',
+                          transition:'all .15s',
+                        }}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Colores ── */}
+              {selected.colors?.length > 0 && (
+                <div style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'rgba(255,255,255,0.5)', marginBottom:8, textTransform:'uppercase', letterSpacing:'0.06em' }}>Color{selColor ? `: ${selColor}` : ''}</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                    {selected.colors.map(c => (
+                      <button key={c} type="button" onClick={()=>setSelColor(selColor===c?'':c)}
+                        style={{ padding:'8px 16px', borderRadius:20, fontSize:13, fontWeight:700, cursor:'pointer',
+                          border:`2px solid ${selColor===c?P:'rgba(255,255,255,0.18)'}`,
+                          background: selColor===c?hexAlpha(P,0.2):'rgba(255,255,255,0.05)',
+                          color: selColor===c?P:'rgba(255,255,255,0.7)',
+                          transition:'all .15s',
+                        }}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <button onClick={()=>addToCart(selected)} style={{ width:'100%', padding:'16px', borderRadius:16, border:'none', background:P, color:'#fff', fontWeight:800, fontSize:16, cursor:'pointer', marginBottom:10 }}>🛒 Agregar al carrito</button>
               {storeWA && (
                 <a href={`https://wa.me/${storeWA.replace(/\D/g,'')}?text=${encodeURIComponent(`Hola, me interesa: ${selected.name} — S/${selected.minPrice.toFixed(2)}`)}`} target="_blank" rel="noopener noreferrer"
@@ -560,6 +618,7 @@ export default function TiendaPage({ params }) {
                       </div>
                       <div style={{ flex:1 }}>
                         <div style={{ fontWeight:700, fontSize:14 }}>{item.name}</div>
+                        {item.label && <div style={{ fontSize:11, color:'rgba(255,255,255,0.45)', marginBottom:2 }}>{item.label}</div>}
                         <div style={{ color:P, fontWeight:800, fontSize:13 }}>S/{(item.price*item.qty).toFixed(2)}</div>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:6 }}>

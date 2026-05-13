@@ -3702,8 +3702,50 @@ export default function CorpPage() {
                     <input className="form-input" placeholder="SN123456" value={form.serial_number || ''} onChange={e => setForm({ ...form, serial_number: e.target.value })} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Precio de venta (S/)</label>
-                    <input className="form-input" type="number" required placeholder="0.00" value={form.sale_price || ''} onChange={e => setForm({ ...form, sale_price: e.target.value })} />
+                    <label className="form-label">Precio de venta (S/) <span style={{ color:'var(--text3)', fontSize:11, fontWeight:400 }}>— opcional</span></label>
+                    <input className="form-input" type="number" placeholder="0.00" value={form.sale_price || ''} onChange={e => setForm({ ...form, sale_price: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Color <span style={{ color:'var(--text3)', fontSize:11, fontWeight:400 }}>— opcional</span></label>
+                    {/* Chips de colores del modelo */}
+                    {form.product_id && (() => {
+                      const sel = products.find(p => p.id === form.product_id);
+                      const cols = sel?.default_colors || [];
+                      if (cols.length === 0) return null;
+                      return (
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
+                          {cols.map(c => (
+                            <button key={c} type="button"
+                              onClick={() => setForm(f => ({ ...f, color_info: f.color_info === c ? '' : c }))}
+                              style={{ padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:`1.5px solid ${form.color_info===c?'#BF5AF2':'var(--border)'}`, background: form.color_info===c?'rgba(191,90,242,0.15)':'transparent', color: form.color_info===c?'#BF5AF2':'var(--text-muted)' }}>
+                              {c}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    <input className="form-input" placeholder="Ej: Deep Blue, Silver..." value={form.color_info || ''} onChange={e => setForm({ ...form, color_info: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Capacidad (GB/TB) <span style={{ color:'var(--text3)', fontSize:11, fontWeight:400 }}>— opcional</span></label>
+                    {/* Chips de capacidades del modelo */}
+                    {form.product_id && (() => {
+                      const sel = products.find(p => p.id === form.product_id);
+                      const caps = sel?.default_capacities || [];
+                      if (caps.length === 0) return null;
+                      return (
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
+                          {caps.map(c => (
+                            <button key={c} type="button"
+                              onClick={() => setForm(f => ({ ...f, storage_info: f.storage_info === c ? '' : c }))}
+                              style={{ padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:`1.5px solid ${form.storage_info===c?'#FF9F0A':'var(--border)'}`, background: form.storage_info===c?'rgba(255,159,10,0.15)':'transparent', color: form.storage_info===c?'#FF9F0A':'var(--text-muted)' }}>
+                              {c}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    <input className="form-input" placeholder="Ej: 256GB, 512GB..." value={form.storage_info || ''} onChange={e => setForm({ ...form, storage_info: e.target.value })} />
                   </div>
                   <button className="btn btn-primary" type="submit">Guardar</button>
                 </form>
