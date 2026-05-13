@@ -111,7 +111,8 @@ export default function AccesoSlugPage({ params }) {
     const { data } = await supabase
       .from('user_roles').select('role').eq('user_id', userId).limit(1).maybeSingle();
     const r = data?.role;
-    if (!r || r === 'cliente') return `/cliente/${slug}`;
+    // Cliente → /cliente (el middleware agrega el slug según el dominio)
+    if (!r || r === 'cliente') return '/cliente';
     if (r === 'superadmin')    return '/superadmin';
     if (r === 'corp' || r === 'admin_corp') return '/corp';
     if (r === 'gerente' || r === 'store_manager' || r === 'store_admin') return '/store';
