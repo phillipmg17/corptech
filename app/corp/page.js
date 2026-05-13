@@ -73,6 +73,29 @@ export default function CorpPage() {
   const [dashData,    setDashData]    = useState(null);
   const [dashLoading, setDashLoading] = useState(false);
 
+  /* ── FINANZAS COMPLETO — sub-tabs ── */
+  const [finSubTab,           setFinSubTab]           = useState('caja');
+
+  // Sueldos
+  const [employees,           setEmployees]           = useState([]);
+  const [empLoading,          setEmpLoading]          = useState(false);
+  const [empOrgFilter,        setEmpOrgFilter]        = useState('all');
+  const [empStatusFilter,     setEmpStatusFilter]     = useState('activo');
+  const [salaryPayments,      setSalaryPayments]      = useState([]);
+  const [empDetailId,         setEmpDetailId]         = useState(null);
+
+  // Deudores
+  const [debtors,             setDebtors]             = useState([]);
+  const [debtorLoading,       setDebtorLoading]       = useState(false);
+  const [debtorOrgFilter,     setDebtorOrgFilter]     = useState('all');
+  const [debtorStatusFilter,  setDebtorStatusFilter]  = useState('activo');
+
+  // Deudas empresa
+  const [compDebts,           setCompDebts]           = useState([]);
+  const [compDebtLoading,     setCompDebtLoading]     = useState(false);
+  const [compDebtOrgFilter,   setCompDebtOrgFilter]   = useState('all');
+  const [compDebtStatusFilter,setCompDebtStatusFilter]= useState('activo');
+
   /* ── LIQUIDACIONES ── */
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [liqLoading,    setLiqLoading]    = useState(false);
@@ -836,6 +859,197 @@ export default function CorpPage() {
     loadFinanzas();
   }
 
+  /* ── SUELDOS ── */
+  async function loadEmployees() {
+    setEmpLoading(true);
+    let q = supabase.from('employees').select('*').order('full_name');
+    if (empOrgFilter !== 'all') q = q.eq('org_id', empOrgFilter);
+    if (empStatusFilter !== 'all') q = q.eq('is_active', empStatusFilter === 'activo');
+    const { data } = await q;
+    setEmployees(data || []);
+    setEmpLoading(false);
+  }
+
+  async function loadSalaryPayments(empId) {
+    const { data } = await supabase.from('salary_payments').select('*')
+      .eq('employee_id', empId).order('created_at', { ascending: false }).limit(24);
+    setSalaryPayments(data || []);
+  }
+
+  async function saveEmployee(e) {
+    e.preventDefault();
+    const payload = {
+      org_id:          form.emp_org   || CORP_ID,
+      full_name:       form.emp_name,
+      email:           form.emp_email      || null,
+      phone:           form.emp_phone      || null,
+      role_title:      form.emp_role       || 'Empleado',
+      salary:          parseFloat(form.emp_salary) || 0,
+      salary_currency: form.emp_currency   || 'PEN',
+      salary_period:   form.emp_period     || 'mensual',
+      start_date:      form.emp_start      || null,
+      notes:           form.emp_notes      || null,
+      is_active:       true,
+      created_by:      me?.id,
+    };
+    const isEdit = !!form.emp_id;
+    const { error } = isEdit
+      ? await supabase.from('employees').update(payload).eq('id', form.emp_id)
+      : await supabase.from('employees').insert(payload);
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast(isEdit ? 'Empleado actualizado ✓' : 'Empleado agregado ✓');
+    setModal(null); setForm({});
+    loadEmployees();
+  }
+
+  async function deleteEmployee(id) {
+    if (!confirm('¿Eliminar empleado?')) return;
+    await supabase.from('employees').delete().eq('id', id);
+    showToast('Empleado eliminado');
+    loadEmployees();
+  }
+
+  async function saveSalaryPayment(e) {
+    e.preventDefault();
+    const { error } = await supabase.from('salary_payments').insert({
+      employee_id:    form.sp_emp_id,
+      org_id:         form.sp_org || CORP_ID,
+      amount:         parseFloat(form.sp_amount) || 0,
+      currency:       form.sp_currency || 'PEN',
+      period_label:   form.sp_period_label || '',
+      payment_date:   form.sp_date || new Date().toISOString().split('T')[0],
+      payment_method: form.sp_method || 'efectivo',
+      status:         'pagado',
+      notes:          form.sp_notes || null,
+      created_by:     me?.id,
+    });
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('Pago registrado ✓');
+    setModal(null); setForm({});
+    loadEmployees();
+    if (empDetailId) loadSalaryPayments(empDetailId);
+  }
+
+  /* ── DEUDORES ── */
+  async function loadDebtors() {
+    setDebtorLoading(true);
+    let q = supabase.from('debtors').select('*').order('created_at', { ascending: false });
+    if (debtorOrgFilter !== 'all') q = q.eq('org_id', debtorOrgFilter);
+    if (debtorStatusFilter !== 'all') q = q.eq('status', debtorStatusFilter);
+    const { data } = await q;
+    setDebtors(data || []);
+    setDebtorLoading(false);
+  }
+
+  async function saveDebtor(e) {
+    e.preventDefault();
+    const payload = {
+      org_id:           form.dr_org  || CORP_ID,
+      name:             form.dr_name,
+      phone:            form.dr_phone         || null,
+      email:            form.dr_email         || null,
+      description:      form.dr_desc          || null,
+      principal_amount: parseFloat(form.dr_principal) || 0,
+      currency:         form.dr_currency      || 'PEN',
+      interest_rate:    parseFloat(form.dr_rate) || 0,
+      interest_type:    form.dr_int_type       || 'none',
+      start_date:       form.dr_start          || new Date().toISOString().split('T')[0],
+      due_date:         form.dr_due            || null,
+      status:           'activo',
+      notes:            form.dr_notes          || null,
+      created_by:       me?.id,
+    };
+    const isEdit = !!form.dr_id;
+    const { error } = isEdit
+      ? await supabase.from('debtors').update(payload).eq('id', form.dr_id)
+      : await supabase.from('debtors').insert(payload);
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast(isEdit ? 'Deudor actualizado ✓' : 'Deudor agregado ✓');
+    setModal(null); setForm({});
+    loadDebtors();
+  }
+
+  async function registerDebtorPayment(e) {
+    e.preventDefault();
+    const dr = debtors.find(d => d.id === form.drp_id);
+    if (!dr) return;
+    const newPaid = (dr.amount_paid || 0) + (parseFloat(form.drp_amount) || 0);
+    const total   = dr.principal_amount + calcAccruedInterest(dr);
+    const newStatus = newPaid >= total ? 'pagado' : 'activo';
+    const { error } = await supabase.from('debtors')
+      .update({ amount_paid: newPaid, status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', form.drp_id);
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('Cobro registrado ✓');
+    setModal(null); setForm({});
+    loadDebtors();
+  }
+
+  /* ── DEUDAS EMPRESA ── */
+  async function loadCompDebts() {
+    setCompDebtLoading(true);
+    let q = supabase.from('company_debts').select('*').order('created_at', { ascending: false });
+    if (compDebtOrgFilter !== 'all') q = q.eq('org_id', compDebtOrgFilter);
+    if (compDebtStatusFilter !== 'all') q = q.eq('status', compDebtStatusFilter);
+    const { data } = await q;
+    setCompDebts(data || []);
+    setCompDebtLoading(false);
+  }
+
+  async function saveCompDebt(e) {
+    e.preventDefault();
+    const payload = {
+      org_id:           form.cd_org  || CORP_ID,
+      creditor_name:    form.cd_creditor,
+      description:      form.cd_desc          || null,
+      principal_amount: parseFloat(form.cd_principal) || 0,
+      currency:         form.cd_currency      || 'PEN',
+      interest_rate:    parseFloat(form.cd_rate) || 0,
+      interest_type:    form.cd_int_type       || 'none',
+      start_date:       form.cd_start          || new Date().toISOString().split('T')[0],
+      due_date:         form.cd_due            || null,
+      status:           'activo',
+      notes:            form.cd_notes          || null,
+      created_by:       me?.id,
+    };
+    const isEdit = !!form.cd_id;
+    const { error } = isEdit
+      ? await supabase.from('company_debts').update(payload).eq('id', form.cd_id)
+      : await supabase.from('company_debts').insert(payload);
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast(isEdit ? 'Deuda actualizada ✓' : 'Deuda registrada ✓');
+    setModal(null); setForm({});
+    loadCompDebts();
+  }
+
+  async function registerDebtPayment(e) {
+    e.preventDefault();
+    const cd = compDebts.find(d => d.id === form.cdp_id);
+    if (!cd) return;
+    const newPaid = (cd.amount_paid || 0) + (parseFloat(form.cdp_amount) || 0);
+    const total   = cd.principal_amount + calcAccruedInterest(cd);
+    const newStatus = newPaid >= total ? 'pagado' : 'activo';
+    const { error } = await supabase.from('company_debts')
+      .update({ amount_paid: newPaid, status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', form.cdp_id);
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('Pago registrado ✓');
+    setModal(null); setForm({});
+    loadCompDebts();
+  }
+
+  /* ── HELPER: interés acumulado ── */
+  function calcAccruedInterest(item) {
+    if (!item.interest_rate || item.interest_type === 'none') return 0;
+    const start  = new Date(item.start_date || item.created_at);
+    const now    = new Date();
+    const months = Math.max(0, (now - start) / (1000 * 60 * 60 * 24 * 30.4375));
+    const rate   = parseFloat(item.interest_rate) / 100;
+    if (item.interest_type === 'monthly') return item.principal_amount * rate * months;
+    if (item.interest_type === 'annual')  return item.principal_amount * rate * (months / 12);
+    return 0;
+  }
+
   /* ── ADD / EDIT / DELETE PRODUCT ── */
   async function addProduct(e) {
     e.preventDefault();
@@ -1316,7 +1530,15 @@ export default function CorpPage() {
     if (tab === 'dashboard') loadDashboard();
     if (tab === 'global') loadGlobalStock();
     if (tab === 'ventas') loadAllSales();
-  }, [tab]); // eslint-disable-line
+    if (tab === 'finanzas' && finSubTab === 'sueldos')   loadEmployees();
+    if (tab === 'finanzas' && finSubTab === 'deudores')  loadDebtors();
+    if (tab === 'finanzas' && finSubTab === 'deudas')    loadCompDebts();
+    if (tab === 'finanzas' && finSubTab === 'caja')      loadFinanzas();
+  }, [tab, finSubTab]); // eslint-disable-line
+
+  useEffect(() => { if (tab === 'finanzas' && finSubTab === 'sueldos') loadEmployees(); }, [empOrgFilter, empStatusFilter]); // eslint-disable-line
+  useEffect(() => { if (tab === 'finanzas' && finSubTab === 'deudores') loadDebtors(); }, [debtorOrgFilter, debtorStatusFilter]); // eslint-disable-line
+  useEffect(() => { if (tab === 'finanzas' && finSubTab === 'deudas') loadCompDebts(); }, [compDebtOrgFilter, compDebtStatusFilter]); // eslint-disable-line
 
   useEffect(() => {
     if (tab === 'global') loadGlobalStock();
@@ -2781,7 +3003,32 @@ export default function CorpPage() {
             TAB: FINANZAS
         ══════════════════════════════════════ */}
         {tab === 'finanzas' && (
-          <div style={{ padding: '16px' }}>
+          <div style={{ padding: '16px', paddingBottom: 48 }}>
+
+            {/* ── Sub-nav ── */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 20, overflowX: 'auto', paddingBottom: 2 }}>
+              {[
+                { id: 'caja',      ico: '💰', lbl: 'Caja & Stock'  },
+                { id: 'sueldos',   ico: '👥', lbl: 'Sueldos'       },
+                { id: 'deudores',  ico: '📥', lbl: 'Deudores'      },
+                { id: 'deudas',    ico: '📤', lbl: 'Deudas'        },
+              ].map(s => (
+                <button key={s.id} type="button"
+                  onClick={() => setFinSubTab(s.id)}
+                  style={{
+                    flexShrink: 0, padding: '9px 18px', borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    border: `1.5px solid ${finSubTab === s.id ? '#0A84FF' : 'var(--border)'}`,
+                    background: finSubTab === s.id ? 'rgba(10,132,255,0.15)' : 'transparent',
+                    color: finSubTab === s.id ? '#0A84FF' : 'var(--text-muted)',
+                    transition: 'all .15s',
+                  }}>
+                  {s.ico} {s.lbl}
+                </button>
+              ))}
+            </div>
+
+            {/* ════════════════ SUB-TAB: CAJA & STOCK (existente) ════════════════ */}
+            {finSubTab === 'caja' && <div>
 
             {/* ── HERO: Valorización total — siempre fondo oscuro para contraste ── */}
             <div style={{
@@ -2946,6 +3193,296 @@ export default function CorpPage() {
             >
               {finLoading ? '⏳ Calculando…' : '🔄 Actualizar datos financieros'}
             </button>
+          </div>}
+            {/* ════════════════ SUB-TAB: SUELDOS ════════════════ */}
+            {finSubTab === 'sueldos' && (() => {
+              const fmt = (n) => `S/ ${parseFloat(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+              const totalMensual = employees.filter(e => e.is_active).reduce((s,e) => s + (e.salary||0), 0);
+              return (
+                <>
+                  {/* Filtros */}
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
+                    <select className="form-select" style={{ flex:1, minWidth:140, maxWidth:200 }} value={empOrgFilter} onChange={e=>setEmpOrgFilter(e.target.value)}>
+                      <option value="all">🏢 Todas las empresas</option>
+                      <option value={CORP_ID}>🏢 Corp Tech</option>
+                      {STORES.map(s=><option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                    </select>
+                    <select className="form-select" style={{ flex:1, minWidth:120, maxWidth:160 }} value={empStatusFilter} onChange={e=>setEmpStatusFilter(e.target.value)}>
+                      <option value="all">Todos</option>
+                      <option value="activo">✅ Activos</option>
+                      <option value="inactivo">❌ Inactivos</option>
+                    </select>
+                    <button className="section-action" onClick={()=>{ setModal('add-employee'); setForm({ emp_org: CORP_ID, emp_currency:'PEN', emp_period:'mensual' }); }}>+ Empleado</button>
+                  </div>
+
+                  {/* Resumen */}
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:10, marginBottom:16 }}>
+                    {[
+                      { lbl:'Planilla Mensual', val: fmt(totalMensual), ico:'💰', color:'#30D158' },
+                      { lbl:'Empleados Activos', val: employees.filter(e=>e.is_active).length, ico:'👥', color:'#0A84FF' },
+                      { lbl:'Total Empleados', val: employees.length, ico:'📋', color:'var(--text3)' },
+                    ].map((k,i)=>(
+                      <div key={i} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', borderLeft:`3px solid ${k.color}` }}>
+                        <div style={{ fontSize:10, color:'var(--text3)', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>{k.ico} {k.lbl}</div>
+                        <div style={{ fontWeight:900, fontSize:18, color:k.color }}>{k.val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Lista empleados */}
+                  {empLoading ? <div className="empty-msg">Cargando...</div>
+                  : employees.length === 0 ? <div className="empty-msg">Sin empleados aún</div>
+                  : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      {employees.map(emp => {
+                        const org = ALL_ORGS.find(o=>o.id===emp.org_id);
+                        return (
+                          <div key={emp.id} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:16, padding:'14px 16px' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:8 }}>
+                              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                                <div style={{ width:40, height:40, borderRadius:'50%', background:'rgba(10,132,255,0.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>
+                                  {emp.is_active ? '👤' : '🚫'}
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight:800, fontSize:14 }}>{emp.full_name}</div>
+                                  <div style={{ fontSize:11, color:'var(--text3)' }}>{emp.role_title} · {org?.ico} {org?.name || 'Corp'}</div>
+                                  {emp.phone && <div style={{ fontSize:11, color:'var(--text3)' }}>📞 {emp.phone}</div>}
+                                </div>
+                              </div>
+                              <div style={{ textAlign:'right' }}>
+                                <div style={{ fontWeight:900, fontSize:18, color:'#30D158' }}>{fmt(emp.salary)}</div>
+                                <div style={{ fontSize:11, color:'var(--text3)', textTransform:'capitalize' }}>/{emp.salary_period}</div>
+                              </div>
+                            </div>
+                            <div style={{ display:'flex', gap:8, marginTop:10, flexWrap:'wrap' }}>
+                              <button type="button" onClick={()=>{ setEmpDetailId(emp.id); loadSalaryPayments(emp.id); setModal('pay-salary'); setForm({ sp_emp_id:emp.id, sp_org:emp.org_id, sp_amount:emp.salary, sp_currency:emp.salary_currency||'PEN', sp_method:'efectivo', sp_date:new Date().toISOString().split('T')[0], sp_period_label: new Date().toLocaleString('es-PE',{month:'long',year:'numeric'}) }); }}
+                                style={{ flex:1, padding:'7px 0', borderRadius:10, border:'none', background:'rgba(48,209,88,0.12)', color:'#30D158', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                                💵 Registrar Pago
+                              </button>
+                              <button type="button" onClick={()=>{ setModal('add-employee'); setForm({ emp_id:emp.id, emp_name:emp.full_name, emp_email:emp.email||'', emp_phone:emp.phone||'', emp_role:emp.role_title, emp_salary:emp.salary, emp_currency:emp.salary_currency||'PEN', emp_period:emp.salary_period||'mensual', emp_org:emp.org_id, emp_notes:emp.notes||'', emp_start:emp.start_date||'' }); }}
+                                style={{ flex:1, padding:'7px 0', borderRadius:10, border:'none', background:'rgba(10,132,255,0.1)', color:'#4DA8FF', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                                ✏️ Editar
+                              </button>
+                              <button type="button" onClick={()=>deleteEmployee(emp.id)}
+                                style={{ padding:'7px 14px', borderRadius:10, border:'none', background:'rgba(255,69,58,0.08)', color:'#FF453A', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                                🗑
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* ════════════════ SUB-TAB: DEUDORES ════════════════ */}
+            {finSubTab === 'deudores' && (() => {
+              const fmt = (n) => `S/ ${parseFloat(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+              const totalPrincipal = debtors.reduce((s,d)=>s+(d.principal_amount||0),0);
+              const totalIntereses = debtors.reduce((s,d)=>s+calcAccruedInterest(d),0);
+              const totalCobrado   = debtors.reduce((s,d)=>s+(d.amount_paid||0),0);
+              const totalPendiente = (totalPrincipal + totalIntereses) - totalCobrado;
+              return (
+                <>
+                  {/* Filtros */}
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
+                    <select className="form-select" style={{ flex:1, minWidth:140, maxWidth:200 }} value={debtorOrgFilter} onChange={e=>setDebtorOrgFilter(e.target.value)}>
+                      <option value="all">🏢 Todas las empresas</option>
+                      <option value={CORP_ID}>🏢 Corp Tech</option>
+                      {STORES.map(s=><option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                    </select>
+                    <select className="form-select" style={{ flex:1, minWidth:120, maxWidth:160 }} value={debtorStatusFilter} onChange={e=>setDebtorStatusFilter(e.target.value)}>
+                      <option value="all">Todos</option>
+                      <option value="activo">🔴 Activos</option>
+                      <option value="pagado">✅ Pagados</option>
+                      <option value="vencido">⚠️ Vencidos</option>
+                    </select>
+                    <button className="section-action" onClick={()=>{ setModal('add-debtor'); setForm({ dr_org:CORP_ID, dr_currency:'PEN', dr_int_type:'none', dr_start:new Date().toISOString().split('T')[0] }); }}>+ Deudor</button>
+                  </div>
+
+                  {/* KPIs */}
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:10, marginBottom:16 }}>
+                    {[
+                      { lbl:'Por Cobrar (neto)', val:fmt(totalPendiente), color:'#FF9F0A' },
+                      { lbl:'Intereses Acum.',   val:fmt(totalIntereses), color:'#BF5AF2' },
+                      { lbl:'Ya Cobrado',        val:fmt(totalCobrado),   color:'#30D158' },
+                      { lbl:'Capital Total',     val:fmt(totalPrincipal), color:'#0A84FF' },
+                    ].map((k,i)=>(
+                      <div key={i} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', borderLeft:`3px solid ${k.color}` }}>
+                        <div style={{ fontSize:10, color:'var(--text3)', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>{k.lbl}</div>
+                        <div style={{ fontWeight:900, fontSize:16, color:k.color }}>{k.val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Lista */}
+                  {debtorLoading ? <div className="empty-msg">Cargando...</div>
+                  : debtors.length === 0 ? <div className="empty-msg">Sin deudores registrados</div>
+                  : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      {debtors.map(dr => {
+                        const interest   = calcAccruedInterest(dr);
+                        const total      = (dr.principal_amount||0) + interest;
+                        const pending    = total - (dr.amount_paid||0);
+                        const pct        = total > 0 ? ((dr.amount_paid||0)/total)*100 : 0;
+                        const statusColor= dr.status==='pagado'?'#30D158':dr.status==='vencido'?'#FF453A':'#FF9F0A';
+                        const org        = ALL_ORGS.find(o=>o.id===dr.org_id);
+                        const dueDate    = dr.due_date ? new Date(dr.due_date) : null;
+                        const isOverdue  = dueDate && dueDate < new Date() && dr.status === 'activo';
+                        return (
+                          <div key={dr.id} style={{ background:'var(--card)', border:`1px solid ${isOverdue?'rgba(255,69,58,0.4)':'var(--border)'}`, borderRadius:16, padding:'14px 16px' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:8, marginBottom:8 }}>
+                              <div>
+                                <div style={{ fontWeight:800, fontSize:14 }}>{dr.name}</div>
+                                <div style={{ fontSize:11, color:'var(--text3)' }}>
+                                  {org?.ico} {org?.name||'Corp'} · Desde {dr.start_date}
+                                  {dr.due_date && ` · Vence ${dr.due_date}`}
+                                </div>
+                                {dr.phone && <div style={{ fontSize:11, color:'var(--text3)' }}>📞 {dr.phone}</div>}
+                                {dr.description && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{dr.description}</div>}
+                              </div>
+                              <div style={{ textAlign:'right' }}>
+                                <div style={{ fontWeight:900, fontSize:18, color:statusColor }}>{fmt(pending)}</div>
+                                <div style={{ fontSize:11, color:'var(--text3)' }}>pendiente</div>
+                                <span style={{ fontSize:10, fontWeight:700, color:statusColor, background:`${statusColor}1a`, padding:'2px 8px', borderRadius:20 }}>{dr.status}</span>
+                              </div>
+                            </div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, fontSize:11, color:'var(--text3)', marginBottom:8 }}>
+                              <div>Capital: <b style={{color:'var(--text)'}}>{fmt(dr.principal_amount)}</b></div>
+                              <div>Interés: <b style={{color:'#BF5AF2'}}>{fmt(interest)}{dr.interest_rate>0?` (${dr.interest_rate}%/${dr.interest_type==='monthly'?'mes':'año'})`:''}</b></div>
+                              <div>Cobrado: <b style={{color:'#30D158'}}>{fmt(dr.amount_paid)}</b></div>
+                            </div>
+                            {/* Barra de progreso */}
+                            <div style={{ height:5, background:'var(--border)', borderRadius:99, marginBottom:10, overflow:'hidden' }}>
+                              <div style={{ height:'100%', width:`${Math.min(pct,100)}%`, background:'#30D158', borderRadius:99 }} />
+                            </div>
+                            <div style={{ display:'flex', gap:8 }}>
+                              {dr.status !== 'pagado' && (
+                                <button type="button"
+                                  onClick={()=>{ setModal('register-debtor-payment'); setForm({ drp_id:dr.id, drp_amount: pending.toFixed(2) }); }}
+                                  style={{ flex:1, padding:'7px 0', borderRadius:10, border:'none', background:'rgba(48,209,88,0.12)', color:'#30D158', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                                  💵 Registrar Cobro
+                                </button>
+                              )}
+                              <button type="button"
+                                onClick={()=>{ setModal('add-debtor'); setForm({ dr_id:dr.id, dr_name:dr.name, dr_phone:dr.phone||'', dr_email:dr.email||'', dr_desc:dr.description||'', dr_principal:dr.principal_amount, dr_currency:dr.currency||'PEN', dr_rate:dr.interest_rate||0, dr_int_type:dr.interest_type||'none', dr_start:dr.start_date, dr_due:dr.due_date||'', dr_notes:dr.notes||'', dr_org:dr.org_id }); }}
+                                style={{ flex:1, padding:'7px 0', borderRadius:10, border:'none', background:'rgba(10,132,255,0.1)', color:'#4DA8FF', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                                ✏️ Editar
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* ════════════════ SUB-TAB: DEUDAS EMPRESA ════════════════ */}
+            {finSubTab === 'deudas' && (() => {
+              const fmt = (n) => `S/ ${parseFloat(n||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+              const totalPrincipal = compDebts.reduce((s,d)=>s+(d.principal_amount||0),0);
+              const totalIntereses = compDebts.reduce((s,d)=>s+calcAccruedInterest(d),0);
+              const totalPagado    = compDebts.reduce((s,d)=>s+(d.amount_paid||0),0);
+              const totalPendiente = (totalPrincipal + totalIntereses) - totalPagado;
+              return (
+                <>
+                  {/* Filtros */}
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
+                    <select className="form-select" style={{ flex:1, minWidth:140, maxWidth:200 }} value={compDebtOrgFilter} onChange={e=>setCompDebtOrgFilter(e.target.value)}>
+                      <option value="all">🏢 Todas las empresas</option>
+                      <option value={CORP_ID}>🏢 Corp Tech</option>
+                      {STORES.map(s=><option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                    </select>
+                    <select className="form-select" style={{ flex:1, minWidth:120, maxWidth:160 }} value={compDebtStatusFilter} onChange={e=>setCompDebtStatusFilter(e.target.value)}>
+                      <option value="all">Todos</option>
+                      <option value="activo">🔴 Activos</option>
+                      <option value="pagado">✅ Pagados</option>
+                      <option value="vencido">⚠️ Vencidos</option>
+                    </select>
+                    <button className="section-action" onClick={()=>{ setModal('add-comp-debt'); setForm({ cd_org:CORP_ID, cd_currency:'PEN', cd_int_type:'none', cd_start:new Date().toISOString().split('T')[0] }); }}>+ Deuda</button>
+                  </div>
+
+                  {/* KPIs */}
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:10, marginBottom:16 }}>
+                    {[
+                      { lbl:'Por Pagar (neto)', val:fmt(totalPendiente), color:'#FF453A' },
+                      { lbl:'Intereses Acum.',  val:fmt(totalIntereses), color:'#BF5AF2' },
+                      { lbl:'Ya Pagado',        val:fmt(totalPagado),    color:'#30D158' },
+                      { lbl:'Capital Total',    val:fmt(totalPrincipal), color:'#FF9F0A' },
+                    ].map((k,i)=>(
+                      <div key={i} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'12px 14px', borderLeft:`3px solid ${k.color}` }}>
+                        <div style={{ fontSize:10, color:'var(--text3)', fontWeight:700, textTransform:'uppercase', marginBottom:4 }}>{k.lbl}</div>
+                        <div style={{ fontWeight:900, fontSize:16, color:k.color }}>{k.val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Lista */}
+                  {compDebtLoading ? <div className="empty-msg">Cargando...</div>
+                  : compDebts.length === 0 ? <div className="empty-msg">Sin deudas registradas</div>
+                  : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                      {compDebts.map(cd => {
+                        const interest   = calcAccruedInterest(cd);
+                        const total      = (cd.principal_amount||0) + interest;
+                        const pending    = total - (cd.amount_paid||0);
+                        const pct        = total > 0 ? ((cd.amount_paid||0)/total)*100 : 0;
+                        const statusColor= cd.status==='pagado'?'#30D158':cd.status==='vencido'?'#FF453A':'#FF9F0A';
+                        const org        = ALL_ORGS.find(o=>o.id===cd.org_id);
+                        const dueDate    = cd.due_date ? new Date(cd.due_date) : null;
+                        const isOverdue  = dueDate && dueDate < new Date() && cd.status === 'activo';
+                        return (
+                          <div key={cd.id} style={{ background:'var(--card)', border:`1px solid ${isOverdue?'rgba(255,69,58,0.4)':'var(--border)'}`, borderRadius:16, padding:'14px 16px' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:8, marginBottom:8 }}>
+                              <div>
+                                <div style={{ fontWeight:800, fontSize:14 }}>{cd.creditor_name}</div>
+                                <div style={{ fontSize:11, color:'var(--text3)' }}>
+                                  {org?.ico} {org?.name||'Corp'} · Desde {cd.start_date}
+                                  {cd.due_date && ` · Vence ${cd.due_date}`}
+                                </div>
+                                {cd.description && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{cd.description}</div>}
+                              </div>
+                              <div style={{ textAlign:'right' }}>
+                                <div style={{ fontWeight:900, fontSize:18, color:statusColor }}>{fmt(pending)}</div>
+                                <div style={{ fontSize:11, color:'var(--text3)' }}>por pagar</div>
+                                <span style={{ fontSize:10, fontWeight:700, color:statusColor, background:`${statusColor}1a`, padding:'2px 8px', borderRadius:20 }}>{cd.status}</span>
+                              </div>
+                            </div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, fontSize:11, color:'var(--text3)', marginBottom:8 }}>
+                              <div>Capital: <b style={{color:'var(--text)'}}>{fmt(cd.principal_amount)}</b></div>
+                              <div>Interés: <b style={{color:'#BF5AF2'}}>{fmt(interest)}{cd.interest_rate>0?` (${cd.interest_rate}%/${cd.interest_type==='monthly'?'mes':'año'})`:''}</b></div>
+                              <div>Pagado: <b style={{color:'#30D158'}}>{fmt(cd.amount_paid)}</b></div>
+                            </div>
+                            <div style={{ height:5, background:'var(--border)', borderRadius:99, marginBottom:10, overflow:'hidden' }}>
+                              <div style={{ height:'100%', width:`${Math.min(pct,100)}%`, background:'#30D158', borderRadius:99 }} />
+                            </div>
+                            <div style={{ display:'flex', gap:8 }}>
+                              {cd.status !== 'pagado' && (
+                                <button type="button"
+                                  onClick={()=>{ setModal('register-debt-payment'); setForm({ cdp_id:cd.id, cdp_amount: pending.toFixed(2) }); }}
+                                  style={{ flex:1, padding:'7px 0', borderRadius:10, border:'none', background:'rgba(48,209,88,0.12)', color:'#30D158', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                                  💵 Registrar Pago
+                                </button>
+                              )}
+                              <button type="button"
+                                onClick={()=>{ setModal('add-comp-debt'); setForm({ cd_id:cd.id, cd_creditor:cd.creditor_name, cd_desc:cd.description||'', cd_principal:cd.principal_amount, cd_currency:cd.currency||'PEN', cd_rate:cd.interest_rate||0, cd_int_type:cd.interest_type||'none', cd_start:cd.start_date, cd_due:cd.due_date||'', cd_notes:cd.notes||'', cd_org:cd.org_id }); }}
+                                style={{ flex:1, padding:'7px 0', borderRadius:10, border:'none', background:'rgba(10,132,255,0.1)', color:'#4DA8FF', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                                ✏️ Editar
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
           </div>
         )}
 
@@ -4109,6 +4646,287 @@ export default function CorpPage() {
                     <input className="form-input" placeholder="Ej: 256GB, 512GB..." value={form.storage_info || ''} onChange={e => setForm({ ...form, storage_info: e.target.value })} />
                   </div>
                   <button className="btn btn-primary" type="submit">Guardar</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Empleado ── */}
+            {modal === 'add-employee' && (
+              <>
+                <div className="modal-title">👤 {form.emp_id ? 'Editar' : 'Nuevo'} Empleado</div>
+                <form onSubmit={saveEmployee}>
+                  <div className="form-group">
+                    <label className="form-label">Empresa</label>
+                    <select className="form-select" value={form.emp_org||CORP_ID} onChange={e=>setForm({...form,emp_org:e.target.value})}>
+                      <option value={CORP_ID}>🏢 Corp Tech</option>
+                      {STORES.map(s=><option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Nombre completo *</label>
+                    <input className="form-input" required placeholder="Juan Pérez" value={form.emp_name||''} onChange={e=>setForm({...form,emp_name:e.target.value})} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Teléfono</label>
+                      <input className="form-input" placeholder="+51 999..." value={form.emp_phone||''} onChange={e=>setForm({...form,emp_phone:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Email</label>
+                      <input className="form-input" type="email" placeholder="correo@..." value={form.emp_email||''} onChange={e=>setForm({...form,emp_email:e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Cargo / Rol</label>
+                    <input className="form-input" placeholder="Vendedor, Encargado..." value={form.emp_role||''} onChange={e=>setForm({...form,emp_role:e.target.value})} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Sueldo</label>
+                      <input className="form-input" type="number" required placeholder="0.00" value={form.emp_salary||''} onChange={e=>setForm({...form,emp_salary:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Moneda</label>
+                      <select className="form-select" value={form.emp_currency||'PEN'} onChange={e=>setForm({...form,emp_currency:e.target.value})}>
+                        <option value="PEN">S/ PEN</option>
+                        <option value="USD">$ USD</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Periodicidad</label>
+                      <select className="form-select" value={form.emp_period||'mensual'} onChange={e=>setForm({...form,emp_period:e.target.value})}>
+                        <option value="mensual">Mensual</option>
+                        <option value="quincenal">Quincenal</option>
+                        <option value="semanal">Semanal</option>
+                        <option value="diario">Diario</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Fecha de ingreso</label>
+                    <input className="form-input" type="date" value={form.emp_start||''} onChange={e=>setForm({...form,emp_start:e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Notas</label>
+                    <input className="form-input" placeholder="Observaciones..." value={form.emp_notes||''} onChange={e=>setForm({...form,emp_notes:e.target.value})} />
+                  </div>
+                  <button className="btn btn-primary" type="submit">{form.emp_id?'Actualizar':'Guardar'}</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Pagar Sueldo ── */}
+            {modal === 'pay-salary' && (
+              <>
+                <div className="modal-title">💵 Registrar Pago de Sueldo</div>
+                <form onSubmit={saveSalaryPayment}>
+                  <div className="form-group">
+                    <label className="form-label">Período</label>
+                    <input className="form-input" placeholder="Mayo 2026" value={form.sp_period_label||''} onChange={e=>setForm({...form,sp_period_label:e.target.value})} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Monto</label>
+                      <input className="form-input" type="number" required value={form.sp_amount||''} onChange={e=>setForm({...form,sp_amount:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Moneda</label>
+                      <select className="form-select" value={form.sp_currency||'PEN'} onChange={e=>setForm({...form,sp_currency:e.target.value})}>
+                        <option value="PEN">S/</option>
+                        <option value="USD">$</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Fecha</label>
+                      <input className="form-input" type="date" value={form.sp_date||''} onChange={e=>setForm({...form,sp_date:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Método</label>
+                      <select className="form-select" value={form.sp_method||'efectivo'} onChange={e=>setForm({...form,sp_method:e.target.value})}>
+                        <option value="efectivo">Efectivo</option>
+                        <option value="transferencia">Transferencia</option>
+                        <option value="yape">Yape</option>
+                        <option value="plin">Plin</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Notas</label>
+                    <input className="form-input" placeholder="Observaciones..." value={form.sp_notes||''} onChange={e=>setForm({...form,sp_notes:e.target.value})} />
+                  </div>
+                  <button className="btn btn-primary" type="submit">Registrar Pago</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Deudor ── */}
+            {modal === 'add-debtor' && (
+              <>
+                <div className="modal-title">📥 {form.dr_id?'Editar':'Nuevo'} Deudor</div>
+                <form onSubmit={saveDebtor}>
+                  <div className="form-group">
+                    <label className="form-label">Empresa</label>
+                    <select className="form-select" value={form.dr_org||CORP_ID} onChange={e=>setForm({...form,dr_org:e.target.value})}>
+                      <option value={CORP_ID}>🏢 Corp Tech</option>
+                      {STORES.map(s=><option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Nombre del deudor *</label>
+                    <input className="form-input" required placeholder="Nombre completo o empresa" value={form.dr_name||''} onChange={e=>setForm({...form,dr_name:e.target.value})} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Teléfono</label>
+                      <input className="form-input" placeholder="+51 999..." value={form.dr_phone||''} onChange={e=>setForm({...form,dr_phone:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Email</label>
+                      <input className="form-input" placeholder="correo@..." value={form.dr_email||''} onChange={e=>setForm({...form,dr_email:e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Concepto</label>
+                    <input className="form-input" placeholder="Por qué nos debe..." value={form.dr_desc||''} onChange={e=>setForm({...form,dr_desc:e.target.value})} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Monto prestado (capital)</label>
+                      <input className="form-input" type="number" required placeholder="0.00" value={form.dr_principal||''} onChange={e=>setForm({...form,dr_principal:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Moneda</label>
+                      <select className="form-select" value={form.dr_currency||'PEN'} onChange={e=>setForm({...form,dr_currency:e.target.value})}>
+                        <option value="PEN">S/</option>
+                        <option value="USD">$</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Tasa de interés (%)</label>
+                      <input className="form-input" type="number" placeholder="0" value={form.dr_rate||''} onChange={e=>setForm({...form,dr_rate:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Tipo de interés</label>
+                      <select className="form-select" value={form.dr_int_type||'none'} onChange={e=>setForm({...form,dr_int_type:e.target.value})}>
+                        <option value="none">Sin interés</option>
+                        <option value="monthly">% Mensual</option>
+                        <option value="annual">% Anual</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Fecha inicio</label>
+                      <input className="form-input" type="date" value={form.dr_start||''} onChange={e=>setForm({...form,dr_start:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Fecha vencimiento</label>
+                      <input className="form-input" type="date" value={form.dr_due||''} onChange={e=>setForm({...form,dr_due:e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Notas</label>
+                    <input className="form-input" placeholder="Garantías, acuerdos..." value={form.dr_notes||''} onChange={e=>setForm({...form,dr_notes:e.target.value})} />
+                  </div>
+                  <button className="btn btn-primary" type="submit">{form.dr_id?'Actualizar':'Guardar Deudor'}</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Registrar cobro al deudor ── */}
+            {modal === 'register-debtor-payment' && (
+              <>
+                <div className="modal-title">💵 Registrar Cobro</div>
+                <form onSubmit={registerDebtorPayment}>
+                  <div className="form-group">
+                    <label className="form-label">Monto cobrado</label>
+                    <input className="form-input" type="number" required value={form.drp_amount||''} onChange={e=>setForm({...form,drp_amount:e.target.value})} />
+                  </div>
+                  <button className="btn btn-primary" type="submit">Registrar Cobro</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Deuda empresa ── */}
+            {modal === 'add-comp-debt' && (
+              <>
+                <div className="modal-title">📤 {form.cd_id?'Editar':'Nueva'} Deuda</div>
+                <form onSubmit={saveCompDebt}>
+                  <div className="form-group">
+                    <label className="form-label">Empresa</label>
+                    <select className="form-select" value={form.cd_org||CORP_ID} onChange={e=>setForm({...form,cd_org:e.target.value})}>
+                      <option value={CORP_ID}>🏢 Corp Tech</option>
+                      {STORES.map(s=><option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Acreedor (a quien debemos) *</label>
+                    <input className="form-input" required placeholder="Banco, persona, empresa..." value={form.cd_creditor||''} onChange={e=>setForm({...form,cd_creditor:e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Concepto</label>
+                    <input className="form-input" placeholder="Por qué debemos..." value={form.cd_desc||''} onChange={e=>setForm({...form,cd_desc:e.target.value})} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Monto (capital)</label>
+                      <input className="form-input" type="number" required placeholder="0.00" value={form.cd_principal||''} onChange={e=>setForm({...form,cd_principal:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Moneda</label>
+                      <select className="form-select" value={form.cd_currency||'PEN'} onChange={e=>setForm({...form,cd_currency:e.target.value})}>
+                        <option value="PEN">S/</option>
+                        <option value="USD">$</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Tasa de interés (%)</label>
+                      <input className="form-input" type="number" placeholder="0" value={form.cd_rate||''} onChange={e=>setForm({...form,cd_rate:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Tipo de interés</label>
+                      <select className="form-select" value={form.cd_int_type||'none'} onChange={e=>setForm({...form,cd_int_type:e.target.value})}>
+                        <option value="none">Sin interés</option>
+                        <option value="monthly">% Mensual</option>
+                        <option value="annual">% Anual</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Fecha inicio</label>
+                      <input className="form-input" type="date" value={form.cd_start||''} onChange={e=>setForm({...form,cd_start:e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Fecha vencimiento</label>
+                      <input className="form-input" type="date" value={form.cd_due||''} onChange={e=>setForm({...form,cd_due:e.target.value})} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Notas</label>
+                    <input className="form-input" placeholder="Garantías, cuotas..." value={form.cd_notes||''} onChange={e=>setForm({...form,cd_notes:e.target.value})} />
+                  </div>
+                  <button className="btn btn-primary" type="submit">{form.cd_id?'Actualizar':'Guardar Deuda'}</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Registrar pago de deuda empresa ── */}
+            {modal === 'register-debt-payment' && (
+              <>
+                <div className="modal-title">💵 Registrar Pago</div>
+                <form onSubmit={registerDebtPayment}>
+                  <div className="form-group">
+                    <label className="form-label">Monto pagado</label>
+                    <input className="form-input" type="number" required value={form.cdp_amount||''} onChange={e=>setForm({...form,cdp_amount:e.target.value})} />
+                  </div>
+                  <button className="btn btn-primary" type="submit">Registrar Pago</button>
                 </form>
               </>
             )}
