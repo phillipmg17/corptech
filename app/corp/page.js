@@ -108,18 +108,47 @@ export default function CorpPage() {
   useEffect(() => { init(); }, []);
 
   async function init() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { router.replace('/login'); return; }
-    const uid = session.user.id;
-    const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
-    const r = roleRow?.role;
-    if (r !== 'corp' && r !== 'superadmin' && r !== 'admin_corp') { router.replace('/dashboard'); return; }
-    const { data: prof } = await supabase.from('users').select('full_name').eq('id', uid).single();
-    setMe({ id: uid, name: prof?.full_name, role: r });
-    await loadKpis();
-    await loadProducts();
-    await loadGlobalStock();
-    setLoading(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.replace('/login'); return; }
+      const uid = session.user.id;
+
+      // Buscar rol — intentar con user_id y también con eq directo
+      const { data: roleRow } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', uid)
+        .maybeSingle();
+
+      const r = roleRow?.role;
+
+      // Roles permitidos en corp panel
+      const CORP_ROLES = ['corp', 'superadmin', 'admin_corp'];
+      if (!r || !CORP_ROLES.includes(r)) {
+        router.replace('/login');
+        return;
+      }
+
+      const { data: prof } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', uid)
+        .maybeSingle();
+
+      setMe({ id: uid, name: prof?.full_name || 'Admin', role: r });
+
+      // Cargar datos en paralelo para que sea más rápido
+      await Promise.allSettled([
+        loadKpis(),
+        loadProducts(),
+        loadGlobalStock(),
+      ]);
+
+      setLoading(false);
+    } catch (err) {
+      console.error('Corp init error:', err);
+      setLoading(false); // mostrar algo aunque falle
+    }
   }
 
   async function loadKpis() {
