@@ -464,6 +464,7 @@ export default function StorePage() {
     { id: 'ventas',   ico: '📊', lbl: 'Ventas'   },
     { id: 'deudas',   ico: '💳', lbl: 'Deudas'   },
     { id: 'config',   ico: '⚙️', lbl: 'Config'   },
+    { href: '/biometrics', ico: '🔐', lbl: 'Mi Carnet QR' },
   ];
 
   return (
@@ -487,10 +488,12 @@ export default function StorePage() {
       {/* ── MOBILE DRAWER ── */}
       <div className={`mobile-nav-drawer${mobileMenuOpen ? ' open' : ''}`}>
         {STORE_NAV.map(t => (
-          <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
-            onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
-            <span className="ico">{t.ico}</span>{t.lbl}
-          </button>
+          t.href
+            ? <Link key={t.href} href={t.href} className="tab-btn" onClick={() => setMobileMenuOpen(false)}><span className="ico">{t.ico}</span>{t.lbl}</Link>
+            : <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
+                onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
+                <span className="ico">{t.ico}</span>{t.lbl}
+              </button>
         ))}
         <div style={{ display:'flex', gap:8, marginTop:4 }}>
           <button onClick={toggleTheme} style={{ flex:1, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'10px 0', color:'var(--text2)', cursor:'pointer', fontSize:18 }}>
@@ -1324,22 +1327,30 @@ export default function StorePage() {
       {/* TAB BAR — sidebar desktop */}
       <div className="tab-bar tab-bar-branded">
         <div className="sidebar-brand">
-          <div className="sidebar-brand-logo">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Corp Tech" />
+          <div className="sidebar-brand-top">
+            <div className="sidebar-brand-logo">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Corp Tech" />
+            </div>
+            <div className="sidebar-brand-info">
+              <div className="sidebar-brand-company">{orgName || 'Tienda'}</div>
+              <div className="sidebar-brand-user">{me?.name}</div>
+            </div>
           </div>
-          <div className="sidebar-brand-company">{orgName || 'Tienda'}</div>
-          <div className="sidebar-brand-user">{me?.name}</div>
-          <span className="badge badge-blue" style={{ fontSize:10, marginBottom:6 }}>{me?.role?.toUpperCase()}</span>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span className="badge badge-blue" style={{ fontSize:10 }}>{me?.role?.toUpperCase()}</span>
+          </div>
           <div className="sidebar-brand-actions">
             <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
             <button onClick={doLogout}>Salir</button>
           </div>
         </div>
         {STORE_NAV.map(t => (
-          <button key={t.id} className={`tab-btn${tab===t.id?' active':''}`} onClick={() => switchTab(t.id)}>
-            <span className="ico">{t.ico}</span>{t.lbl}
-          </button>
+          t.href
+            ? <Link key={t.href} href={t.href} className="tab-btn"><span className="ico">{t.ico}</span>{t.lbl}</Link>
+            : <button key={t.id} className={`tab-btn${tab===t.id?' active':''}`} onClick={() => switchTab(t.id)}>
+                <span className="ico">{t.ico}</span>{t.lbl}
+              </button>
         ))}
         <div className="sidebar-footer">
           Desarrollado por<br />

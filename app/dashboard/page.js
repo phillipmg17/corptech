@@ -185,6 +185,7 @@ export default function DashboardPage() {
     { id: 'stock',    ico: '📦', lbl: 'Stock'    },
     { id: 'clientes', ico: '👥', lbl: 'Clientes' },
     { id: 'ventas',   ico: '📊', lbl: 'Ventas'   },
+    { href: '/biometrics', ico: '🔐', lbl: 'Mi Carnet QR' },
   ];
 
   return (
@@ -208,10 +209,12 @@ export default function DashboardPage() {
       {/* ── MOBILE DRAWER ── */}
       <div className={`mobile-nav-drawer${mobileMenuOpen ? ' open' : ''}`}>
         {NAV_ITEMS.map(t => (
-          <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
-            onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
-            <span className="ico">{t.ico}</span>{t.lbl}
-          </button>
+          t.href
+            ? <Link key={t.href} href={t.href} className="tab-btn" onClick={() => setMobileMenuOpen(false)}><span className="ico">{t.ico}</span>{t.lbl}</Link>
+            : <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
+                onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
+                <span className="ico">{t.ico}</span>{t.lbl}
+              </button>
         ))}
         <div style={{ display:'flex', gap:8, marginTop:4 }}>
           <button onClick={toggleTheme} style={{ flex:1, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'10px 0', color:'var(--text2)', cursor:'pointer', fontSize:18 }}>
@@ -379,23 +382,30 @@ export default function DashboardPage() {
       <div className="tab-bar tab-bar-branded">
         {/* BRAND al tope del sidebar */}
         <div className="sidebar-brand">
-          <div className="sidebar-brand-logo">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Corp Tech" />
+          <div className="sidebar-brand-top">
+            <div className="sidebar-brand-logo">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Corp Tech" />
+            </div>
+            <div className="sidebar-brand-info">
+              <div className="sidebar-brand-company">{orgName}</div>
+              <div className="sidebar-brand-user">{profile?.full_name}</div>
+            </div>
           </div>
-          <div className="sidebar-brand-company">{orgName}</div>
-          <div className="sidebar-brand-user">{profile?.full_name}</div>
-          <span className="badge" style={{ background: BADGE_COLOR[role] || '#0A84FF', color:'#fff', fontSize:10, marginBottom:6 }}>{role?.toUpperCase()}</span>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span className="badge" style={{ background: BADGE_COLOR[role] || '#0A84FF', color:'#fff', fontSize:10 }}>{role?.toUpperCase()}</span>
+          </div>
           <div className="sidebar-brand-actions">
             <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
             <button onClick={doLogout}>Salir</button>
           </div>
         </div>
         {NAV_ITEMS.map(t => (
-          <button key={t.id} className={`tab-btn${tab===t.id ? ' active' : ''}`} onClick={() => switchTab(t.id)}>
-            <span className="ico">{t.ico}</span>
-            {t.lbl}
-          </button>
+          t.href
+            ? <Link key={t.href} href={t.href} className="tab-btn"><span className="ico">{t.ico}</span>{t.lbl}</Link>
+            : <button key={t.id} className={`tab-btn${tab===t.id ? ' active' : ''}`} onClick={() => switchTab(t.id)}>
+                <span className="ico">{t.ico}</span>{t.lbl}
+              </button>
         ))}
         <div className="sidebar-footer">
           Desarrollado por<br />

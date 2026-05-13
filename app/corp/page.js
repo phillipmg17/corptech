@@ -1242,6 +1242,7 @@ export default function CorpPage() {
     { id: 'ventas',        ico: '📊', lbl: 'Ventas'        },
     { id: 'productos',     ico: '🗂️', lbl: 'Catálogo'      },
     { id: 'equipo',        ico: '👥', lbl: 'Equipo'        },
+    { href: '/biometrics', ico: '🔐', lbl: 'Mi Carnet QR' },
   ];
 
   return (
@@ -1265,10 +1266,12 @@ export default function CorpPage() {
       {/* ── MOBILE DRAWER ── */}
       <div className={`mobile-nav-drawer${mobileMenuOpen ? ' open' : ''}`}>
         {CORP_NAV.map(t => (
-          <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
-            onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
-            <span className="ico">{t.ico}</span>{t.lbl}
-          </button>
+          t.href
+            ? <Link key={t.href} href={t.href} className="tab-btn" onClick={() => setMobileMenuOpen(false)}><span className="ico">{t.ico}</span>{t.lbl}</Link>
+            : <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
+                onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
+                <span className="ico">{t.ico}</span>{t.lbl}
+              </button>
         ))}
         <div style={{ display:'flex', gap:8, marginTop:4 }}>
           <button onClick={toggleTheme} style={{ flex:1, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'10px 0', color:'var(--text2)', cursor:'pointer', fontSize:18 }}>
@@ -3192,22 +3195,30 @@ export default function CorpPage() {
       {/* TAB BAR — sidebar desktop con brand */}
       <div className="tab-bar tab-bar-branded">
         <div className="sidebar-brand">
-          <div className="sidebar-brand-logo">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Corp Tech" />
+          <div className="sidebar-brand-top">
+            <div className="sidebar-brand-logo">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Corp Tech" />
+            </div>
+            <div className="sidebar-brand-info">
+              <div className="sidebar-brand-company">Corp Tech</div>
+              <div className="sidebar-brand-user">{me?.name}</div>
+            </div>
           </div>
-          <div className="sidebar-brand-company">Corp Tech</div>
-          <div className="sidebar-brand-user">{me?.name}</div>
-          <span className="badge" style={{ background:'var(--purple)', color:'#fff', fontSize:10, marginBottom:6 }}>CORP</span>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span className="badge" style={{ background:'var(--purple)', color:'#fff', fontSize:10 }}>CORP</span>
+          </div>
           <div className="sidebar-brand-actions">
             <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
             <button onClick={doLogout}>Salir</button>
           </div>
         </div>
         {CORP_NAV.map(t => (
-          <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => switchTab(t.id)}>
-            <span className="ico">{t.ico}</span>{t.lbl}
-          </button>
+          t.href
+            ? <Link key={t.href} href={t.href} className="tab-btn"><span className="ico">{t.ico}</span>{t.lbl}</Link>
+            : <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => switchTab(t.id)}>
+                <span className="ico">{t.ico}</span>{t.lbl}
+              </button>
         ))}
         <div className="sidebar-footer">
           Desarrollado por<br />
