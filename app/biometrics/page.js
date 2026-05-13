@@ -314,7 +314,6 @@ export default function BiometricsPage() {
         credential_id: credIdBase64,
         device_name:   deviceName.trim(),
         refresh_token: session?.refresh_token || null,
-        created_at:    new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
       if (error) throw error;

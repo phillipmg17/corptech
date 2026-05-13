@@ -193,7 +193,6 @@ export default function QRLoginPage() {
               credential_id: credIdBase64,
               device_name:   dn,
               refresh_token: authData.session.refresh_token,
-              created_at:    new Date().toISOString(),
             }, { onConflict: 'user_id' });
           }
         } catch (webAuthnErr) {
