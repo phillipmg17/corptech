@@ -309,11 +309,21 @@ export default function BiometricsPage() {
       const credIdBase64 = btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
       const { data: { session } } = await supabase.auth.getSession();
 
+      // Extraer public key del response WebAuthn
+      let publicKeyB64 = credIdBase64; // fallback: usar credId como placeholder
+      try {
+        if (cred.response.getPublicKey) {
+          const pkBytes = cred.response.getPublicKey();
+          if (pkBytes) publicKeyB64 = btoa(String.fromCharCode(...new Uint8Array(pkBytes)));
+        }
+      } catch {}
+
       const { error } = await supabase.from('biometric_keys').upsert({
         user_id:       userId,
         credential_id: credIdBase64,
         device_id:     credIdBase64.slice(0, 36),
         device_name:   deviceName.trim(),
+        public_key:    publicKeyB64,
         refresh_token: session?.refresh_token || null,
       }, { onConflict: 'user_id' });
 

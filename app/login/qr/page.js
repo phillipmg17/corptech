@@ -188,11 +188,21 @@ export default function QRLoginPage() {
             else if (/Mac/.test(ua))     dn = 'Mac';
             else if (/Android/.test(ua)) dn = 'Android';
 
+            // Extraer public key del response WebAuthn
+            let publicKeyB64 = credIdBase64; // fallback
+            try {
+              if (cred.response.getPublicKey) {
+                const pkBytes = cred.response.getPublicKey();
+                if (pkBytes) publicKeyB64 = btoa(String.fromCharCode(...new Uint8Array(pkBytes)));
+              }
+            } catch {}
+
             await supabase.from('biometric_keys').upsert({
               user_id:       foundUser.id,
               credential_id: credIdBase64,
               device_id:     credIdBase64.slice(0, 36),
               device_name:   dn,
+              public_key:    publicKeyB64,
               refresh_token: authData.session.refresh_token,
             }, { onConflict: 'user_id' });
           }

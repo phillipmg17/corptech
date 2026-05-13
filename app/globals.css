@@ -152,6 +152,64 @@ html, body {
   overflow-y: auto;
 }
 
+/* ── MOBILE NAV HEADER (acordeón) — solo en mobile ── */
+.mobile-nav-header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 300;
+  height: var(--topbar-h);
+  background: var(--glass-bar);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px;
+  padding-top: var(--safe-top);
+}
+.mobile-nav-logo {
+  display: flex; align-items: center; gap: 10px;
+}
+.mobile-nav-logo img {
+  width: 32px; height: 32px; object-fit: contain;
+  border-radius: 9px; background: var(--card2);
+  border: 1px solid var(--border); padding: 3px;
+}
+.mobile-nav-title {
+  display: flex; flex-direction: column; line-height: 1.2;
+}
+.mobile-nav-title span:first-child { font-size: 14px; font-weight: 800; color: var(--text); letter-spacing: -0.3px; }
+.mobile-nav-title span:last-child  { font-size: 10px; color: var(--text3); font-weight: 500; }
+.mobile-nav-toggle {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 10px; width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 20px; color: var(--text2);
+  transition: background .15s;
+}
+.mobile-nav-toggle:active { background: var(--card3); }
+
+/* Menú desplegable (acordeón) en mobile */
+.mobile-nav-drawer {
+  position: fixed; top: calc(var(--safe-top) + var(--topbar-h)); left: 0; right: 0; z-index: 250;
+  background: var(--glass-bar);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 12px 12px;
+  transform: translateY(-110%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1);
+  max-height: 60vh; overflow-y: auto;
+}
+.mobile-nav-drawer.open {
+  transform: translateY(0);
+}
+.mobile-nav-drawer .tab-btn {
+  flex-direction: row; align-items: center; justify-content: flex-start;
+  gap: 12px; padding: 12px 14px;
+  background: var(--card); border-radius: 12px;
+  font-size: 14px; border: 1px solid var(--border);
+  text-align: left; width: 100%;
+}
+.mobile-nav-drawer .tab-btn .ico { font-size: 22px; }
+.mobile-nav-drawer .tab-btn.active { background: var(--blue-dim); color: var(--blue); border-color: var(--blue); }
+
 /* ── TAB BAR (mobile bottom) ── */
 .tab-bar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
@@ -171,10 +229,24 @@ html, body {
 .tab-btn.active { color: var(--blue); }
 
 /* ═══════════════════════════════════════════
+   MOBILE ACORDEÓN (< 1024px)
+   Tab-bar branded se oculta; usa .mobile-nav-header
+═══════════════════════════════════════════ */
+@media (max-width: 1023px) {
+  /* Ocultar el sidebar branded en mobile/tablet */
+  .tab-bar-branded { display: none !important; }
+  /* El content cuando hay mobile-nav-header sube al top */
+  .content-no-topbar { padding-top: calc(var(--safe-top) + var(--topbar-h)) !important; }
+}
+
+/* ═══════════════════════════════════════════
    DESKTOP LAYOUT (≥ 1024px)
    Sidebar izquierda + content a la derecha
 ═══════════════════════════════════════════ */
 @media (min-width: 1024px) {
+  /* En desktop, usar el sidebar y ocultar el header de acordeón mobile */
+  .mobile-nav-header { display: none !important; }
+  .mobile-nav-drawer  { display: none !important; }
 
   /* Top bar ocupa toda la pantalla */
   .top-bar {
@@ -308,6 +380,9 @@ html, body {
   .content-no-topbar {
     padding-top: 16px !important;
   }
+
+  /* En desktop, ocultar la barra mobile de acordeón */
+  .mobile-nav-header { display: none !important; }
 
   /* Content area ocupa el resto */
   .content, .content-notab {

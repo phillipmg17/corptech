@@ -45,9 +45,10 @@ export default function SuperadminPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
 
-  const [loading,   setLoading]   = useState(true);
-  const [me,        setMe]        = useState(null);
-  const [tab,       setTab]       = useState('dashboard');
+  const [loading,        setLoading]        = useState(true);
+  const [me,             setMe]             = useState(null);
+  const [tab,            setTab]            = useState('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toast,     setToast]     = useState(null);
   const [modal,     setModal]     = useState(null);
   const [form,      setForm]      = useState({});
@@ -333,10 +334,53 @@ export default function SuperadminPage() {
     <div className="auth-screen"><div className="loading-wrap"><div className="spinner" /></div></div>
   );
 
+  const NAV_ITEMS = [
+    { id: 'dashboard', ico: '⚡', lbl: 'Dashboard' },
+    { id: 'usuarios',  ico: '👥', lbl: 'Usuarios'  },
+    { id: 'creditos',  ico: '💎', lbl: 'Créditos'  },
+    { id: 'apis',      ico: '🔑', lbl: 'APIs'      },
+    { id: 'funciones', ico: '🧩', lbl: 'Funciones' },
+    { id: 'bugs',      ico: '🐛', lbl: 'Bugs'      },
+    { id: 'qa',        ico: '🧪', lbl: 'QA'        },
+  ];
+
   return (
     <div className="page-wrap">
 
-      {/* TOP BAR */}
+      {/* ── MOBILE NAV HEADER (acordeón) — solo visible en mobile/tablet ── */}
+      <div className="mobile-nav-header">
+        <div className="mobile-nav-logo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Corp Tech" />
+          <div className="mobile-nav-title">
+            <span>Corp Tech</span>
+            <span>{me?.name}</span>
+          </div>
+        </div>
+        <button className="mobile-nav-toggle" onClick={() => setMobileMenuOpen(o => !o)}>
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
+      </div>
+
+      {/* ── MOBILE DRAWER (menú acordeón) ── */}
+      <div className={`mobile-nav-drawer${mobileMenuOpen ? ' open' : ''}`}>
+        {NAV_ITEMS.map(t => (
+          <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`}
+            onClick={() => { switchTab(t.id); setMobileMenuOpen(false); }}>
+            <span className="ico">{t.ico}</span>{t.lbl}
+          </button>
+        ))}
+        <div style={{ display:'flex', gap:8, marginTop:4 }}>
+          <button onClick={toggleTheme} style={{ flex:1, background:'var(--card)', border:'1px solid var(--border)', borderRadius:12, padding:'10px 0', color:'var(--text2)', cursor:'pointer', fontSize:18 }}>
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button onClick={doLogout} style={{ flex:2, background:'var(--red-dim)', border:'1px solid var(--red)', borderRadius:12, padding:'10px 0', color:'var(--red)', cursor:'pointer', fontWeight:700, fontSize:13, fontFamily:'inherit' }}>
+            Cerrar sesión
+          </button>
+        </div>
+      </div>
+
+      {/* TOP BAR — solo desktop, se oculta en mobile/tablet */}
       <div className="top-bar top-bar-desktop-hidden">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width:40, height:40, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
@@ -892,15 +936,7 @@ export default function SuperadminPage() {
             <button onClick={doLogout}>Salir</button>
           </div>
         </div>
-        {[
-          { id: 'dashboard', ico: '⚡', lbl: 'Dashboard' },
-          { id: 'usuarios',  ico: '👥', lbl: 'Usuarios'  },
-          { id: 'creditos',  ico: '💎', lbl: 'Créditos'  },
-          { id: 'apis',      ico: '🔑', lbl: 'APIs'      },
-          { id: 'funciones', ico: '🧩', lbl: 'Funciones' },
-          { id: 'bugs',      ico: '🐛', lbl: 'Bugs'      },
-          { id: 'qa',        ico: '🧪', lbl: 'QA'        },
-        ].map(t => (
+        {NAV_ITEMS.map(t => (
           <button key={t.id} className={`tab-btn${tab === t.id ? ' active' : ''}`} onClick={() => switchTab(t.id)}>
             <span className="ico">{t.ico}</span>{t.lbl}
           </button>
