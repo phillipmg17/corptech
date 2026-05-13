@@ -1524,9 +1524,22 @@ export default function CorpPage() {
                           position: 'relative',
                         }}>
                           {p.image_url
-                            ? <img src={p.image_url} alt={p.name} style={{ maxHeight: 120, maxWidth: '85%', objectFit: 'contain' }} />
-                            : <span style={{ fontSize: 56 }}>{p.emoji || '📦'}</span>
+                            ? <img
+                                src={p.image_url}
+                                alt={p.name}
+                                style={{ maxHeight: 120, maxWidth: '85%', objectFit: 'contain' }}
+                                onError={e => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            : null
                           }
+                          <span style={{
+                            fontSize: 56,
+                            display: p.image_url ? 'none' : 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                          }}>{p.emoji || '📦'}</span>
                           {/* Badge categoría */}
                           <span style={{
                             position: 'absolute', top: 10, right: 10,
