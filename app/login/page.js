@@ -120,7 +120,9 @@ export default function LoginPage() {
   const [orgId,  setOrgId]  = useState('');
   const [role,   setRole]   = useState('vendedor');
   /* passkey */
-  const [pkEmail, setPkEmail] = useState('');
+  const [pkEmail,    setPkEmail]    = useState('');
+  const [pkRenew,    setPkRenew]    = useState(null); // { credId, userId } cuando token expiró
+  const [pkPassword, setPkPassword] = useState('');
   /* magic link */
   const [mgEmail,  setMgEmail]  = useState('');
   const [mgSent,   setMgSent]   = useState(false);
@@ -159,8 +161,8 @@ export default function LoginPage() {
   }
 
   function clearAlerts() { setError(''); setSuccess(''); }
-  function selectMethod(id) { setMethod(id); setSubMode('login'); clearAlerts(); }
-  function goBack() { setMethod(null); setMgSent(false); clearAlerts(); }
+  function selectMethod(id) { setMethod(id); setSubMode('login'); setPkRenew(null); setPkPassword(''); clearAlerts(); }
+  function goBack() { setMethod(null); setMgSent(false); setPkRenew(null); setPkPassword(''); clearAlerts(); }
 
   /* ──────────────── PASSKEY LOGIN ──────────────── */
   async function doPasskeyLogin(e) {
@@ -214,7 +216,8 @@ export default function LoginPage() {
         .maybeSingle();
 
       if (!bkRow?.refresh_token) {
-        setError('Passkey no vinculada a ninguna sesión. Usa Magic Link para restablecer el acceso.');
+        /* Passkey encontrada pero sin token → pedir contraseña para vincular */
+        setPkRenew({ credId: assertCredId, userId: bkRow?.user_id || userId });
         setLoading(false); return;
       }
 
@@ -223,11 +226,12 @@ export default function LoginPage() {
       });
 
       if (refreshErr || !session) {
-        setError('Sesión expirada. Usa ✉️ Magic Link para renovar tu acceso sin contraseña.');
+        /* Token expirado → pedir contraseña para renovar (Face ID ya probó identidad) */
+        setPkRenew({ credId: assertCredId, userId: bkRow.user_id });
         setLoading(false); return;
       }
 
-      /* Actualizar token y last_used */
+      /* ✓ Todo ok: actualizar token y redirigir */
       await supabase.from('biometric_keys')
         .update({ refresh_token: session.refresh_token, last_used: new Date().toISOString() })
         .eq('credential_id', assertCredId);
@@ -245,6 +249,40 @@ export default function LoginPage() {
       }
       setLoading(false);
     }
+  }
+
+  /* ──────────────── RENOVAR SESIÓN PASSKEY (token expirado) ──────────────── */
+  async function doRenewPasskey(e) {
+    e.preventDefault();
+    if (!pkRenew || !pkPassword) return;
+    setLoading(true); clearAlerts();
+
+    /* Iniciar sesión con contraseña para obtener token fresco */
+    const emailToUse = pkEmail.trim() || '';
+    if (!emailToUse) { setError('Ingresa tu email para renovar.'); setLoading(false); return; }
+
+    const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+      email: emailToUse, password: pkPassword,
+    });
+
+    if (authErr || !authData?.session) {
+      setError('Contraseña incorrecta. Intenta de nuevo.');
+      setLoading(false); return;
+    }
+
+    /* Actualizar refresh_token en biometric_keys para este credential */
+    await supabase.from('biometric_keys')
+      .update({ refresh_token: authData.session.refresh_token, last_used: new Date().toISOString() })
+      .eq('credential_id', pkRenew.credId);
+
+    /* También actualizar otros credentials del mismo usuario por si acaso */
+    await supabase.from('biometric_keys')
+      .update({ refresh_token: authData.session.refresh_token })
+      .eq('user_id', authData.user.id)
+      .neq('credential_id', pkRenew.credId);
+
+    const dest = await getRedirectPath(authData.user.id);
+    router.replace(dest);
   }
 
   /* ──────────────── MAGIC LINK ──────────────── */
@@ -382,7 +420,7 @@ export default function LoginPage() {
             )}
 
             {/* ══════════ PASSKEY ══════════ */}
-            {method === 'passkey' && (
+            {method === 'passkey' && !pkRenew && (
               <form onSubmit={doPasskeyLogin}>
                 <p style={{ fontSize:13, color:'rgba(255,255,255,0.45)', lineHeight:1.6, marginBottom:18, textAlign:'center' }}>
                   Ingresa tu email para encontrar tu llave, o déjalo vacío si usas una Passkey descubrible de iCloud.
@@ -408,6 +446,66 @@ export default function LoginPage() {
                     Usa Magic Link →
                   </button>
                 </div>
+              </form>
+            )}
+
+            {/* ── Renovación de sesión expirada (Face ID verificó identidad, solo falta contraseña) ── */}
+            {method === 'passkey' && pkRenew && (
+              <form onSubmit={doRenewPasskey}>
+                {/* Encabezado informativo */}
+                <div style={{ textAlign:'center', marginBottom:18 }}>
+                  <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
+                  <div style={{ fontSize:15, fontWeight:700, color:'#fff', marginBottom:4 }}>Face ID verificado</div>
+                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.35)', lineHeight:1.6 }}>
+                    Tu sesión expiró por inactividad.<br/>
+                    Ingresa tu contraseña una última vez para renovarla. Después usarás solo Face ID.
+                  </div>
+                </div>
+
+                {/* Email (puede estar pre-llenado o necesitar ingresarlo) */}
+                {!pkEmail && (
+                  <div style={{ marginBottom:12 }}>
+                    <label style={S.label}>Correo electrónico</label>
+                    <input
+                      className="q-input"
+                      type="email"
+                      placeholder="tu@email.com"
+                      value={pkEmail}
+                      onChange={e => { setPkEmail(e.target.value); clearAlerts(); }}
+                      required
+                    />
+                  </div>
+                )}
+                {pkEmail && (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'rgba(255,255,255,0.05)', borderRadius:10, marginBottom:12 }}>
+                    <span style={{ fontSize:14 }}>✉️</span>
+                    <span style={{ fontSize:13, color:'rgba(255,255,255,0.5)' }}>{pkEmail}</span>
+                  </div>
+                )}
+
+                <div style={{ marginBottom:16 }}>
+                  <label style={S.label}>Contraseña (una sola vez)</label>
+                  <input
+                    className="q-input"
+                    type="password"
+                    placeholder="••••••••"
+                    value={pkPassword}
+                    onChange={e => { setPkPassword(e.target.value); clearAlerts(); }}
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                <button className="q-btn" type="submit" disabled={loading}
+                  style={{ background:'linear-gradient(135deg,#0A84FF,#5E5CE6)', boxShadow:'0 6px 24px rgba(10,132,255,0.3)', marginBottom:10 }}>
+                  {loading ? <><Spinner /> Renovando...</> : '🔑 Renovar sesión y entrar'}
+                </button>
+
+                <button type="button" className="q-btn"
+                  onClick={() => { setPkRenew(null); setPkPassword(''); clearAlerts(); }}
+                  style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)' }}>
+                  ← Volver a Face ID
+                </button>
               </form>
             )}
 
