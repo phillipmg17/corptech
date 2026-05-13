@@ -67,9 +67,10 @@ export default function AuthPage() {
       .limit(1)
       .single();
     const r = data?.role || 'vendedor';
-    if (r === 'superadmin') return '/superadmin';
-    if (r === 'corp')       return '/corp';
-    if (r === 'gerente')    return '/store';
+    if (r === 'superadmin')                          return '/superadmin';
+    if (r === 'corp'      || r === 'admin_corp')     return '/corp';
+    if (r === 'gerente'   || r === 'store_manager'
+                          || r === 'store_admin')    return '/store';
     return '/pos';
   }
 
