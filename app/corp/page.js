@@ -96,6 +96,15 @@ export default function CorpPage() {
   const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
   const [batchText,     setBatchText]     = useState('');
 
+  /* ── TIENDAS & GESTIÓN DE USUARIOS ── */
+  const [storeUsers,            setStoreUsers]            = useState([]);
+  const [storeUsersLoading,     setStoreUsersLoading]     = useState(false);
+  const [selectedStoreForUsers, setSelectedStoreForUsers] = useState(STORES[0].id);
+  const [creatingUser,          setCreatingUser]          = useState(false);
+  const [newUserForm,           setNewUserForm]           = useState({
+    full_name: '', email: '', password: '', role: 'vendedor', org_id: STORES[0].id,
+  });
+
   useEffect(() => { init(); }, []);
 
   async function init() {
@@ -1125,6 +1134,41 @@ export default function CorpPage() {
     if (t === 'finanzas')       loadFinanzas();
     if (t === 'liquidaciones') { loadLiquidaciones(); loadPlataformas(); loadLiqPlat(); loadCalendarioAll(); }
     if (t === 'imei')         { loadImeiCredits(); loadImeiHistory(); }
+    if (t === 'tiendas')      loadStoreUsers(selectedStoreForUsers);
+  }
+
+  async function loadStoreUsers(storeId) {
+    setStoreUsersLoading(true);
+    const sid = storeId || selectedStoreForUsers;
+    const { data } = await supabase
+      .from('users')
+      .select('id, full_name, email, user_roles(role)')
+      .eq('org_id', sid)
+      .order('full_name');
+    setStoreUsers(data || []);
+    setStoreUsersLoading(false);
+  }
+
+  async function createStoreUser(e) {
+    e.preventDefault();
+    setCreatingUser(true);
+    try {
+      const res = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUserForm),
+      });
+      const json = await res.json();
+      if (!res.ok) { showToast('Error: ' + (json.error || 'Inténtalo de nuevo'), 'err'); return; }
+      showToast('✅ Usuario creado correctamente', 'ok');
+      setModal(null);
+      setNewUserForm({ full_name:'', email:'', password:'', role:'vendedor', org_id: selectedStoreForUsers });
+      await loadStoreUsers(selectedStoreForUsers);
+    } catch (err) {
+      showToast('Error de conexión', 'err');
+    } finally {
+      setCreatingUser(false);
+    }
   }
 
   useEffect(() => {
@@ -1499,6 +1543,100 @@ export default function CorpPage() {
             </div>
           );
         })()}
+
+        {/* ══════════════════════════════════════
+            TAB: TIENDAS
+        ══════════════════════════════════════ */}
+        {tab === 'tiendas' && (
+          <div style={{ padding: '16px', paddingBottom: 48 }}>
+
+            {/* ─ Acceso Rápido ─ */}
+            <div className="section-title" style={{ marginBottom: 12 }}>🏪 Acceso Rápido</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 24 }}>
+              {STORES.map(s => (
+                <div key={s.id} style={{
+                  background: 'var(--card)', border: '1px solid var(--border)',
+                  borderRadius: 18, padding: '16px 10px', textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 30, marginBottom: 6 }}>{s.ico}</div>
+                  <div style={{ fontWeight: 800, fontSize: 12, marginBottom: 10, lineHeight: 1.3 }}>{s.name}</div>
+                  <button
+                    className="btn-primary"
+                    style={{ width: '100%', fontSize: 11, padding: '8px 4px', borderRadius: 10 }}
+                    onClick={() => {
+                      localStorage.setItem('corp_selected_store', s.id);
+                      localStorage.setItem('corp_selected_store_name', s.name);
+                      router.push('/store');
+                    }}>
+                    Ingresar →
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* ─ Gestión de Usuarios ─ */}
+            <div className="section-header">
+              <div className="section-title">👥 Usuarios por Tienda</div>
+              <button className="section-action" onClick={() => {
+                setModal('create-user');
+                setNewUserForm({ full_name: '', email: '', password: '', role: 'vendedor', org_id: selectedStoreForUsers });
+              }}>+ Nuevo</button>
+            </div>
+
+            {/* Pills selector de tienda */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+              {STORES.map(s => (
+                <button key={s.id} type="button"
+                  onClick={() => { setSelectedStoreForUsers(s.id); loadStoreUsers(s.id); }}
+                  style={{
+                    padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    border: `1.5px solid ${selectedStoreForUsers === s.id ? '#0A84FF' : 'var(--border)'}`,
+                    background: selectedStoreForUsers === s.id ? 'rgba(10,132,255,0.15)' : 'transparent',
+                    color: selectedStoreForUsers === s.id ? '#0A84FF' : 'var(--text3)',
+                    transition: 'all .15s',
+                  }}>
+                  {s.ico} {s.name}
+                </button>
+              ))}
+            </div>
+
+            {/* Lista de usuarios */}
+            {storeUsersLoading ? (
+              <div className="empty-msg">Cargando usuarios...</div>
+            ) : storeUsers.length === 0 ? (
+              <div className="empty-msg">
+                Sin usuarios en esta tienda.{' '}
+                <span style={{ color: 'var(--blue)', cursor: 'pointer', fontWeight: 700 }}
+                  onClick={() => {
+                    setModal('create-user');
+                    setNewUserForm({ full_name: '', email: '', password: '', role: 'vendedor', org_id: selectedStoreForUsers });
+                  }}>
+                  Crear primero →
+                </span>
+              </div>
+            ) : (
+              <div className="card">
+                {storeUsers.map(u => {
+                  const role = u.user_roles?.[0]?.role || '—';
+                  const roleColor = role === 'store_admin' ? '#FF9F0A' : role === 'vendedor' ? '#30D158' : 'var(--text3)';
+                  const roleLabel = role === 'store_admin' ? '🏪 Admin Tienda' : role === 'vendedor' ? '🛒 Vendedor' : role;
+                  return (
+                    <div className="list-item" key={u.id}>
+                      <div className="list-item-ico">👤</div>
+                      <div className="list-item-body">
+                        <div className="list-item-name">{u.full_name}</div>
+                        <div className="list-item-sub">
+                          <span style={{ color: roleColor, fontWeight: 700 }}>{roleLabel}</span>
+                          {' · '}{u.email}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ══════════════════════════════════════
             TAB: EQUIPO
@@ -3006,6 +3144,7 @@ export default function CorpPage() {
       {/* TAB BAR — scrollable on mobile */}
       <div className="tab-bar" style={{ overflowX: 'auto' }}>
         {[
+          { id: 'tiendas',       ico: '🏪', lbl: 'Tiendas'      },
           { id: 'global',        ico: '📦', lbl: 'Stock'        },
           { id: 'finanzas',      ico: '💰', lbl: 'Finanzas'     },
           { id: 'liquidaciones', ico: '💳', lbl: 'Liquidaciones' },
@@ -3030,6 +3169,95 @@ export default function CorpPage() {
         <div className="modal-backdrop" onClick={() => setModal(null)}>
           <div className="modal-sheet" onClick={e => e.stopPropagation()}>
             <div className="modal-drag" />
+
+            {/* ── MODAL: Crear Usuario de Tienda ── */}
+            {modal === 'create-user' && (
+              <>
+                <div className="modal-title">👤 Nuevo Usuario de Tienda</div>
+                <form onSubmit={createStoreUser} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                  <div className="form-group">
+                    <label className="form-label">Nombre completo</label>
+                    <input className="form-input" required
+                      placeholder="Juan García"
+                      value={newUserForm.full_name}
+                      onChange={e => setNewUserForm({ ...newUserForm, full_name: e.target.value })} />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Email</label>
+                    <input className="form-input" type="email" required
+                      placeholder="juan@correo.com"
+                      value={newUserForm.email}
+                      onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })} />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Contraseña inicial</label>
+                    <input className="form-input" type="password" required minLength={6}
+                      placeholder="Mínimo 6 caracteres"
+                      value={newUserForm.password}
+                      onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Rol</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {[
+                        { v: 'store_admin', l: '🏪 Admin Tienda', d: 'Gestiona stock, ventas y equipo' },
+                        { v: 'vendedor',    l: '🛒 Vendedor',     d: 'Solo accede al POS para vender' },
+                      ].map(r => (
+                        <button key={r.v} type="button"
+                          onClick={() => setNewUserForm({ ...newUserForm, role: r.v })}
+                          style={{
+                            flex: 1, padding: '10px 8px', borderRadius: 12, cursor: 'pointer',
+                            border: `1.5px solid ${newUserForm.role === r.v ? '#0A84FF' : 'var(--border)'}`,
+                            background: newUserForm.role === r.v ? 'rgba(10,132,255,0.15)' : 'transparent',
+                            color: newUserForm.role === r.v ? '#0A84FF' : 'var(--text)',
+                            textAlign: 'center', transition: 'all .15s',
+                          }}>
+                          <div style={{ fontWeight: 800, fontSize: 12 }}>{r.l}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>{r.d}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Asignar a tienda</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {STORES.map(s => (
+                        <button key={s.id} type="button"
+                          onClick={() => setNewUserForm({ ...newUserForm, org_id: s.id })}
+                          style={{
+                            flex: 1, padding: '8px 6px', borderRadius: 12, cursor: 'pointer', textAlign: 'center',
+                            border: `1.5px solid ${newUserForm.org_id === s.id ? '#30D158' : 'var(--border)'}`,
+                            background: newUserForm.org_id === s.id ? 'rgba(48,209,88,0.15)' : 'transparent',
+                            color: newUserForm.org_id === s.id ? '#30D158' : 'var(--text)',
+                            fontWeight: 700, fontSize: 12, transition: 'all .15s',
+                          }}>
+                          {s.ico} {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Aviso: necesita SUPABASE_SERVICE_ROLE_KEY */}
+                  <div style={{
+                    background: 'rgba(255,159,10,0.12)', border: '1px solid rgba(255,159,10,0.3)',
+                    borderRadius: 12, padding: '10px 14px', fontSize: 12, color: '#FF9F0A',
+                  }}>
+                    ⚠️ Requiere <strong>SUPABASE_SERVICE_ROLE_KEY</strong> en variables de entorno Vercel.
+                    Ve a Vercel → tu proyecto → Settings → Environment Variables.
+                  </div>
+
+                  <button type="submit" className="btn-primary" disabled={creatingUser}
+                    style={{ marginTop: 4, padding: '13px', fontSize: 15, fontWeight: 800 }}>
+                    {creatingUser ? '⏳ Creando...' : '✅ Crear Usuario'}
+                  </button>
+                </form>
+              </>
+            )}
 
             {/* ── MODAL: Nuevo / Editar Producto ── */}
             {modal === 'add-product' && (() => {

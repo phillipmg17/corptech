@@ -106,16 +106,28 @@ export default function StorePage() {
     const { data: prof } = await supabase.from('users').select('org_id, full_name, organizations(name)').eq('id', uid).single();
     const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
     const r = roleRow?.role;
-    if (!r || (r !== 'gerente' && r !== 'vendedor' && r !== 'superadmin' && r !== 'corp' && r !== 'store_manager')) {
+    const ALLOWED = ['gerente','vendedor','superadmin','corp','store_manager','admin_corp','store_admin'];
+    if (!r || !ALLOWED.includes(r)) {
       router.replace('/dashboard'); return;
     }
     setMe({ id: uid, name: prof?.full_name, role: r });
-    setOrgId(prof?.org_id);
-    setOrgName(prof?.organizations?.name || 'Tienda');
+
+    // admin_corp: usa la tienda seleccionada desde el Corp Panel
+    let oid = prof?.org_id;
+    let oname = prof?.organizations?.name || 'Tienda';
+    if (r === 'admin_corp' || r === 'superadmin' || r === 'corp') {
+      const override = typeof window !== 'undefined' ? localStorage.getItem('corp_selected_store') : null;
+      const overrideName = typeof window !== 'undefined' ? localStorage.getItem('corp_selected_store_name') : null;
+      if (override) { oid = override; oname = overrideName || 'Tienda'; }
+      else { router.replace('/corp'); return; } // sin tienda seleccionada → volver a corp
+    }
+
+    setOrgId(oid);
+    setOrgName(oname);
     setLoading(false);
-    loadTab('stock', prof?.org_id);
-    loadProducts(prof?.org_id);
-    loadConfig(prof?.org_id);
+    loadTab('stock', oid);
+    loadProducts(oid);
+    loadConfig(oid);
   }
 
   async function loadTab(t, oid) {
@@ -450,8 +462,12 @@ export default function StorePage() {
       {/* TOP BAR */}
       <div className="top-bar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Link href="/dashboard" className="top-btn">🏠</Link>
-          <Link href="/pos"       className="top-btn">🛒</Link>
+          {(me?.role === 'admin_corp' || me?.role === 'corp' || me?.role === 'superadmin') ? (
+            <Link href="/corp" className="top-btn" title="Volver a Corp Panel">‹ Corp</Link>
+          ) : (
+            <Link href="/dashboard" className="top-btn">🏠</Link>
+          )}
+          <Link href="/pos" className="top-btn">🛒</Link>
           <div>
             <div className="top-bar-title">🏪 {orgName}</div>
             <div className="top-bar-sub">{me?.name}</div>
