@@ -338,18 +338,21 @@ export default function SuperadminPage() {
 
       {/* TOP BAR */}
       <div className="top-bar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 24 }}>⚡</span>
-          <div>
-            <div className="top-bar-title">SuperAdmin</div>
-            <div className="top-bar-sub">{me?.name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width:40, height:40, borderRadius:12, background:'var(--card2)', border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Corp Tech" style={{ width:32, height:32, objectFit:'contain' }} />
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', lineHeight:1.2 }}>
+            <span style={{ fontSize:15, fontWeight:800, color:'var(--text)', letterSpacing:'-0.3px' }}>Corp Tech</span>
+            <span style={{ fontSize:11, color:'var(--text3)', fontWeight:500 }}>{me?.name}</span>
           </div>
         </div>
         <div className="top-bar-actions">
           <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
-          <Link href="/dashboard" className="top-btn" title="Dashboard">🏠</Link>
+          <span className="badge" style={{ background:'#BF5AF2', color:'#fff', fontSize:11 }}>SUPERADMIN</span>
           <button className="top-btn-logout" onClick={doLogout}>Salir</button>
         </div>
       </div>
