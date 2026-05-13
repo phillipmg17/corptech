@@ -39,6 +39,8 @@ export default function BiometricsPage() {
   const [savingImg,      setSavingImg]      = useState(false);
   const [showWallet,     setShowWallet]     = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [qrUnlocked,     setQrUnlocked]     = useState(false);   // FaceID desbloqueó el QR
+  const [unlocking,      setUnlocking]      = useState(false);
 
   /* ── cargar qrcodejs una sola vez ── */
   useEffect(() => {
@@ -77,9 +79,9 @@ export default function BiometricsPage() {
     setLoading(false);
   }
 
-  /* ── generar QR en el preview ── */
+  /* ── generar QR solo cuando está desbloqueado ── */
   useEffect(() => {
-    if (!userId || !qrPreviewRef.current) return;
+    if (!userId || !qrUnlocked || !qrPreviewRef.current) return;
     const tryRender = () => {
       if (!qrLibLoaded.current || !window.QRCode) {
         setTimeout(tryRender, 200);
@@ -96,7 +98,27 @@ export default function BiometricsPage() {
       });
     };
     tryRender();
-  }, [userId]);
+  }, [userId, qrUnlocked]);
+
+  /* ── Desbloquear QR con FaceID/Huella ── */
+  async function unlockQR() {
+    if (!window.PublicKeyCredential) { setQrUnlocked(true); return; } // Si no hay WebAuthn, mostrar directo
+    setUnlocking(true);
+    try {
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          userVerification: 'required',
+          timeout: 60000,
+        },
+      });
+      setQrUnlocked(true);
+    } catch (err) {
+      if (err.name !== 'NotAllowedError') setQrUnlocked(true); // si no hay cred aún, igual mostrar
+    }
+    setUnlocking(false);
+  }
 
   async function loadBiometrics(uid) {
     const { data } = await supabase
@@ -518,11 +540,18 @@ export default function BiometricsPage() {
               </div>
               <div style={{ fontSize:10, color:'#888', marginBottom:12 }}>{orgName}</div>
 
-              {/* QR generado inline (sin red) */}
-              <div
-                ref={qrPreviewRef}
-                style={{ borderRadius:10, overflow:'hidden', background:'#fff', lineHeight:0 }}
-              />
+              {/* QR — bloqueado por FaceID hasta que el usuario verifique */}
+              {qrUnlocked ? (
+                <div ref={qrPreviewRef} style={{ borderRadius:10, overflow:'hidden', background:'#fff', lineHeight:0 }} />
+              ) : (
+                <div style={{ width:150, height:150, borderRadius:12, background:'#f0f0f0', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, cursor:'pointer' }}
+                  onClick={unlockQR}>
+                  <div style={{ fontSize:36 }}>{unlocking ? '⏳' : '🔐'}</div>
+                  <div style={{ fontSize:10, color:'#888', fontWeight:700, textAlign:'center', lineHeight:1.4 }}>
+                    {unlocking ? 'Verificando...' : 'Toca para\nver QR'}
+                  </div>
+                </div>
+              )}
 
               <div style={{ fontSize:9, color:'#bbb', marginTop:8 }}>
                 {userId.slice(0, 8).toUpperCase()}

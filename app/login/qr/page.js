@@ -242,14 +242,18 @@ export default function QRLoginPage() {
   async function confirmBiometric() {
     setStep('loading');
     try {
-      const credId      = foundUser.credential_id;
-      const credIdBytes = Uint8Array.from(atob(credId), c => c.charCodeAt(0));
-      const challenge   = crypto.getRandomValues(new Uint8Array(32));
+      // Obtener todos los credentials del usuario para este dispositivo
+      const allCreds = (foundUser.biometrics || []).map(b => {
+        try {
+          return { type: 'public-key', id: Uint8Array.from(atob(b.credential_id), c => c.charCodeAt(0)) };
+        } catch { return null; }
+      }).filter(Boolean);
 
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
       const assertion = await navigator.credentials.get({
         publicKey: {
           challenge,
-          allowCredentials: [{ type: 'public-key', id: credIdBytes }],
+          allowCredentials: allCreds.length > 0 ? allCreds : undefined,
           userVerification: 'required',
           timeout: 60000,
         },
@@ -257,42 +261,41 @@ export default function QRLoginPage() {
 
       if (!assertion) { setErrorMsg('Verificación cancelada.'); setStep('confirm'); return; }
 
-      const { data: bk } = await supabase
+      // Intentar usar el refresh_token guardado
+      const { data: bkRows } = await supabase
         .from('biometric_keys')
-        .select('refresh_token')
+        .select('refresh_token, credential_id')
         .eq('user_id', foundUser.id)
-        .single();
+        .not('refresh_token', 'is', null);
 
-      if (!bk?.refresh_token) {
-        setErrorMsg('Sesión biométrica expirada. Escanea de nuevo e ingresa tu contraseña para renovarla.');
-        setStep('error');
-        return;
+      let sessionOk = false;
+      for (const bk of (bkRows || [])) {
+        if (!bk.refresh_token) continue;
+        const { data: { session }, error } = await supabase.auth.refreshSession({ refresh_token: bk.refresh_token });
+        if (!error && session) {
+          // Actualizar token renovado
+          await supabase.from('biometric_keys')
+            .update({ refresh_token: session.refresh_token, last_used: new Date().toISOString() })
+            .eq('credential_id', bk.credential_id);
+          sessionOk = true;
+          redirectByRole(foundUser.role);
+          break;
+        }
       }
 
-      const { data: { session }, error } = await supabase.auth.refreshSession({
-        refresh_token: bk.refresh_token,
-      });
-
-      if (error || !session) {
-        setErrorMsg('Sesión expirada. Escanea de nuevo e ingresa tu contraseña para renovarla.');
-        setStep('error');
-        return;
+      if (!sessionOk) {
+        // Token expirado → pedir contraseña para renovar (no mostrar error, flujo suave)
+        setStep('register');
       }
-
-      await supabase.from('biometric_keys').update({
-        refresh_token: session.refresh_token,
-        last_used:     new Date().toISOString(),
-      }).eq('user_id', foundUser.id);
-
-      redirectByRole(foundUser.role);
 
     } catch (err) {
       if (err.name === 'NotAllowedError') {
-        setErrorMsg('Verificación biométrica denegada o cancelada.');
+        setErrorMsg('Verificación biométrica cancelada. Intenta de nuevo.');
+        setStep('confirm');
       } else {
-        setErrorMsg('Error de autenticación: ' + err.message);
+        // Cualquier otro error → ir a contraseña directamente
+        setStep('register');
       }
-      setStep('confirm');
     }
   }
 
