@@ -26,12 +26,33 @@ const BRANDS = [
 ];
 
 export default function CorpLandingPage() {
-  const [year, setYear] = useState('');
-  const [hover, setHover] = useState(null);
+  const [year,       setYear]       = useState('');
+  const [hover,      setHover]      = useState(null);
+  const [taps,       setTaps]       = useState(0);
+  const [tapTimer,   setTapTimer]   = useState(null);
+  const [showFlash,  setShowFlash]  = useState(false);
 
   useEffect(() => {
     setYear(new Date().getFullYear().toString());
   }, []);
+
+  // ── 5 clics rápidos en el logo → login interno ──
+  function handleLogoTap() {
+    if (tapTimer) clearTimeout(tapTimer);
+    const next = taps + 1;
+    if (next >= 5) {
+      setTaps(0);
+      setShowFlash(true);
+      setTimeout(() => {
+        setShowFlash(false);
+        window.location.href = '/corp/login';
+      }, 400);
+      return;
+    }
+    setTaps(next);
+    const t = setTimeout(() => setTaps(0), 1800);
+    setTapTimer(t);
+  }
 
   return (
     <div style={{
@@ -74,6 +95,16 @@ export default function CorpLandingPage() {
         }
       `}</style>
 
+      {/* Flash blanco al activar el easter egg */}
+      {showFlash && (
+        <div style={{
+          position: 'fixed', inset: 0, background: '#fff',
+          zIndex: 9999, opacity: 0.15, pointerEvents: 'none',
+          animation: 'flashOut 0.4s ease forwards',
+        }} />
+      )}
+      <style>{`@keyframes flashOut { from{opacity:0.15} to{opacity:0} }`}</style>
+
       {/* ══ NAV ══ */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
@@ -83,15 +114,21 @@ export default function CorpLandingPage() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 9,
-            background: 'linear-gradient(135deg, #007AFF, #BF5AF2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 15, fontWeight: 900,
-          }}>CT</div>
+          {/* Logo — 5 toques rápidos activan el acceso interno */}
+          <div
+            onClick={handleLogoTap}
+            style={{
+              width: 32, height: 32, borderRadius: 9,
+              background: 'linear-gradient(135deg, #007AFF, #BF5AF2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 15, fontWeight: 900,
+              cursor: 'default',
+              userSelect: 'none',
+              WebkitTapHighlightColor: 'transparent',
+            }}>CT</div>
           <span style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.3px' }}>Corp Tech</span>
         </div>
-        {/* Sin botón de login — el nav es solo marca */}
+        {/* Sin botón de login visible */}
         <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase' }}>
           Holding Tecnológico
         </span>
