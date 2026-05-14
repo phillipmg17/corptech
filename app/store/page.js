@@ -459,6 +459,7 @@ export default function StorePage() {
   const slug = SLUG_MAP[orgId] || '';
 
   const STORE_NAV = [
+    { href: '/pos',   ico: '🛒', lbl: 'POS'      },   // ← acceso directo al Punto de Venta
     { id: 'stock',    ico: '📦', lbl: 'Stock'    },
     { id: 'clientes', ico: '👥', lbl: 'Clientes' },
     { id: 'ventas',   ico: '📊', lbl: 'Ventas'   },

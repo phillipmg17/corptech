@@ -73,9 +73,7 @@ export default function PosPage() {
 
     if (r === 'corp' || r === 'admin_corp') { router.replace('/corp'); return; }
     if (r === 'superadmin')                 { router.replace('/superadmin'); return; }
-    if (r === 'store_admin' || r === 'gerente' || r === 'store_manager') {
-      router.replace('/store'); return;
-    }
+    // store_admin, gerente, vendedor → todos pueden usar el POS
 
     const oid = prof?.org_id;
     setMe({ id: uid, name: prof?.full_name });
