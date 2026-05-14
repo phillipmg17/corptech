@@ -84,6 +84,17 @@ export default function AsistenciaAdminPage({ params }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [queryError,     setQueryError]     = useState('');
 
+  // Sincronizar tema con el resto del panel al montar
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('theme')
+        || document.documentElement.getAttribute('data-theme')
+        || 'dark';
+      setTheme(saved);
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  }, []);
+
   function toggleTheme() {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);

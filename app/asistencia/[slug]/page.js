@@ -68,6 +68,17 @@ export default function AsistenciaPage({ params }) {
   const [theme,          setTheme]          = useState('dark');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Sincronizar tema con el resto del panel al montar
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('theme')
+        || document.documentElement.getAttribute('data-theme')
+        || 'dark';
+      setTheme(saved);
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  }, []);
+
   function toggleTheme() {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
