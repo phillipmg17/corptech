@@ -950,9 +950,10 @@ export default function TiendaPage({ params }) {
           {/* Bottom */}
           <div style={{ borderTop:'1px solid rgba(255,255,255,0.08)', paddingTop:24, display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:16 }}>
             <p style={{ fontSize:13, color:'#6E6E73' }}>© {new Date().getFullYear()} {storeName}. Todos los derechos reservados.</p>
-            <div style={{ display:'flex', gap:20 }}>
+            <div style={{ display:'flex', gap:20, alignItems:'center' }}>
               <span style={{ fontSize:13, color:'#6E6E73', cursor:'pointer' }}>Política de privacidad</span>
               <span style={{ fontSize:13, color:'#6E6E73', cursor:'pointer' }}>Términos y condiciones</span>
+              <a href="/ingresar" style={{ fontSize:11, color:'rgba(255,255,255,0.18)', textDecoration:'none', fontWeight:500 }}>Acceso equipo</a>
             </div>
           </div>
         </div>

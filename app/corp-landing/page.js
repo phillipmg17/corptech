@@ -45,7 +45,7 @@ export default function CorpLandingPage() {
       setShowFlash(true);
       setTimeout(() => {
         setShowFlash(false);
-        window.location.href = '/corp/login';
+        window.location.href = '/ingresar/corp';
       }, 400);
       return;
     }
