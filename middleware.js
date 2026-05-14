@@ -52,7 +52,7 @@ export function middleware(request) {
   const PASS_THROUGH = [
     '/tienda', '/corp', '/store', '/dashboard', '/pos',
     '/api', '/_next', '/wallet', '/acceso', '/cliente',
-    '/login', '/superadmin', '/corp-landing', '/staff', '/ingresar',
+    '/login', '/superadmin', '/corp-landing', '/staff', '/ingresar', '/guia',
   ];
   if (PASS_THROUGH.some(p => pathname.startsWith(p))) return NextResponse.next();
 
