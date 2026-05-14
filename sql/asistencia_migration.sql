@@ -1,6 +1,6 @@
 -- ============================================================
 -- MÓDULO DE ASISTENCIA CON GEOLOCALIZACIÓN
--- Ejecutar en Supabase SQL Editor
+-- Copiar y pegar TODO esto en: Supabase Dashboard → SQL Editor → New Query
 -- ============================================================
 
 -- 1. TABLA PRINCIPAL DE REGISTROS DE ASISTENCIA
@@ -19,10 +19,10 @@ CREATE TABLE IF NOT EXISTS asistencia_registros (
   lat             DOUBLE PRECISION,
   lng             DOUBLE PRECISION,
   precision_gps   REAL,       -- precisión en metros
-  direccion       TEXT,       -- dirección reversa opcional
+  direccion       TEXT,
 
   -- Metadata
-  dispositivo     TEXT,       -- "iPhone / iOS 17", "Android 14", etc.
+  dispositivo     TEXT,
   ip              TEXT,
   notas           TEXT,
 
@@ -33,35 +33,36 @@ CREATE TABLE IF NOT EXISTS asistencia_registros (
 CREATE INDEX IF NOT EXISTS idx_asistencia_user_id    ON asistencia_registros(user_id);
 CREATE INDEX IF NOT EXISTS idx_asistencia_org_id     ON asistencia_registros(org_id);
 CREATE INDEX IF NOT EXISTS idx_asistencia_timestamp  ON asistencia_registros(timestamp DESC);
--- Índice por timestamp para filtrar por rango de fechas
-CREATE INDEX IF NOT EXISTS idx_asistencia_fecha
-  ON asistencia_registros(timestamp);
+CREATE INDEX IF NOT EXISTS idx_asistencia_fecha      ON asistencia_registros(timestamp);
 
 -- 3. HABILITAR RLS
 ALTER TABLE asistencia_registros ENABLE ROW LEVEL SECURITY;
 
--- 4. POLÍTICAS RLS
+-- 4. ELIMINAR POLÍTICAS EXISTENTES (por si ya existían de antes)
+DROP POLICY IF EXISTS "trabajador_ver_propios"    ON asistencia_registros;
+DROP POLICY IF EXISTS "trabajador_crear_propio"   ON asistencia_registros;
+DROP POLICY IF EXISTS "store_admin_ver_org"        ON asistencia_registros;
+DROP POLICY IF EXISTS "corp_admin_gestionar"       ON asistencia_registros;
+DROP POLICY IF EXISTS "asistencia_insert_own"      ON asistencia_registros;
+DROP POLICY IF EXISTS "asistencia_select"          ON asistencia_registros;
 
--- Trabajador: solo ve y crea sus propios registros
-CREATE POLICY "trabajador_ver_propios" ON asistencia_registros
-  FOR SELECT USING (auth.uid() = user_id);
+-- 5. POLÍTICAS RLS
 
-CREATE POLICY "trabajador_crear_propio" ON asistencia_registros
+-- Cualquier usuario autenticado puede INSERT sus propios registros
+CREATE POLICY "asistencia_insert_own" ON asistencia_registros
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- Admin de tienda: ve todos los de su org
-CREATE POLICY "store_admin_ver_org" ON asistencia_registros
+-- SELECT: trabajador ve los suyos, admin ve los de su org, corp ve todo
+CREATE POLICY "asistencia_select" ON asistencia_registros
   FOR SELECT USING (
+    auth.uid() = user_id
+    OR
     org_id IN (
       SELECT org_id FROM user_roles
       WHERE user_id = auth.uid()
       AND role IN ('store_admin','gerente','store_manager','admin_corp','corp','superadmin')
     )
-  );
-
--- Admin Corp / SuperAdmin: puede editar y borrar
-CREATE POLICY "corp_admin_gestionar" ON asistencia_registros
-  FOR ALL USING (
+    OR
     EXISTS (
       SELECT 1 FROM user_roles
       WHERE user_id = auth.uid()
@@ -69,5 +70,6 @@ CREATE POLICY "corp_admin_gestionar" ON asistencia_registros
     )
   );
 
--- 5. GRANT DE PERMISOS
+-- 6. GRANT DE PERMISOS
 GRANT SELECT, INSERT ON asistencia_registros TO authenticated;
+GRANT USAGE ON SEQUENCE asistencia_registros_id_seq TO authenticated;

@@ -28,6 +28,9 @@ const ALL_STORES = [
   { slug:'wetech',     name:'WeTech Perú', orgId: '00000000-0000-0000-0000-000000000004' },
 ];
 
+// Valor especial para "todas las tiendas" (solo admins corp)
+const ALL_ORGS = 'ALL';
+
 const CORP_NAV = [
   { id: 'dashboard',     href: '/corp',           ico: '📈', lbl: 'Dashboard'     },
   { id: 'tiendas',       href: '/corp',           ico: '🏪', lbl: 'Tiendas'       },
@@ -63,21 +66,23 @@ export default function AsistenciaAdminPage({ params }) {
 
   const mapRef     = useRef(null);
   const leafletRef = useRef(null);
-  const markersRef = useRef([]);
 
   const [loading,        setLoading]        = useState(true);
   const [isCorpAdmin,    setIsCorpAdmin]    = useState(false);
   const [perfil,         setPerfil]         = useState(null);
   const [user,           setUser]           = useState(null);
   const [registros,      setRegistros]      = useState([]);
+  const [perfiles,       setPerfiles]       = useState({}); // { user_id: { full_name, avatar_url } }
   const [filtroFecha,    setFiltroFecha]    = useState(new Date().toISOString().split('T')[0]);
   const [filtroUser,     setFiltroUser]     = useState('');
-  const [filtroTienda,   setFiltroTienda]   = useState(orgId);
+  // Corp admin por defecto ve TODAS las tiendas; store admin ve su tienda
+  const [filtroTienda,   setFiltroTienda]   = useState(slug === 'corp' ? ALL_ORGS : orgId);
   const [usuarios,       setUsuarios]       = useState([]);
   const [mapReady,       setMapReady]       = useState(false);
   const [activeView,     setActiveView]     = useState('tabla');
   const [theme,          setTheme]          = useState('dark');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [queryError,     setQueryError]     = useState('');
 
   function toggleTheme() {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -110,6 +115,10 @@ export default function AsistenciaAdminPage({ params }) {
       const isCorp = roles?.some(r => CORP_ROLES.includes(r.role));
       setIsCorpAdmin(isCorp);
 
+      // Si es admin corp, por defecto ve todas las tiendas
+      if (isCorp) setFiltroTienda(ALL_ORGS);
+      else setFiltroTienda(orgId);
+
       const { data: profile } = await supabase
         .from('profiles').select('full_name, avatar_url').eq('user_id', session.user.id).single();
 
@@ -119,36 +128,59 @@ export default function AsistenciaAdminPage({ params }) {
     })();
   }, []);
 
-  // ── Cargar registros ──────────────────────────────────────────
+  // ── Cargar registros (sin joins de FK — más robusto) ──────────
   const cargarRegistros = useCallback(async () => {
-    const oid = filtroTienda || orgId;
-    let q = supabase
-      .from('asistencia_registros')
-      .select(`
-        *,
-        profiles:profiles!asistencia_registros_user_id_fkey(full_name, avatar_url),
-        user_roles!asistencia_registros_user_id_fkey(role)
-      `)
-      .eq('org_id', oid)
-      .gte('timestamp', filtroFecha + 'T00:00:00')
-      .lte('timestamp', filtroFecha + 'T23:59:59')
-      .order('timestamp', { ascending: true });
+    setQueryError('');
+    try {
+      // 1) Construir query base sin joins complicados
+      let q = supabase
+        .from('asistencia_registros')
+        .select('*')
+        .gte('timestamp', filtroFecha + 'T00:00:00')
+        .lte('timestamp', filtroFecha + 'T23:59:59')
+        .order('timestamp', { ascending: true });
 
-    if (filtroUser) q = q.eq('user_id', filtroUser);
+      // Filtro por tienda
+      if (filtroTienda === ALL_ORGS) {
+        // No filtrar por org — corp admin ve todo (RLS lo controla)
+      } else {
+        q = q.eq('org_id', filtroTienda);
+      }
 
-    const { data, error } = await q;
-    if (!error) setRegistros(data || []);
+      if (filtroUser) q = q.eq('user_id', filtroUser);
 
-    if (!filtroUser) {
-      const enriched = (data || []).reduce((acc, r) => {
-        if (!acc.find(u => u.id === r.user_id)) {
-          acc.push({ id: r.user_id, nombre: r.profiles?.full_name || r.user_id.slice(0,8) });
-        }
-        return acc;
-      }, []);
-      setUsuarios(enriched);
+      const { data, error } = await q;
+      if (error) { setQueryError(error.message); return; }
+
+      const rows = data || [];
+      setRegistros(rows);
+
+      // 2) Buscar perfiles para los user_ids encontrados
+      const uids = [...new Set(rows.map(r => r.user_id))];
+      if (uids.length > 0) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('user_id, full_name, avatar_url')
+          .in('user_id', uids);
+
+        const profileMap = {};
+        (profileData || []).forEach(p => { profileMap[p.user_id] = p; });
+        setPerfiles(profileMap);
+
+        // Usuarios únicos para el filtro
+        const enriched = uids.map(uid => ({
+          id: uid,
+          nombre: profileMap[uid]?.full_name || uid.slice(0,8),
+        }));
+        setUsuarios(enriched);
+      } else {
+        setPerfiles({});
+        setUsuarios([]);
+      }
+    } catch (e) {
+      setQueryError(e.message);
     }
-  }, [filtroFecha, filtroUser, filtroTienda, orgId]);
+  }, [filtroFecha, filtroUser, filtroTienda]);
 
   useEffect(() => { if (!loading) cargarRegistros(); }, [loading, cargarRegistros]);
 
@@ -191,8 +223,10 @@ export default function AsistenciaAdminPage({ params }) {
     withCoords.forEach(r => {
       const isEntrada = r.tipo === 'entrada';
       const color     = isEntrada ? '#30D158' : '#FF3B30';
-      const nombre    = r.profiles?.full_name || 'Usuario';
+      const nombre    = perfiles[r.user_id]?.full_name || r.user_id.slice(0,8);
       const hora      = new Date(r.timestamp).toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' });
+      // Nombre de tienda
+      const tienda    = ALL_STORES.find(s => s.orgId === r.org_id)?.name || '';
 
       const icon = L.divIcon({
         className: '',
@@ -203,6 +237,7 @@ export default function AsistenciaAdminPage({ params }) {
       L.marker([r.lat, r.lng], { icon }).addTo(map).bindPopup(`
         <div style="font-family:system-ui;min-width:160px;">
           <div style="font-weight:700;font-size:14px;">${nombre}</div>
+          ${tienda ? `<div style="color:#888;font-size:11px;">${tienda}</div>` : ''}
           <div style="color:${color};font-weight:600;font-size:13px;text-transform:capitalize;">${r.tipo}</div>
           <div style="color:#666;font-size:12px;">🕐 ${hora}</div>
           ${r.precision_gps ? `<div style="color:#999;font-size:11px;">±${Math.round(r.precision_gps)}m precisión</div>` : ''}
@@ -214,15 +249,16 @@ export default function AsistenciaAdminPage({ params }) {
 
     if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40] });
     setTimeout(() => map.invalidateSize(), 200);
-  }, [mapReady, registros, activeView]);
+  }, [mapReady, registros, activeView, perfiles]);
 
   // ── Calcular sesiones (pares entrada/salida) ──────────────────
   const getSesiones = () => {
     const byUser = {};
     registros.forEach(r => {
-      if (!byUser[r.user_id]) byUser[r.user_id] = { entradas:[], salidas:[], info:r };
-      if (r.tipo === 'entrada') byUser[r.user_id].entradas.push(r);
-      else byUser[r.user_id].salidas.push(r);
+      const key = `${r.user_id}_${r.org_id}`;
+      if (!byUser[key]) byUser[key] = { entradas:[], salidas:[], info:r };
+      if (r.tipo === 'entrada') byUser[key].entradas.push(r);
+      else byUser[key].salidas.push(r);
     });
 
     return Object.values(byUser).map(({ entradas, salidas, info }) => {
@@ -232,9 +268,12 @@ export default function AsistenciaAdminPage({ params }) {
       if (entrada && salida) {
         horas = ((new Date(salida.timestamp) - new Date(entrada.timestamp)) / 3600000).toFixed(1);
       }
+      const tiendaNombre = ALL_STORES.find(s => s.orgId === info.org_id)?.name || '';
       return {
-        user_id: info.user_id,
-        nombre:  info.profiles?.full_name || info.user_id.slice(0,8),
+        user_id:  info.user_id,
+        org_id:   info.org_id,
+        nombre:   perfiles[info.user_id]?.full_name || info.user_id.slice(0,8),
+        tienda:   tiendaNombre,
         entrada, salida, horas,
       };
     });
@@ -330,6 +369,13 @@ export default function AsistenciaAdminPage({ params }) {
       <div className="content content-no-topbar">
         <div style={{ maxWidth:1100, margin:'0 auto', padding:'20px 16px', paddingBottom:40 }}>
 
+          {/* Error de query */}
+          {queryError && (
+            <div style={{ background:'rgba(255,59,48,0.12)', border:'1px solid rgba(255,59,48,0.3)', borderRadius:14, padding:'14px 16px', marginBottom:16, color:'#FF3B30', fontSize:13 }}>
+              ⚠️ {queryError}
+            </div>
+          )}
+
           {/* ── FILTROS ── */}
           <div style={{ background:card, borderRadius:20, padding:20, marginBottom:16, border:`1px solid ${border}` }}>
             <div style={{ fontSize:13, fontWeight:700, color:sub, textTransform:'uppercase', letterSpacing:0.5, marginBottom:14 }}>Filtros</div>
@@ -345,6 +391,7 @@ export default function AsistenciaAdminPage({ params }) {
                   <label style={{ fontSize:11, color:sub, display:'block', marginBottom:4 }}>Sede</label>
                   <select value={filtroTienda} onChange={e=>setFiltroTienda(e.target.value)}
                     style={{ width:'100%', background:input, border:'none', borderRadius:12, padding:'10px 12px', color:text, fontSize:14, fontFamily:'inherit', cursor:'pointer' }}>
+                    <option value={ALL_ORGS}>🌐 Todas las sedes</option>
                     {ALL_STORES.map(s => (
                       <option key={s.orgId} value={s.orgId}>{s.name}</option>
                     ))}
@@ -407,29 +454,42 @@ export default function AsistenciaAdminPage({ params }) {
           {activeView === 'tabla' && (
             <div style={{ background:card, borderRadius:20, border:`1px solid ${border}`, overflow:'hidden' }}>
               <div style={{ padding:'18px 20px', borderBottom:`1px solid ${border}` }}>
-                <div style={{ fontSize:15, fontWeight:700 }}>📋 Reporte de sesiones — {new Date(filtroFecha).toLocaleDateString('es-PE',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+                <div style={{ fontSize:15, fontWeight:700 }}>
+                  📋 Reporte — {new Date(filtroFecha).toLocaleDateString('es-PE',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}
+                </div>
               </div>
               <div style={{ overflowX:'auto' }}>
                 <table>
                   <thead>
                     <tr style={{ borderBottomColor:border }}>
-                      {['Trabajador','Entrada','Salida','Horas','📍 GPS Entrada','📍 GPS Salida'].map(h => (
-                        <th key={h} className={h.includes('GPS')?'desktop-col':''}
-                          style={{ color:sub, fontWeight:600, fontSize:12, textTransform:'uppercase', letterSpacing:0.4, padding:'12px 14px' }}>
-                          {h}
-                        </th>
-                      ))}
+                      {['Trabajador', isCorpAdmin ? 'Sede' : null, 'Entrada','Salida','Horas','📍 GPS Entrada','📍 GPS Salida']
+                        .filter(Boolean)
+                        .map(h => (
+                          <th key={h} className={h.includes('GPS')?'desktop-col':''}
+                            style={{ color:sub, fontWeight:600, fontSize:12, textTransform:'uppercase', letterSpacing:0.4, padding:'12px 14px' }}>
+                            {h}
+                          </th>
+                        ))}
                     </tr>
                   </thead>
                   <tbody>
                     {sesiones.length === 0 && (
                       <tr style={{ borderBottomColor:'transparent' }}>
-                        <td colSpan={6} style={{ textAlign:'center', color:sub, padding:32 }}>Sin registros para esta fecha</td>
+                        <td colSpan={7} style={{ textAlign:'center', color:sub, padding:32 }}>Sin registros para esta fecha</td>
                       </tr>
                     )}
-                    {sesiones.map((s) => (
-                      <tr key={s.user_id} style={{ borderBottomColor:border }}>
-                        <td><div style={{ fontWeight:600, fontSize:14 }}>{s.nombre}</div></td>
+                    {sesiones.map((s, i) => (
+                      <tr key={i} style={{ borderBottomColor:border }}>
+                        <td>
+                          <div style={{ fontWeight:600, fontSize:14 }}>{s.nombre}</div>
+                        </td>
+                        {isCorpAdmin && (
+                          <td>
+                            <span style={{ background:cfg.accent+'20', color:cfg.accent, borderRadius:8, padding:'3px 10px', fontSize:12, fontWeight:600 }}>
+                              {s.tienda || '—'}
+                            </span>
+                          </td>
+                        )}
                         <td><span style={{ color:'#30D158', fontWeight:600 }}>{formatHora(s.entrada?.timestamp)}</span></td>
                         <td><span style={{ color: s.salida ? '#FF9F0A' : sub, fontWeight: s.salida ? 600 : 400 }}>{formatHora(s.salida?.timestamp)}</span></td>
                         <td>
@@ -453,23 +513,29 @@ export default function AsistenciaAdminPage({ params }) {
                 </table>
               </div>
 
+              {/* Detalle crudo */}
               {registros.length > 0 && (
                 <details style={{ padding:20, borderTop:`1px solid ${border}` }}>
                   <summary style={{ fontSize:13, color:sub, cursor:'pointer', fontWeight:600 }}>Ver todos los registros del día ({registros.length})</summary>
                   <div style={{ marginTop:14, display:'flex', flexDirection:'column', gap:8 }}>
-                    {registros.map(r => (
-                      <div key={r.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:bg, borderRadius:12 }}>
-                        <div style={{ width:8, height:8, borderRadius:'50%', background:r.tipo==='entrada'?'#30D158':'#FF3B30', flexShrink:0 }}/>
-                        <div style={{ flex:1 }}>
-                          <span style={{ fontWeight:600, fontSize:13 }}>{r.profiles?.full_name || '—'}</span>
-                          <span style={{ color:sub, fontSize:12, marginLeft:8 }}>{new Date(r.timestamp).toLocaleString('es-PE')}</span>
-                          <span style={{ color:r.tipo==='entrada'?'#30D158':'#FF3B30', fontSize:12, marginLeft:8, textTransform:'capitalize' }}>{r.tipo}</span>
+                    {registros.map(r => {
+                      const nombreR = perfiles[r.user_id]?.full_name || r.user_id.slice(0,8);
+                      const tiendaR = ALL_STORES.find(s => s.orgId === r.org_id)?.name || '';
+                      return (
+                        <div key={r.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:bg, borderRadius:12 }}>
+                          <div style={{ width:8, height:8, borderRadius:'50%', background:r.tipo==='entrada'?'#30D158':'#FF3B30', flexShrink:0 }}/>
+                          <div style={{ flex:1 }}>
+                            <span style={{ fontWeight:600, fontSize:13 }}>{nombreR}</span>
+                            {isCorpAdmin && tiendaR && <span style={{ color:cfg.accent, fontSize:11, marginLeft:6 }}>{tiendaR}</span>}
+                            <span style={{ color:sub, fontSize:12, marginLeft:8 }}>{new Date(r.timestamp).toLocaleString('es-PE')}</span>
+                            <span style={{ color:r.tipo==='entrada'?'#30D158':'#FF3B30', fontSize:12, marginLeft:8, textTransform:'capitalize' }}>{r.tipo}</span>
+                          </div>
+                          {r.lat && (
+                            <a href={`https://www.google.com/maps?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer" style={{ fontSize:11, color:cfg.accent, textDecoration:'none' }}>📍 Ver</a>
+                          )}
                         </div>
-                        {r.lat && (
-                          <a href={`https://www.google.com/maps?q=${r.lat},${r.lng}`} target="_blank" rel="noreferrer" style={{ fontSize:11, color:cfg.accent, textDecoration:'none' }}>📍 Ver</a>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </details>
               )}
@@ -481,7 +547,7 @@ export default function AsistenciaAdminPage({ params }) {
             <div style={{ background:card, borderRadius:20, border:`1px solid ${border}`, overflow:'hidden' }}>
               <div style={{ padding:'18px 20px', borderBottom:`1px solid ${border}` }}>
                 <div style={{ fontSize:15, fontWeight:700 }}>🗺️ Mapa de marcados</div>
-                <div style={{ fontSize:12, color:sub, marginTop:2 }}>🟢 Entrada &nbsp;&nbsp; 🔴 Salida</div>
+                <div style={{ fontSize:12, color:sub, marginTop:2 }}>▲ Entrada &nbsp;&nbsp; ▼ Salida — haz clic en un pin para ver detalles</div>
               </div>
               {!mapReady && (
                 <div style={{ height:400, display:'flex', alignItems:'center', justifyContent:'center', color:sub }}>Cargando mapa...</div>
