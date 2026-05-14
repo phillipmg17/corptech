@@ -2,15 +2,79 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+/* ── Tiendas: para mostrar links en la pantalla de error ── */
+const TIENDAS = [
+  { name:'Futurteck',       url:'https://futurteck.pe/acceso',          color:'#007AFF' },
+  { name:'Innovatech Store',url:'https://innovatechstore.com.pe/acceso', color:'#BF5AF2' },
+  { name:'WeTech Peru',     url:'https://wetechperu.pe/acceso',          color:'#30D158' },
+];
+
 export default function LandingPage() {
   const [menuOpen,    setMenuOpen]    = useState(false);
   const [scrolled,    setScrolled]    = useState(false);
+  const [authError,   setAuthError]   = useState(null); // { code, description }
+
+  /* ── Detectar errores de auth en el hash de la URL ──
+     Supabase redirige aquí cuando un link expiró o es inválido.
+     Mostramos pantalla amigable SIN mencionar CorpTech. */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash;
+    if (hash.includes('error=')) {
+      const params = new URLSearchParams(hash.replace('#', ''));
+      const code = params.get('error_code') || params.get('error') || 'unknown';
+      const desc = params.get('error_description') || '';
+      setAuthError({ code, desc });
+      // Limpiar el hash de la URL sin recargar
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  /* ── PANTALLA DE ERROR DE AUTH (link expirado, etc.) ── */
+  if (authError) {
+    const isExpired = authError.code === 'otp_expired';
+    return (
+      <div style={{
+        minHeight:'100vh', display:'flex', flexDirection:'column',
+        alignItems:'center', justifyContent:'center',
+        background:'#0a0a0a', fontFamily:"'Urbanist',system-ui,sans-serif",
+        padding:'24px', textAlign:'center',
+      }}>
+        <div style={{ fontSize:56, marginBottom:20 }}>{isExpired ? '⏱️' : '⚠️'}</div>
+        <h1 style={{ color:'#fff', fontSize:26, fontWeight:800, margin:'0 0 12px' }}>
+          {isExpired ? 'El link ha expirado' : 'Link inválido'}
+        </h1>
+        <p style={{ color:'rgba(255,255,255,0.5)', fontSize:15, maxWidth:380, margin:'0 auto 32px', lineHeight:1.6 }}>
+          {isExpired
+            ? 'Los links de confirmación son válidos por 24 horas. Por favor regístrate de nuevo o solicita un nuevo correo desde tu tienda.'
+            : 'Este link ya no es válido. Vuelve a tu tienda e inicia el proceso nuevamente.'
+          }
+        </p>
+        <p style={{ color:'rgba(255,255,255,0.35)', fontSize:13, marginBottom:16 }}>
+          Vuelve a tu tienda:
+        </p>
+        <div style={{ display:'flex', flexDirection:'column', gap:10, width:'100%', maxWidth:280 }}>
+          {TIENDAS.map(t => (
+            <a key={t.url} href={t.url}
+              style={{
+                display:'block', padding:'13px 20px', borderRadius:14,
+                background: `rgba(${t.color === '#007AFF' ? '10,132,255' : t.color === '#BF5AF2' ? '191,90,242' : '48,209,88'},0.12)`,
+                border: `1px solid ${t.color}33`,
+                color: t.color, fontSize:15, fontWeight:700, textDecoration:'none',
+              }}>
+              {t.name}
+            </a>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const EMPRESAS = [
     {

@@ -140,7 +140,7 @@ export default function CorpPage() {
   async function init() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.replace('/login'); return; }
+      if (!session) { router.replace('/corp/login'); return; }
       const uid = session.user.id;
 
       // Buscar rol — intentar con user_id y también con eq directo
@@ -155,7 +155,7 @@ export default function CorpPage() {
       // Roles permitidos en corp panel
       const CORP_ROLES = ['corp', 'superadmin', 'admin_corp'];
       if (!r || !CORP_ROLES.includes(r)) {
-        router.replace('/login');
+        router.replace('/corp/login');
         return;
       }
 
@@ -1476,7 +1476,7 @@ export default function CorpPage() {
 
   async function doLogout() {
     await supabase.auth.signOut();
-    router.replace('/login');
+    router.replace('/corp/login');
   }
 
   function switchTab(t) {
