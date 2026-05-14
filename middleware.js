@@ -31,6 +31,17 @@ export function middleware(request) {
     return NextResponse.rewrite(new URL(`/staff/${slug}`, request.url));
   }
 
+  // /ingresar en dominio de tienda → login multi-método branded por tienda
+  if (pathname === '/ingresar' && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    return NextResponse.rewrite(new URL(`/ingresar/${slug}`, request.url));
+  }
+
+  // /ingresar en corptech.pe → login multi-método Corp Tech
+  if (pathname === '/ingresar' && targetPath === '/corp-landing') {
+    return NextResponse.rewrite(new URL('/ingresar/corp', request.url));
+  }
+
   // /cliente exacto en dominio de tienda → portal de clientes con slug correcto
   if (pathname === '/cliente' && targetPath.startsWith('/tienda')) {
     const slug = targetPath.split('/').pop();
@@ -41,7 +52,7 @@ export function middleware(request) {
   const PASS_THROUGH = [
     '/tienda', '/corp', '/store', '/dashboard', '/pos',
     '/api', '/_next', '/wallet', '/acceso', '/cliente',
-    '/login', '/superadmin', '/corp-landing', '/staff',
+    '/login', '/superadmin', '/corp-landing', '/staff', '/ingresar',
   ];
   if (PASS_THROUGH.some(p => pathname.startsWith(p))) return NextResponse.next();
 
