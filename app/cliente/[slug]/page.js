@@ -164,15 +164,33 @@ export default function ClientePortalPage({ params }) {
       setEditPhone(cust?.phone || '');
       setEditAddress(cust?.address || '');
 
-      /* Cargar pedidos */
+      /* Cargar pedidos — dos intentos para máxima compatibilidad con RLS */
       const email = session.user.email;
-      const { data: ordersData } = await supabase
-        .from('online_orders')
-        .select('id, total_amount, status, payment_method, items, notes, created_at, delivery_address')
-        .eq('org_id', orgId)
-        .or(`customer_id.eq.${cust?.id || '00000000-0000-0000-0000-000000000000'},contact_email.eq.${email}`)
-        .order('created_at', { ascending: false });
-      setOrders(ordersData || []);
+      let ordersData = [];
+
+      // Intento 1: por customer_id (si tiene registro en customers)
+      if (cust?.id) {
+        const { data: o1 } = await supabase
+          .from('online_orders')
+          .select('id, total_amount, status, payment_method, items, notes, created_at, delivery_address, contact_email')
+          .eq('org_id', orgId)
+          .eq('customer_id', cust.id)
+          .order('created_at', { ascending: false });
+        ordersData = o1 || [];
+      }
+
+      // Intento 2: por email (pedidos hechos antes de tener cuenta)
+      if (ordersData.length === 0 && email) {
+        const { data: o2 } = await supabase
+          .from('online_orders')
+          .select('id, total_amount, status, payment_method, items, notes, created_at, delivery_address, contact_email')
+          .eq('org_id', orgId)
+          .eq('contact_email', email)
+          .order('created_at', { ascending: false });
+        ordersData = o2 || [];
+      }
+
+      setOrders(ordersData);
       setLoading(false);
     };
     init();
