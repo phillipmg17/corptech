@@ -102,7 +102,7 @@ export default function StorePage() {
 
   async function init() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { router.replace('/login'); return; }
+    if (!session) { router.replace('/ingresar'); return; }
     const uid = session.user.id;
     const { data: prof } = await supabase.from('users').select('org_id, full_name, organizations(name)').eq('id', uid).single();
     const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
@@ -449,7 +449,7 @@ export default function StorePage() {
 
   async function doLogout() {
     await supabase.auth.signOut();
-    router.replace('/login');
+    router.replace('/ingresar');
   }
 
   if (loading) return (

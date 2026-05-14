@@ -26,12 +26,32 @@ const BRANDS = [
 ];
 
 export default function CorpLandingPage() {
-  const [year,  setYear]  = useState('');
-  const [hover, setHover] = useState(null);
+  const [year,      setYear]      = useState('');
+  const [hover,     setHover]     = useState(null);
+  const [taps,      setTaps]      = useState(0);
+  const [tapTimer,  setTapTimer]  = useState(null);
+  const [showFlash, setShowFlash] = useState(false);
 
   useEffect(() => {
     setYear(new Date().getFullYear().toString());
   }, []);
+
+  function handleLogoTap() {
+    if (tapTimer) clearTimeout(tapTimer);
+    const next = taps + 1;
+    if (next >= 5) {
+      setTaps(0);
+      setShowFlash(true);
+      setTimeout(() => {
+        setShowFlash(false);
+        window.location.href = '/ingresar/corp';
+      }, 400);
+      return;
+    }
+    setTaps(next);
+    const t = setTimeout(() => setTaps(0), 1800);
+    setTapTimer(t);
+  }
 
   return (
     <div style={{
@@ -74,6 +94,11 @@ export default function CorpLandingPage() {
         }
       `}</style>
 
+      {showFlash && (
+        <div style={{ position:'fixed', inset:0, background:'#fff', zIndex:9999, opacity:0.15, pointerEvents:'none', animation:'flashOut 0.4s ease forwards' }} />
+      )}
+      <style>{`@keyframes flashOut { from{opacity:0.15} to{opacity:0} }`}</style>
+
       {/* ══ NAV ══ */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
@@ -87,7 +112,8 @@ export default function CorpLandingPage() {
           <img
             src="/logo.png"
             alt="Corp Tech"
-            style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'contain', display: 'block' }}
+            onClick={handleLogoTap}
+            style={{ width:36, height:36, borderRadius:10, objectFit:'contain', cursor:'default', userSelect:'none', WebkitTapHighlightColor:'transparent', display:'block' }}
           />
           <span style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.3px' }}>Corp Tech</span>
         </div>

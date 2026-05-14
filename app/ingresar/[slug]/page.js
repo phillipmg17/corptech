@@ -399,7 +399,7 @@ export default function IngresarPage() {
                   Usa el QR de tu carnet de trabajo o el pase de Apple Wallet.
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                  <a href="/login/qr" style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, padding:'14px', borderRadius:14, background:'linear-gradient(135deg,#FF9F0A,#FF6B00)', color:'#fff', fontWeight:700, fontSize:15, textDecoration:'none', boxShadow:'0 6px 24px rgba(255,159,10,0.3)' }}>
+                  <a href="/ingresar/corp" style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, padding:'14px', borderRadius:14, background:'linear-gradient(135deg,#FF9F0A,#FF6B00)', color:'#fff', fontWeight:700, fontSize:15, textDecoration:'none', boxShadow:'0 6px 24px rgba(255,159,10,0.3)' }}>
                     <IconQR /> &nbsp;Abrir Escáner QR
                   </a>
                   <a href="/biometrics" style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10, padding:'13px', borderRadius:14, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.7)', fontWeight:600, fontSize:14, textDecoration:'none' }}>

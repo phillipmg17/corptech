@@ -118,7 +118,7 @@ export default function CarnetPage() {
         <div style={{ textAlign:'center', color:'#fff' }}>
           <div style={{ fontSize:48, marginBottom:12 }}>⚠️</div>
           <div style={{ fontSize:18, fontWeight:700 }}>Carnet no encontrado</div>
-          <button onClick={() => router.push('/login')} style={{ marginTop:20, padding:'12px 24px', borderRadius:14, background:'#0A84FF', border:'none', color:'#fff', fontWeight:700, cursor:'pointer' }}>
+          <button onClick={() => router.push('/ingresar/corp')} style={{ marginTop:20, padding:'12px 24px', borderRadius:14, background:'#0A84FF', border:'none', color:'#fff', fontWeight:700, cursor:'pointer' }}>
             Ir al login
           </button>
         </div>
@@ -283,7 +283,7 @@ export default function CarnetPage() {
         )}
 
         <button
-          onClick={() => router.push('/login')}
+          onClick={() => router.push('/ingresar/corp')}
           style={{
             background:'none', border:'none',
             color:'rgba(255,255,255,0.25)', fontSize:13,

@@ -165,7 +165,7 @@ export default function NuevoProducto() {
 
   async function init() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { router.replace('/login'); return; }
+    if (!session) { router.replace('/ingresar/corp'); return; }
     const uid = session.user.id;
     const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
     const r = roleRow?.role;

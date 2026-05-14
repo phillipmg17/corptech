@@ -596,7 +596,7 @@ export default function LandingPage() {
       <div style={S.divider} />
       <footer style={S.footer}>
         <span style={S.footerLeft}>© 2026 Corp Tech SAC · Lima, Perú · Todos los derechos reservados</span>
-        <Link href="/login" style={S.footerRight}>Acceso colaboradores</Link>
+        <Link href="/ingresar/corp" style={S.footerRight}>Acceso colaboradores</Link>
       </footer>
     </div>
   );

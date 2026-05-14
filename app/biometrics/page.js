@@ -56,7 +56,7 @@ export default function BiometricsPage() {
 
   async function init() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { router.replace('/login'); return; }
+    if (!session) { router.replace('/ingresar/corp'); return; }
     const uid = session.user.id;
     setUserId(uid);
 
