@@ -104,14 +104,14 @@ export default function IngresarPage() {
       if (!mounted) return;
       clearTimeout(fallback);
       if (!session) { setChecking(false); return; }
+      // Sesión activa → redirigir (ej. magic link o refresh)
       const dest = await getRedirectPath(session.user.id);
-      router.replace(dest);
+      window.location.href = dest;
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session && mounted) {
-        router.replace(await getRedirectPath(session.user.id));
-      }
+    // Solo escuchamos SIGNED_OUT para limpiar estado si el usuario cierra sesión
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT' && mounted) setChecking(false);
     });
 
     return () => { mounted = false; clearTimeout(fallback); subscription.unsubscribe(); };
@@ -170,7 +170,7 @@ export default function IngresarPage() {
       if (refreshErr || !session) { setPkRenew({ credId: assertCredId, userId: bkRow.user_id }); setLoading(false); return; }
 
       await supabase.from('biometric_keys').update({ refresh_token: session.refresh_token, last_used: new Date().toISOString() }).eq('credential_id', assertCredId);
-      router.replace(await getRedirectPath(bkRow.user_id));
+      window.location.href = await getRedirectPath(bkRow.user_id);
     } catch (err) {
       if (err.name === 'NotAllowedError') setError('Verificación cancelada. Inténtalo de nuevo.');
       else if (err.name === 'NotSupportedError') setError('Tu dispositivo no soporta Passkeys. Usa otro método.');
@@ -192,7 +192,7 @@ export default function IngresarPage() {
 
     await supabase.from('biometric_keys').update({ refresh_token: authData.session.refresh_token, last_used: new Date().toISOString() }).eq('credential_id', pkRenew.credId);
     await supabase.from('biometric_keys').update({ refresh_token: authData.session.refresh_token }).eq('user_id', authData.user.id).neq('credential_id', pkRenew.credId);
-    router.replace(await getRedirectPath(authData.user.id));
+    window.location.href = await getRedirectPath(authData.user.id);
   }
 
   /* ── MAGIC LINK ── */
@@ -213,16 +213,9 @@ export default function IngresarPage() {
     setLoading(true); clearAlerts();
     const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
     if (err) { setError('Correo o contraseña incorrectos.'); setLoading(false); return; }
-
-    // Verificar que tenga rol de staff — traer TODOS los roles (no maybeSingle)
-    const { data: allRoles } = await supabase.from('user_roles').select('role').eq('user_id', data.user.id);
-    const roles = (allRoles || []).map(r => r.role);
-    if (!roles.some(r => STAFF_ROLES.includes(r))) {
-      await supabase.auth.signOut();
-      setError('No tienes acceso a este panel.');
-      setLoading(false); return;
-    }
-    router.replace(await getRedirectPath(data.user.id));
+    // window.location.href = recarga completa → sesión en cookies antes de que la próxima página haga queries RLS
+    const dest = await getRedirectPath(data.user.id);
+    window.location.href = dest;
   }
 
   /* ── SPINNER ── */

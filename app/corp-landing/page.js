@@ -117,19 +117,9 @@ export default function CorpLandingPage() {
           />
           <span style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.3px' }}>Corp Tech</span>
         </div>
-        <a
-          href="/ingresar/corp"
-          style={{
-            fontSize: 13, fontWeight: 700, color: '#fff',
-            background: 'rgba(10,132,255,0.15)',
-            border: '1px solid rgba(10,132,255,0.35)',
-            borderRadius: 10, padding: '7px 18px',
-            textDecoration: 'none', letterSpacing: '0.2px',
-            transition: 'all .2s',
-          }}
-        >
-          Ingresar →
-        </a>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase' }}>
+          Holding Tecnológico
+        </span>
       </nav>
 
       {/* ══ HERO ══ */}
