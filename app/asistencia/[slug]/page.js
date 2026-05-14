@@ -11,10 +11,10 @@ const STORE_CONFIG = {
 };
 
 const SLUG_MAP = {
-  futurteck:  '00000000-0000-0000-0000-000000000001',
-  wetech:     '00000000-0000-0000-0000-000000000002',
+  futurteck:  '00000000-0000-0000-0000-000000000002',
+  wetech:     '00000000-0000-0000-0000-000000000004',
   innovatech: '00000000-0000-0000-0000-000000000003',
-  corp:       '00000000-0000-0000-0000-000000000000',
+  corp:       '00000000-0000-0000-0000-000000000001',
 };
 
 const STAFF_ROLES = ['store_admin','vendedor','gerente','store_manager','superadmin','corp','admin_corp'];

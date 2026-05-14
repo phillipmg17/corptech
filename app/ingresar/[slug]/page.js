@@ -109,7 +109,7 @@ export default function IngresarPage() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && mounted) {
+      if (event === 'SIGNED_IN' && session && mounted) {
         router.replace(await getRedirectPath(session.user.id));
       }
     });
@@ -118,12 +118,13 @@ export default function IngresarPage() {
   }, []);
 
   async function getRedirectPath(userId) {
+    // Traer TODOS los roles del usuario y elegir el de mayor jerarquía
     const { data } = await supabase
-      .from('user_roles').select('role').eq('user_id', userId).limit(1).maybeSingle();
-    const r = data?.role || 'vendedor';
-    if (r === 'superadmin') return '/superadmin';
-    if (r === 'corp' || r === 'admin_corp') return '/corp';
-    if (r === 'gerente' || r === 'store_manager' || r === 'store_admin') return '/store';
+      .from('user_roles').select('role').eq('user_id', userId);
+    const roles = (data || []).map(r => r.role);
+    if (roles.includes('superadmin'))  return '/superadmin';
+    if (roles.includes('corp') || roles.includes('admin_corp')) return '/corp';
+    if (roles.includes('store_admin') || roles.includes('gerente') || roles.includes('store_manager')) return '/store';
     return '/pos';
   }
 

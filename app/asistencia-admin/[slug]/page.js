@@ -11,19 +11,20 @@ const STORE_CONFIG = {
 };
 
 const SLUG_MAP = {
-  futurteck:  '00000000-0000-0000-0000-000000000001',
-  wetech:     '00000000-0000-0000-0000-000000000002',
+  futurteck:  '00000000-0000-0000-0000-000000000002',
+  wetech:     '00000000-0000-0000-0000-000000000004',
   innovatech: '00000000-0000-0000-0000-000000000003',
-  corp:       '00000000-0000-0000-0000-000000000000',
+  corp:       '00000000-0000-0000-0000-000000000001',
 };
 
 const ADMIN_ROLES  = ['store_admin','gerente','store_manager','admin_corp','corp','superadmin'];
 const CORP_ROLES   = ['admin_corp','corp','superadmin'];
 
 const ALL_STORES = [
-  { slug:'futurteck',  name:'Futurteck',   orgId: SLUG_MAP.futurteck },
-  { slug:'wetech',     name:'WeTech Perú', orgId: SLUG_MAP.wetech },
-  { slug:'innovatech', name:'InnovaTech',  orgId: SLUG_MAP.innovatech },
+  { slug:'corp',       name:'Corp Tech',   orgId: '00000000-0000-0000-0000-000000000001' },
+  { slug:'futurteck',  name:'Futurteck',   orgId: '00000000-0000-0000-0000-000000000002' },
+  { slug:'innovatech', name:'InnovaTech',  orgId: '00000000-0000-0000-0000-000000000003' },
+  { slug:'wetech',     name:'WeTech Perú', orgId: '00000000-0000-0000-0000-000000000004' },
 ];
 
 export default function AsistenciaAdminPage({ params }) {
