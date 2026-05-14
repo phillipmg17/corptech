@@ -2555,64 +2555,101 @@ export default function CorpPage() {
 
               {/* ── MODAL: INVITAR TRABAJADOR ── */}
               {workerModal && (
-                <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-                  <div className="card" style={{ width:'100%', maxWidth:440, padding:28, position:'relative' }}>
-                    <button onClick={() => setWorkerModal(false)}
-                      style={{ position:'absolute', top:16, right:16, background:'none', border:'none', fontSize:20, cursor:'pointer', color:'var(--text3)' }}>✕</button>
+                <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+                  onClick={e => { if(e.target===e.currentTarget) setWorkerModal(false); }}>
+                  <div style={{
+                    width:'100%', maxWidth:420, borderRadius:20, padding:28,
+                    background:'var(--card)', border:'1px solid var(--border)',
+                    boxShadow:'0 24px 60px rgba(0,0,0,0.4)', position:'relative',
+                  }}>
+                    {/* X cerrar */}
+                    <button onClick={() => setWorkerModal(false)} style={{
+                      position:'absolute', top:16, right:16, width:32, height:32,
+                      background:'var(--bg)', border:'1px solid var(--border)',
+                      borderRadius:8, fontSize:16, cursor:'pointer', color:'var(--text3)',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                    }}>✕</button>
 
-                    <h3 style={{ fontSize:18, fontWeight:800, marginBottom:4 }}>➕ Invitar trabajador</h3>
-                    <p style={{ fontSize:13, color:'var(--text3)', marginBottom:20 }}>
-                      Le llegaré un email para que cree su contraseña.
-                    </p>
-
-                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Nombre completo</label>
-                        <input className="modal-input" style={{ marginTop:5 }}
-                          placeholder="Juan Pérez"
-                          value={workerForm.full_name}
-                          onChange={e => setWorkerForm(p=>({...p, full_name:e.target.value}))} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Email</label>
-                        <input className="modal-input" style={{ marginTop:5 }} type="email"
-                          placeholder="trabajador@email.com"
-                          value={workerForm.email}
-                          onChange={e => setWorkerForm(p=>({...p, email:e.target.value}))} />
-                      </div>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Rol</label>
-                        <select className="modal-input" style={{ marginTop:5 }}
-                          value={workerForm.role}
-                          onChange={e => setWorkerForm(p=>({...p, role:e.target.value}))}>
-                          <option value="vendedor">🛒 Vendedor (POS de tienda)</option>
-                          <option value="store_admin">🏪 Admin Tienda (panel de tienda)</option>
-                          <option value="corp">🏢 Corp (panel corporativo)</option>
-                          <option value="admin_corp">🏢 Admin Corp (panel corporativo)</option>
-                          <option value="superadmin">👑 SuperAdmin (acceso total)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.5px' }}>Tienda / Empresa</label>
-                        <select className="modal-input" style={{ marginTop:5 }}
-                          value={workerForm.org_id}
-                          onChange={e => setWorkerForm(p=>({...p, org_id:e.target.value}))}>
-                          <option value="00000000-0000-0000-0000-000000000001">🏢 Corp Tech</option>
-                          <option value="00000000-0000-0000-0000-000000000002">🔵 Futurteck</option>
-                          <option value="00000000-0000-0000-0000-000000000003">🟣 Innovatech Store</option>
-                          <option value="00000000-0000-0000-0000-000000000004">🟢 WeTech Peru</option>
-                        </select>
-                      </div>
+                    <div style={{ marginBottom:20 }}>
+                      <h3 style={{ fontSize:19, fontWeight:800, margin:'0 0 5px', color:'var(--text)' }}>Invitar trabajador</h3>
+                      <p style={{ fontSize:13, color:'var(--text3)', margin:0 }}>Le llegará un email para crear su contraseña.</p>
                     </div>
 
-                    <div style={{ display:'flex', gap:10, marginTop:22 }}>
-                      <button onClick={() => setWorkerModal(false)}
-                        style={{ flex:1, padding:'12px', borderRadius:12, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text2)', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
-                        Cancelar
-                      </button>
-                      <button onClick={inviteWorker} disabled={workerSaving || !workerForm.email || !workerForm.full_name}
-                        style={{ flex:2, padding:'12px', borderRadius:12, border:'none', background:'var(--accent)', color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit', opacity: workerSaving||!workerForm.email||!workerForm.full_name ? 0.6 : 1 }}>
-                        {workerSaving ? 'Enviando invitación…' : '📨 Enviar invitación'}
+                    {/* Campo reutilizable — función local */}
+                    {[
+                      { lbl:'Nombre completo', key:'full_name', type:'text',  ph:'Juan Pérez' },
+                      { lbl:'Email',           key:'email',     type:'email', ph:'trabajador@email.com' },
+                    ].map(f => (
+                      <div key={f.key} style={{ marginBottom:14 }}>
+                        <label style={{ display:'block', fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>
+                          {f.lbl}
+                        </label>
+                        <input type={f.type} placeholder={f.ph}
+                          value={workerForm[f.key]}
+                          onChange={e => setWorkerForm(p=>({...p, [f.key]:e.target.value}))}
+                          style={{
+                            display:'block', width:'100%', padding:'11px 14px',
+                            background:'var(--bg)', border:'1.5px solid var(--border)',
+                            borderRadius:12, color:'var(--text)', fontSize:15,
+                            fontFamily:'inherit', outline:'none', boxSizing:'border-box',
+                          }} />
+                      </div>
+                    ))}
+
+                    <div style={{ marginBottom:14 }}>
+                      <label style={{ display:'block', fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>
+                        Rol
+                      </label>
+                      <select value={workerForm.role} onChange={e => setWorkerForm(p=>({...p, role:e.target.value}))}
+                        style={{
+                          display:'block', width:'100%', padding:'11px 14px',
+                          background:'var(--bg)', border:'1.5px solid var(--border)',
+                          borderRadius:12, color:'var(--text)', fontSize:15,
+                          fontFamily:'inherit', outline:'none', boxSizing:'border-box', cursor:'pointer',
+                        }}>
+                        <option value="vendedor">🛒 Vendedor — solo POS de tienda</option>
+                        <option value="store_admin">🏪 Admin Tienda — gestiona su tienda</option>
+                        <option value="corp">🏢 Corp — panel corporativo</option>
+                        <option value="admin_corp">🏢 Admin Corp — panel corporativo</option>
+                        <option value="superadmin">👑 SuperAdmin — acceso total</option>
+                      </select>
+                    </div>
+
+                    <div style={{ marginBottom:22 }}>
+                      <label style={{ display:'block', fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>
+                        Tienda / Empresa
+                      </label>
+                      <select value={workerForm.org_id} onChange={e => setWorkerForm(p=>({...p, org_id:e.target.value}))}
+                        style={{
+                          display:'block', width:'100%', padding:'11px 14px',
+                          background:'var(--bg)', border:'1.5px solid var(--border)',
+                          borderRadius:12, color:'var(--text)', fontSize:15,
+                          fontFamily:'inherit', outline:'none', boxSizing:'border-box', cursor:'pointer',
+                        }}>
+                        <option value="00000000-0000-0000-0000-000000000001">🏢 Corp Tech</option>
+                        <option value="00000000-0000-0000-0000-000000000002">🔵 Futurteck</option>
+                        <option value="00000000-0000-0000-0000-000000000003">🟣 Innovatech Store</option>
+                        <option value="00000000-0000-0000-0000-000000000004">🟢 WeTech Peru</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display:'flex', gap:10 }}>
+                      <button onClick={() => setWorkerModal(false)} style={{
+                        flex:1, padding:'12px', borderRadius:12,
+                        border:'1px solid var(--border)', background:'var(--bg)',
+                        color:'var(--text2)', fontSize:14, fontWeight:600,
+                        cursor:'pointer', fontFamily:'inherit',
+                      }}>Cancelar</button>
+                      <button onClick={inviteWorker}
+                        disabled={workerSaving || !workerForm.email || !workerForm.full_name}
+                        style={{
+                          flex:2, padding:'12px', borderRadius:12, border:'none',
+                          background: workerSaving||!workerForm.email||!workerForm.full_name ? 'var(--border)' : 'var(--accent)',
+                          color:'#fff', fontSize:14, fontWeight:700,
+                          cursor: workerSaving||!workerForm.email||!workerForm.full_name ? 'default' : 'pointer',
+                          fontFamily:'inherit', transition:'background .2s',
+                        }}>
+                        {workerSaving ? '⏳ Enviando…' : '📨 Enviar invitación'}
                       </button>
                     </div>
                   </div>
