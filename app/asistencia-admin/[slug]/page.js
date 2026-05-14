@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '../../../lib/supabase';
 
 // ── Config ────────────────────────────────────────────────────
 const STORE_CONFIG = {
@@ -30,7 +30,6 @@ export default function AsistenciaAdminPage({ params }) {
   const slug     = params?.slug || 'corp';
   const cfg      = STORE_CONFIG[slug] || STORE_CONFIG.corp;
   const orgId    = SLUG_MAP[slug];
-  const supabase = createClientComponentClient();
 
   const mapRef    = useRef(null);
   const leafletRef = useRef(null);

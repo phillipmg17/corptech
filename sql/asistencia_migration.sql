@@ -33,9 +33,9 @@ CREATE TABLE IF NOT EXISTS asistencia_registros (
 CREATE INDEX IF NOT EXISTS idx_asistencia_user_id    ON asistencia_registros(user_id);
 CREATE INDEX IF NOT EXISTS idx_asistencia_org_id     ON asistencia_registros(org_id);
 CREATE INDEX IF NOT EXISTS idx_asistencia_timestamp  ON asistencia_registros(timestamp DESC);
--- Índice funcional para filtrar por fecha (reemplaza la columna generada)
+-- Índice por timestamp para filtrar por rango de fechas
 CREATE INDEX IF NOT EXISTS idx_asistencia_fecha
-  ON asistencia_registros( (timestamp AT TIME ZONE 'America/Lima')::date );
+  ON asistencia_registros(timestamp);
 
 -- 3. HABILITAR RLS
 ALTER TABLE asistencia_registros ENABLE ROW LEVEL SECURITY;

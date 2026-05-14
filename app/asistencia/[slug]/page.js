@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '../../../lib/supabase';
 
 // ── Config por tienda ──────────────────────────────────────────
 const STORE_CONFIG = {
@@ -23,7 +23,6 @@ export default function AsistenciaPage({ params }) {
   const slug    = params?.slug || 'corp';
   const cfg     = STORE_CONFIG[slug] || STORE_CONFIG.corp;
   const orgId   = SLUG_MAP[slug];
-  const supabase = createClientComponentClient();
 
   const [user,        setUser]        = useState(null);
   const [perfil,      setPerfil]      = useState(null);
