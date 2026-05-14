@@ -8,8 +8,8 @@ const DOMAIN_MAP = {
   'www.innovatechstore.com.pe': '/tienda/innovatech',
   'futurteck.pe':               '/tienda/futurteck',
   'www.futurteck.pe':           '/tienda/futurteck',
-  'corptech.pe':                '/ingresar/corp',  // login directo
-  'www.corptech.pe':            '/ingresar/corp',
+  'corptech.pe':                '/corp-landing',   // landing pública
+  'www.corptech.pe':            '/corp-landing',
 };
 
 export function middleware(request) {

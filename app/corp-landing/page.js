@@ -26,35 +26,12 @@ const BRANDS = [
 ];
 
 export default function CorpLandingPage() {
-  const [year,       setYear]       = useState('');
-  const [hover,      setHover]      = useState(null);
-  const [taps,       setTaps]       = useState(0);
-  const [tapTimer,   setTapTimer]   = useState(null);
-  const [showFlash,  setShowFlash]  = useState(false);
+  const [year,  setYear]  = useState('');
+  const [hover, setHover] = useState(null);
 
   useEffect(() => {
     setYear(new Date().getFullYear().toString());
-    // Redirigir directo al login interno
-    window.location.href = '/ingresar/corp';
   }, []);
-
-  // ── 5 clics rápidos en el logo → login interno ──
-  function handleLogoTap() {
-    if (tapTimer) clearTimeout(tapTimer);
-    const next = taps + 1;
-    if (next >= 5) {
-      setTaps(0);
-      setShowFlash(true);
-      setTimeout(() => {
-        setShowFlash(false);
-        window.location.href = '/ingresar/corp';
-      }, 400);
-      return;
-    }
-    setTaps(next);
-    const t = setTimeout(() => setTaps(0), 1800);
-    setTapTimer(t);
-  }
 
   return (
     <div style={{
@@ -97,16 +74,6 @@ export default function CorpLandingPage() {
         }
       `}</style>
 
-      {/* Flash blanco al activar el easter egg */}
-      {showFlash && (
-        <div style={{
-          position: 'fixed', inset: 0, background: '#fff',
-          zIndex: 9999, opacity: 0.15, pointerEvents: 'none',
-          animation: 'flashOut 0.4s ease forwards',
-        }} />
-      )}
-      <style>{`@keyframes flashOut { from{opacity:0.15} to{opacity:0} }`}</style>
-
       {/* ══ NAV ══ */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
@@ -116,27 +83,27 @@ export default function CorpLandingPage() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Logo — 5 toques rápidos activan el acceso interno */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo.png"
             alt="Corp Tech"
-            onClick={handleLogoTap}
-            style={{
-              width: 36, height: 36, borderRadius: 10,
-              objectFit: 'contain',
-              cursor: 'default',
-              userSelect: 'none',
-              WebkitTapHighlightColor: 'transparent',
-              display: 'block',
-            }}
+            style={{ width: 36, height: 36, borderRadius: 10, objectFit: 'contain', display: 'block' }}
           />
           <span style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.3px' }}>Corp Tech</span>
         </div>
-        {/* Sin botón de login visible */}
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase' }}>
-          Holding Tecnológico
-        </span>
+        <a
+          href="/ingresar/corp"
+          style={{
+            fontSize: 13, fontWeight: 700, color: '#fff',
+            background: 'rgba(10,132,255,0.15)',
+            border: '1px solid rgba(10,132,255,0.35)',
+            borderRadius: 10, padding: '7px 18px',
+            textDecoration: 'none', letterSpacing: '0.2px',
+            transition: 'all .2s',
+          }}
+        >
+          Ingresar →
+        </a>
       </nav>
 
       {/* ══ HERO ══ */}
