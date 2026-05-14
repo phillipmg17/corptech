@@ -201,7 +201,7 @@ export default function IngresarPage() {
     setLoading(true); clearAlerts();
     const { error: err } = await supabase.auth.signInWithOtp({
       email: mgEmail.trim(),
-      options: { emailRedirectTo: window.location.origin + '/ingresar' },
+      options: { emailRedirectTo: window.location.origin + '/ingresar/' + slug },
     });
     if (err) { setError(err.message); setLoading(false); return; }
     setMgSent(true); setLoading(false);
@@ -214,10 +214,10 @@ export default function IngresarPage() {
     const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
     if (err) { setError('Correo o contraseña incorrectos.'); setLoading(false); return; }
 
-    // Verificar que tenga rol de staff
-    const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', data.user.id).maybeSingle();
-    const r = roleRow?.role;
-    if (!r || !STAFF_ROLES.includes(r)) {
+    // Verificar que tenga rol de staff — traer TODOS los roles (no maybeSingle)
+    const { data: allRoles } = await supabase.from('user_roles').select('role').eq('user_id', data.user.id);
+    const roles = (allRoles || []).map(r => r.role);
+    if (!roles.some(r => STAFF_ROLES.includes(r))) {
       await supabase.auth.signOut();
       setError('No tienes acceso a este panel.');
       setLoading(false); return;
