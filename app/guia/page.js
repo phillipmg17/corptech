@@ -168,8 +168,8 @@ export default function GuiaPage() {
       <div className="toolbar">
         <div className="toolbar-left">📋 Guía del Sistema — Corp Tech ERP</div>
         <div className="toolbar-right">
-          <button className="btn-toggle btn-open"  onClick={() => {}} dangerouslySetInnerHTML={{__html: '▼ Abrir todo'}}   suppressHydrationWarning />
-          <button className="btn-toggle btn-close" onClick={() => {}} dangerouslySetInnerHTML={{__html: '▲ Cerrar todo'}} suppressHydrationWarning />
+          <button className="btn-toggle btn-open">▼ Abrir todo</button>
+          <button className="btn-toggle btn-close">▲ Cerrar todo</button>
         </div>
       </div>
       {/* Los botones necesitan onclick en el HTML para funcionar sin React hydration */}
