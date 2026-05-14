@@ -135,27 +135,40 @@ export default function CorpPage() {
     full_name: '', email: '', password: '', role: 'vendedor', org_id: STORES[0].id,
   });
 
+  /* ── GESTIÓN DE TRABAJADORES (tab equipo) ── */
+  const [workerList,    setWorkerList]    = useState([]);
+  const [workerLoading, setWorkerLoading] = useState(false);
+  const [workerModal,   setWorkerModal]   = useState(false);
+  const [workerForm,    setWorkerForm]    = useState({ full_name:'', email:'', role:'vendedor', org_id: STORES[0].id });
+  const [workerSaving,  setWorkerSaving]  = useState(false);
+  const [workerMsg,     setWorkerMsg]     = useState(null); // { type:'ok'|'err', text }
+  const [workerFilter,  setWorkerFilter]  = useState('all');
+  const [editWorker,    setEditWorker]    = useState(null); // { id, role, org_id }
+
   useEffect(() => { init(); }, []);
 
   async function init() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.replace('/login'); return; }
+      if (!session) { router.replace('/ingresar/corp'); return; }
       const uid = session.user.id;
 
-      // Buscar rol — intentar con user_id y también con eq directo
-      const { data: roleRow } = await supabase
+      // Buscar todos los roles del usuario y elegir el de mayor jerarquía
+      const { data: roleRows } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', uid)
-        .maybeSingle();
+        .eq('user_id', uid);
 
-      const r = roleRow?.role;
+      const roles = (roleRows || []).map(row => row.role);
 
       // Roles permitidos en corp panel
       const CORP_ROLES = ['corp', 'superadmin', 'admin_corp'];
+      const r = roles.find(ro => ro === 'superadmin') ||
+                roles.find(ro => ro === 'corp' || ro === 'admin_corp') ||
+                roles[0];
+
       if (!r || !CORP_ROLES.includes(r)) {
-        router.replace('/login');
+        router.replace('/ingresar/corp');
         return;
       }
 
@@ -1476,7 +1489,7 @@ export default function CorpPage() {
 
   async function doLogout() {
     await supabase.auth.signOut();
-    router.replace('/login');
+    router.replace('/ingresar/corp');
   }
 
   function switchTab(t) {
@@ -1531,6 +1544,7 @@ export default function CorpPage() {
     if (tab === 'dashboard') loadDashboard();
     if (tab === 'global') loadGlobalStock();
     if (tab === 'ventas') loadAllSales();
+    if (tab === 'equipo') loadWorkers();
     if (tab === 'finanzas' && finSubTab === 'sueldos')   loadEmployees();
     if (tab === 'finanzas' && finSubTab === 'deudores')  loadDebtors();
     if (tab === 'finanzas' && finSubTab === 'deudas')    loadCompDebts();
@@ -1570,6 +1584,76 @@ export default function CorpPage() {
     <div className="auth-screen"><div className="loading-wrap"><div className="spinner" /></div></div>
   );
 
+  /* ══════════════════════════════════════
+     FUNCIONES — GESTIÓN DE TRABAJADORES
+  ══════════════════════════════════════ */
+  async function loadWorkers() {
+    setWorkerLoading(true);
+    const { data } = await supabase
+      .from('users')
+      .select('id, full_name, email, org_id, user_roles(role, org_id), organizations(name)')
+      .order('full_name');
+    setWorkerList(data || []);
+    setWorkerLoading(false);
+  }
+
+  async function inviteWorker() {
+    if (!workerForm.email || !workerForm.full_name || !workerForm.role) return;
+    setWorkerSaving(true);
+    setWorkerMsg(null);
+    try {
+      // 1. Crear cuenta en Supabase Auth con password temporal
+      const tempPass = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2).toUpperCase() + '!9';
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
+        email: workerForm.email.trim().toLowerCase(),
+        password: tempPass,
+        options: { data: { full_name: workerForm.full_name } },
+      });
+      if (authErr) { setWorkerMsg({ type:'err', text: authErr.message }); setWorkerSaving(false); return; }
+      const uid = authData.user?.id;
+      if (!uid) { setWorkerMsg({ type:'err', text: 'No se pudo crear la cuenta.' }); setWorkerSaving(false); return; }
+
+      // 2. Insertar en tabla users
+      await supabase.from('users').upsert({
+        id: uid,
+        full_name: workerForm.full_name,
+        email: workerForm.email.trim().toLowerCase(),
+        org_id: workerForm.org_id,
+      });
+
+      // 3. Insertar / actualizar rol
+      await supabase.from('user_roles').upsert({ user_id: uid, role: workerForm.role, org_id: workerForm.org_id });
+
+      // 4. Enviar email para que el trabajador ponga su propia contraseña
+      const originForReset = typeof window !== 'undefined' ? window.location.origin : 'https://corptech.pe';
+      await supabase.auth.resetPasswordForEmail(workerForm.email.trim().toLowerCase(), {
+        redirectTo: `${originForReset}/corp/login`,
+      });
+
+      setWorkerMsg({ type:'ok', text: `✅ Invitación enviada a ${workerForm.email}. El trabajador recibirá un email para crear su contraseña.` });
+      setWorkerForm({ full_name:'', email:'', role:'vendedor', org_id: STORES[0].id });
+      setWorkerModal(false);
+      loadWorkers();
+    } catch (e) {
+      setWorkerMsg({ type:'err', text: e.message || 'Error desconocido.' });
+    }
+    setWorkerSaving(false);
+  }
+
+  async function updateWorkerRole(userId, newRole, orgId) {
+    await supabase.from('user_roles').upsert({ user_id: userId, role: newRole, org_id: orgId });
+    setEditWorker(null);
+    loadWorkers();
+    showToast('Rol actualizado ✓');
+  }
+
+  async function revokeWorkerAccess(userId, userEmail) {
+    if (!confirm(`¿Revocar acceso a ${userEmail}? El usuario no podrá iniciar sesión en ningún panel.`)) return;
+    await supabase.from('user_roles').delete().eq('user_id', userId);
+    loadWorkers();
+    showToast('Acceso revocado');
+  }
+
   const CORP_NAV = [
     { id: 'dashboard',     ico: '📈', lbl: 'Dashboard'     },
     { id: 'tiendas',       ico: '🏪', lbl: 'Tiendas'       },
@@ -1582,8 +1666,10 @@ export default function CorpPage() {
     { id: 'imei',          ico: '🔍', lbl: 'IMEI'          },
     { id: 'ventas',        ico: '📊', lbl: 'Ventas'        },
     { id: 'productos',     ico: '🗂️', lbl: 'Catálogo'      },
-    { id: 'equipo',        ico: '👥', lbl: 'Equipo'        },
-    { href: '/biometrics', ico: '🔐', lbl: 'Mi Carnet QR' },
+    { id: 'equipo',              ico: '👥', lbl: 'Equipo'        },
+    { href: '/asistencia',       ico: '✅', lbl: 'Marcar'        },
+    { href: '/asistencia-admin', ico: '🗓️', lbl: 'Asistencia'   },
+    { href: '/biometrics',       ico: '🔐', lbl: 'Mi Carnet QR' },
   ];
 
   return (
@@ -2324,26 +2410,257 @@ export default function CorpPage() {
         )}
 
         {/* ══════════════════════════════════════
-            TAB: EQUIPO
+            TAB: EQUIPO — GESTIÓN DE TRABAJADORES
         ══════════════════════════════════════ */}
-        {tab === 'equipo' && (
-          <div style={{ padding: '16px' }}>
-            <div className="section-title">👥 Equipo</div>
-            {users.length === 0 ? <div className="empty-msg">Sin usuarios</div> : (
-              <div className="card">
-                {users.map(u => (
-                  <div className="list-item" key={u.id}>
-                    <div className="list-item-ico">👤</div>
-                    <div className="list-item-body">
-                      <div className="list-item-name">{u.full_name}</div>
-                      <div className="list-item-sub">{u.organizations?.name || '—'} · {u.user_roles?.[0]?.role || '—'}</div>
-                    </div>
-                  </div>
+        {tab === 'equipo' && (() => {
+          const ROLE_META = {
+            superadmin:  { lbl:'👑 SuperAdmin',   color:'#FF9F0A' },
+            corp:        { lbl:'🏢 Corp',          color:'#0A84FF' },
+            admin_corp:  { lbl:'🏢 Admin Corp',    color:'#0A84FF' },
+            store_admin: { lbl:'🏪 Admin Tienda',  color:'#BF5AF2' },
+            vendedor:    { lbl:'🛒 Vendedor',      color:'#30D158' },
+          };
+          const ORG_META = {
+            '00000000-0000-0000-0000-000000000001': { lbl:'Corp Tech',       ico:'🏢' },
+            '00000000-0000-0000-0000-000000000002': { lbl:'Futurteck',       ico:'🔵' },
+            '00000000-0000-0000-0000-000000000003': { lbl:'Innovatech Store',ico:'🟣' },
+            '00000000-0000-0000-0000-000000000004': { lbl:'WeTech Peru',     ico:'🟢' },
+          };
+          const getRoleMeta = r => ROLE_META[r] || { lbl: r || 'Sin rol', color:'var(--text3)' };
+          const getOrgMeta  = id => ORG_META[id] || { lbl:'—', ico:'❓' };
+
+          const filtered = workerFilter === 'all'
+            ? workerList
+            : workerList.filter(w => (w.user_roles?.[0]?.org_id || w.org_id) === workerFilter);
+
+          return (
+            <div style={{ padding:'16px' }}>
+
+              {/* Header */}
+              <div className="section-header" style={{ marginBottom:16 }}>
+                <div className="section-title">👥 Equipo de trabajo</div>
+                <button className="section-action" onClick={() => { setWorkerModal(true); setWorkerMsg(null); }}>
+                  + Invitar trabajador
+                </button>
+              </div>
+
+              {/* Mensaje de éxito / error */}
+              {workerMsg && (
+                <div style={{
+                  padding:'12px 16px', borderRadius:12, marginBottom:16, fontSize:14,
+                  background: workerMsg.type==='ok' ? 'rgba(48,209,88,0.1)' : 'rgba(255,59,48,0.1)',
+                  border: `1px solid ${workerMsg.type==='ok' ? 'rgba(48,209,88,0.3)' : 'rgba(255,59,48,0.3)'}`,
+                  color: workerMsg.type==='ok' ? '#30D158' : '#FF3B30',
+                }}>
+                  {workerMsg.text}
+                </div>
+              )}
+
+              {/* Filtros por tienda */}
+              <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+                {[
+                  { id:'all', lbl:'Todos' },
+                  { id:'00000000-0000-0000-0000-000000000001', lbl:'🏢 Corp' },
+                  { id:'00000000-0000-0000-0000-000000000002', lbl:'🔵 Futurteck' },
+                  { id:'00000000-0000-0000-0000-000000000003', lbl:'🟣 Innovatech' },
+                  { id:'00000000-0000-0000-0000-000000000004', lbl:'🟢 WeTech' },
+                ].map(f => (
+                  <button key={f.id} onClick={() => setWorkerFilter(f.id)}
+                    style={{
+                      padding:'6px 14px', borderRadius:20, border:'1px solid var(--border)',
+                      background: workerFilter===f.id ? 'var(--accent)' : 'var(--card)',
+                      color: workerFilter===f.id ? '#fff' : 'var(--text2)',
+                      fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit',
+                    }}>{f.lbl}</button>
                 ))}
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Lista de trabajadores */}
+              {workerLoading ? (
+                <div className="empty-msg">Cargando equipo…</div>
+              ) : filtered.length === 0 ? (
+                <div className="empty-msg">
+                  No hay trabajadores en esta categoría.{' '}
+                  <button style={{ background:'none', border:'none', color:'var(--accent)', cursor:'pointer', fontWeight:700, fontFamily:'inherit', fontSize:14 }}
+                    onClick={() => setWorkerModal(true)}>Invitar ahora →</button>
+                </div>
+              ) : (
+                <div className="card" style={{ overflow:'hidden' }}>
+                  {filtered.map((w, i) => {
+                    const role    = w.user_roles?.[0]?.role;
+                    const roleOrg = w.user_roles?.[0]?.org_id || w.org_id;
+                    const rm  = getRoleMeta(role);
+                    const org = getOrgMeta(roleOrg);
+                    const isEditing = editWorker?.id === w.id;
+
+                    return (
+                      <div key={w.id} className="list-item"
+                        style={{ borderBottom: i < filtered.length-1 ? '1px solid var(--border)' : 'none', flexWrap:'wrap', gap:10 }}>
+
+                        {/* Avatar */}
+                        <div style={{
+                          width:40, height:40, borderRadius:12, flexShrink:0,
+                          background:'var(--accent-dim)', display:'flex', alignItems:'center',
+                          justifyContent:'center', fontSize:16, fontWeight:800,
+                          color:'var(--accent)',
+                        }}>
+                          {(w.full_name||'?')[0].toUpperCase()}
+                        </div>
+
+                        {/* Info */}
+                        <div className="list-item-body" style={{ flex:1, minWidth:160 }}>
+                          <div className="list-item-name">{w.full_name || '—'}</div>
+                          <div className="list-item-sub" style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+                            <span style={{ color: rm.color, fontWeight:700, fontSize:12 }}>{rm.lbl}</span>
+                            <span style={{ opacity:0.4 }}>·</span>
+                            <span>{org.ico} {org.lbl}</span>
+                            <span style={{ opacity:0.4 }}>·</span>
+                            <span style={{ fontSize:11 }}>{w.email}</span>
+                          </div>
+                        </div>
+
+                        {/* Acciones */}
+                        {!isEditing ? (
+                          <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                            <button onClick={() => setEditWorker({ id:w.id, role: role||'vendedor', org_id: roleOrg||STORES[0].id })}
+                              style={{ padding:'5px 12px', borderRadius:8, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text2)', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                              Editar rol
+                            </button>
+                            <button onClick={() => revokeWorkerAccess(w.id, w.email)}
+                              style={{ padding:'5px 10px', borderRadius:8, border:'1px solid rgba(255,59,48,0.3)', background:'rgba(255,59,48,0.08)', color:'#FF3B30', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          /* Editor de rol inline */
+                          <div style={{ display:'flex', gap:6, flexWrap:'wrap', width:'100%', marginTop:8 }}>
+                            <select value={editWorker.role} onChange={e => setEditWorker(p=>({...p, role:e.target.value}))}
+                              style={{ flex:1, padding:'6px 10px', borderRadius:8, border:'1px solid var(--border)', background:'var(--card)', color:'var(--text)', fontSize:13, fontFamily:'inherit' }}>
+                              {Object.entries(ROLE_META).map(([k,v]) => <option key={k} value={k}>{v.lbl}</option>)}
+                            </select>
+                            <select value={editWorker.org_id} onChange={e => setEditWorker(p=>({...p, org_id:e.target.value}))}
+                              style={{ flex:1, padding:'6px 10px', borderRadius:8, border:'1px solid var(--border)', background:'var(--card)', color:'var(--text)', fontSize:13, fontFamily:'inherit' }}>
+                              {Object.entries(ORG_META).map(([k,v]) => <option key={k} value={k}>{v.ico} {v.lbl}</option>)}
+                            </select>
+                            <button onClick={() => updateWorkerRole(editWorker.id, editWorker.role, editWorker.org_id)}
+                              style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'var(--accent)', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+                              Guardar
+                            </button>
+                            <button onClick={() => setEditWorker(null)}
+                              style={{ padding:'6px 10px', borderRadius:8, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text2)', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ── MODAL: INVITAR TRABAJADOR ── */}
+              {workerModal && (
+                <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+                  onClick={e => { if(e.target===e.currentTarget) setWorkerModal(false); }}>
+                  <div style={{
+                    width:'100%', maxWidth:420, borderRadius:20, padding:28,
+                    background:'var(--card)', border:'1px solid var(--border)',
+                    boxShadow:'0 24px 60px rgba(0,0,0,0.4)', position:'relative',
+                  }}>
+                    {/* X cerrar */}
+                    <button onClick={() => setWorkerModal(false)} style={{
+                      position:'absolute', top:16, right:16, width:32, height:32,
+                      background:'var(--bg)', border:'1px solid var(--border)',
+                      borderRadius:8, fontSize:16, cursor:'pointer', color:'var(--text3)',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                    }}>✕</button>
+
+                    <div style={{ marginBottom:20 }}>
+                      <h3 style={{ fontSize:19, fontWeight:800, margin:'0 0 5px', color:'var(--text)' }}>Invitar trabajador</h3>
+                      <p style={{ fontSize:13, color:'var(--text3)', margin:0 }}>Le llegará un email para crear su contraseña.</p>
+                    </div>
+
+                    {/* Campo reutilizable — función local */}
+                    {[
+                      { lbl:'Nombre completo', key:'full_name', type:'text',  ph:'Juan Pérez' },
+                      { lbl:'Email',           key:'email',     type:'email', ph:'trabajador@email.com' },
+                    ].map(f => (
+                      <div key={f.key} style={{ marginBottom:14 }}>
+                        <label style={{ display:'block', fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>
+                          {f.lbl}
+                        </label>
+                        <input type={f.type} placeholder={f.ph}
+                          value={workerForm[f.key]}
+                          onChange={e => setWorkerForm(p=>({...p, [f.key]:e.target.value}))}
+                          style={{
+                            display:'block', width:'100%', padding:'11px 14px',
+                            background:'var(--bg)', border:'1.5px solid var(--border)',
+                            borderRadius:12, color:'var(--text)', fontSize:15,
+                            fontFamily:'inherit', outline:'none', boxSizing:'border-box',
+                          }} />
+                      </div>
+                    ))}
+
+                    <div style={{ marginBottom:14 }}>
+                      <label style={{ display:'block', fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>
+                        Rol
+                      </label>
+                      <select value={workerForm.role} onChange={e => setWorkerForm(p=>({...p, role:e.target.value}))}
+                        style={{
+                          display:'block', width:'100%', padding:'11px 14px',
+                          background:'var(--bg)', border:'1.5px solid var(--border)',
+                          borderRadius:12, color:'var(--text)', fontSize:15,
+                          fontFamily:'inherit', outline:'none', boxSizing:'border-box', cursor:'pointer',
+                        }}>
+                        <option value="vendedor">🛒 Vendedor — solo POS de tienda</option>
+                        <option value="store_admin">🏪 Admin Tienda — gestiona su tienda</option>
+                        <option value="corp">🏢 Corp — panel corporativo</option>
+                      </select>
+                    </div>
+
+                    <div style={{ marginBottom:22 }}>
+                      <label style={{ display:'block', fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:6 }}>
+                        Tienda / Empresa
+                      </label>
+                      <select value={workerForm.org_id} onChange={e => setWorkerForm(p=>({...p, org_id:e.target.value}))}
+                        style={{
+                          display:'block', width:'100%', padding:'11px 14px',
+                          background:'var(--bg)', border:'1.5px solid var(--border)',
+                          borderRadius:12, color:'var(--text)', fontSize:15,
+                          fontFamily:'inherit', outline:'none', boxSizing:'border-box', cursor:'pointer',
+                        }}>
+                        <option value="00000000-0000-0000-0000-000000000001">🏢 Corp Tech</option>
+                        <option value="00000000-0000-0000-0000-000000000002">🔵 Futurteck</option>
+                        <option value="00000000-0000-0000-0000-000000000003">🟣 Innovatech Store</option>
+                        <option value="00000000-0000-0000-0000-000000000004">🟢 WeTech Peru</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display:'flex', gap:10 }}>
+                      <button onClick={() => setWorkerModal(false)} style={{
+                        flex:1, padding:'12px', borderRadius:12,
+                        border:'1px solid var(--border)', background:'var(--bg)',
+                        color:'var(--text2)', fontSize:14, fontWeight:600,
+                        cursor:'pointer', fontFamily:'inherit',
+                      }}>Cancelar</button>
+                      <button onClick={inviteWorker}
+                        disabled={workerSaving || !workerForm.email || !workerForm.full_name}
+                        style={{
+                          flex:2, padding:'12px', borderRadius:12, border:'none',
+                          background: workerSaving||!workerForm.email||!workerForm.full_name ? 'var(--border)' : 'var(--accent)',
+                          color:'#fff', fontSize:14, fontWeight:700,
+                          cursor: workerSaving||!workerForm.email||!workerForm.full_name ? 'default' : 'pointer',
+                          fontFamily:'inherit', transition:'background .2s',
+                        }}>
+                        {workerSaving ? '⏳ Enviando…' : '📨 Enviar invitación'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ══════════════════════════════════════
             TAB: ALMACENES

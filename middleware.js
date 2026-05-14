@@ -8,8 +8,8 @@ const DOMAIN_MAP = {
   'www.innovatechstore.com.pe': '/tienda/innovatech',
   'futurteck.pe':               '/tienda/futurteck',
   'www.futurteck.pe':           '/tienda/futurteck',
-  'corptech.pe':                '/corp',
-  'www.corptech.pe':            '/corp',
+  'corptech.pe':                '/corp-landing',   // landing pública — sin login
+  'www.corptech.pe':            '/corp-landing',
 };
 
 export function middleware(request) {
@@ -19,29 +19,67 @@ export function middleware(request) {
   const targetPath = DOMAIN_MAP[hostname];
   if (!targetPath) return NextResponse.next();
 
-  // Si ya está en la ruta correcta o en login/dashboard/pos → pasar sin cambiar
-  // /acceso en dominio de tienda → mostrar login con logo de ESA tienda
+  // /acceso en dominio de tienda → login con logo de esa tienda
   if (pathname === '/acceso' && targetPath.startsWith('/tienda')) {
     const slug = targetPath.split('/').pop();
     return NextResponse.rewrite(new URL(`/acceso/${slug}`, request.url));
   }
 
-  // /cliente en dominio de tienda → portal de clientes de ESA tienda
-  if (pathname.startsWith('/cliente') && targetPath.startsWith('/tienda')) {
+  // /staff en dominio de tienda → login de trabajadores con logo de esa tienda
+  if (pathname === '/staff' && targetPath.startsWith('/tienda')) {
     const slug = targetPath.split('/').pop();
-    const rest = pathname.replace('/cliente', '');
-    return NextResponse.rewrite(new URL(`/cliente/${slug}${rest}`, request.url));
+    return NextResponse.rewrite(new URL(`/staff/${slug}`, request.url));
   }
 
-  const PASS_THROUGH = ['/tienda', '/corp', '/store', '/dashboard', '/pos', '/api', '/_next', '/wallet', '/acceso', '/cliente', '/login', '/superadmin'];
+  // /ingresar en dominio de tienda → login multi-método branded por tienda
+  if (pathname === '/ingresar' && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    return NextResponse.rewrite(new URL(`/ingresar/${slug}`, request.url));
+  }
+
+  // /ingresar en corptech.pe → login multi-método Corp Tech
+  if (pathname === '/ingresar' && targetPath === '/corp-landing') {
+    return NextResponse.rewrite(new URL('/ingresar/corp', request.url));
+  }
+
+  // /cliente exacto en dominio de tienda → portal de clientes con slug correcto
+  if (pathname === '/cliente' && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    return NextResponse.rewrite(new URL(`/cliente/${slug}`, request.url));
+  }
+
+  // /asistencia en dominio de tienda → marcado con slug
+  if (pathname === '/asistencia' && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    return NextResponse.rewrite(new URL(`/asistencia/${slug}`, request.url));
+  }
+
+  // /asistencia-admin en dominio de tienda → panel admin con slug
+  if (pathname === '/asistencia-admin' && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    return NextResponse.rewrite(new URL(`/asistencia-admin/${slug}`, request.url));
+  }
+
+  // /asistencia en corptech.pe → asistencia corp
+  if (pathname === '/asistencia' && targetPath === '/corp-landing') {
+    return NextResponse.rewrite(new URL('/asistencia/corp', request.url));
+  }
+
+  // /asistencia-admin en corptech.pe → panel admin corp
+  if (pathname === '/asistencia-admin' && targetPath === '/corp-landing') {
+    return NextResponse.rewrite(new URL('/asistencia-admin/corp', request.url));
+  }
+
+  // Rutas que pasan directo sin reescribir (panel interno, APIs, etc.)
+  const PASS_THROUGH = [
+    '/tienda', '/corp', '/store', '/dashboard', '/pos',
+    '/api', '/_next', '/wallet', '/acceso', '/cliente',
+    '/login', '/superadmin', '/corp-landing', '/staff', '/ingresar', '/guia',
+    '/asistencia', '/asistencia-admin',
+  ];
   if (PASS_THROUGH.some(p => pathname.startsWith(p))) return NextResponse.next();
 
-  // Si entra a /login en un dominio de tienda → mostrar login
-  if (pathname === '/login') {
-    return NextResponse.rewrite(new URL('/', request.url));
-  }
-
-  // Raíz del dominio → mostrar la página correspondiente sin cambiar la URL
+  // Raíz del dominio → página correspondiente
   if (pathname === '/') {
     return NextResponse.rewrite(new URL(targetPath, request.url));
   }
