@@ -118,14 +118,18 @@ export default function IngresarPage() {
   }, []);
 
   async function getRedirectPath(userId) {
-    // Traer TODOS los roles del usuario y elegir el de mayor jerarquía
-    const { data } = await supabase
-      .from('user_roles').select('role').eq('user_id', userId);
-    const roles = (data || []).map(r => r.role);
-    if (roles.includes('superadmin'))  return '/superadmin';
-    if (roles.includes('corp') || roles.includes('admin_corp')) return '/corp';
-    if (roles.includes('store_admin') || roles.includes('gerente') || roles.includes('store_manager')) return '/store';
-    return '/pos';
+    try {
+      const { data } = await supabase
+        .from('user_roles').select('role').eq('user_id', userId);
+      const roles = (data || []).map(r => r.role);
+      if (roles.includes('superadmin'))                                                          return '/superadmin';
+      if (roles.includes('corp') || roles.includes('admin_corp'))                               return '/corp';
+      if (roles.includes('store_admin') || roles.includes('gerente') || roles.includes('store_manager')) return '/store';
+      if (roles.includes('vendedor'))                                                            return '/pos';
+    } catch (_) { /* RLS u otro error → fallback por slug */ }
+    // Fallback: si la DB no responde, ir al panel según el slug de esta página
+    if (slug === 'corp') return '/corp';
+    return '/store';
   }
 
   function clearAlerts() { setError(''); setSuccess(''); }
