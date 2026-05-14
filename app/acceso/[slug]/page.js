@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 /* ── Config por defecto de cada tienda (fallback si DB falla) ── */
@@ -24,9 +24,10 @@ function hexAlpha(hex, a) {
 }
 
 export default function AccesoSlugPage({ params }) {
-  const slug   = params.slug?.toLowerCase();
-  const def    = SLUG_DEFAULTS[slug] || { name: 'Tienda', primary: '#0A84FF', emoji: '🏪', id: null };
-  const router = useRouter();
+  const slug        = params.slug?.toLowerCase();
+  const def         = SLUG_DEFAULTS[slug] || { name: 'Tienda', primary: '#0A84FF', emoji: '🏪', id: null };
+  const router      = useRouter();
+  const searchParams = useSearchParams();
 
   const [checking,  setChecking]  = useState(true);
   const [store,     setStore]     = useState(null);
@@ -35,6 +36,20 @@ export default function AccesoSlugPage({ params }) {
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState('');
   const [success,   setSuccess]   = useState('');
+
+  /* ── Detectar tipo de redirect desde email ── */
+  useEffect(() => {
+    const type = searchParams.get('type');
+    if (type === 'signup' || type === 'email_change') {
+      setSuccess('✅ ¡Email confirmado! Ya puedes iniciar sesión con tu correo y contraseña.');
+      setTab('login');
+      setChecking(false);
+    }
+    if (type === 'recovery') {
+      setIsRecovery(true);
+      setChecking(false);
+    }
+  }, [searchParams]);
 
   /* Campos login */
   const [email,     setEmail]     = useState('');
@@ -46,6 +61,12 @@ export default function AccesoSlugPage({ params }) {
   const [regEmail,  setRegEmail]  = useState('');
   const [regPass,   setRegPass]   = useState('');
   const [regPhone,  setRegPhone]  = useState('');
+
+  /* Recuperar / cambiar contraseña */
+  const [showForgot,  setShowForgot]  = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [newPass,     setNewPass]     = useState('');
+  const [isRecovery,  setIsRecovery]  = useState(false);
 
   const P = store?.color_primario || def.primary;
 
@@ -67,13 +88,15 @@ export default function AccesoSlugPage({ params }) {
   /* ── Redirect si ya hay sesión ── */
   useEffect(() => {
     const check = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const dest = await getRedirectPath(session.user.id);
-        router.replace(dest);
-      } else {
-        setChecking(false);
-      }
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const dest = await getRedirectPath(session.user.id);
+          router.replace(dest);
+        }
+      } catch (_) {}
+      // Siempre mostrar el formulario (el redirect ocurre en paralelo)
+      setChecking(false);
     };
     check();
 
@@ -90,7 +113,8 @@ export default function AccesoSlugPage({ params }) {
     const { data } = await supabase
       .from('user_roles').select('role').eq('user_id', userId).limit(1).maybeSingle();
     const r = data?.role;
-    if (!r || r === 'cliente') return `/cliente/${slug}`;
+    // Cliente → /cliente (el middleware agrega el slug según el dominio)
+    if (!r || r === 'cliente') return '/cliente';
     if (r === 'superadmin')    return '/superadmin';
     if (r === 'corp' || r === 'admin_corp') return '/corp';
     if (r === 'gerente' || r === 'store_manager' || r === 'store_admin') return '/store';
@@ -98,6 +122,42 @@ export default function AccesoSlugPage({ params }) {
   }
 
   function clearAlerts() { setError(''); setSuccess(''); }
+
+  /* ── OLVIDÉ MI CONTRASEÑA ── */
+  async function doForgotPassword(e) {
+    e.preventDefault();
+    setLoading(true); clearAlerts();
+    const redirectBase = `${window.location.origin}/acceso`;
+    const { error: err } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${redirectBase}?type=recovery`,
+    });
+    if (err) {
+      setError('No se pudo enviar el correo. Verifica el email ingresado.');
+    } else {
+      setSuccess('✅ Te enviamos un correo. Haz clic en el link para crear tu nueva contraseña.');
+      setShowForgot(false);
+    }
+    setLoading(false);
+  }
+
+  /* ── CAMBIAR CONTRASEÑA (viene del link de recovery) ── */
+  async function doChangePassword(e) {
+    e.preventDefault();
+    setLoading(true); clearAlerts();
+    if (newPass.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      setLoading(false); return;
+    }
+    const { error: err } = await supabase.auth.updateUser({ password: newPass });
+    if (err) {
+      setError('No se pudo actualizar la contraseña. El link puede haber expirado.');
+    } else {
+      setSuccess('✅ ¡Contraseña actualizada! Ahora inicia sesión.');
+      setIsRecovery(false);
+      setTab('login');
+    }
+    setLoading(false);
+  }
 
   /* ── LOGIN (cliente o equipo) ── */
   async function doLogin(e) {
@@ -121,11 +181,17 @@ export default function AccesoSlugPage({ params }) {
       setLoading(false); return;
     }
 
-    /* 1. Crear cuenta en Supabase Auth */
+    /* 1. Crear cuenta en Supabase Auth
+       emailRedirectTo usa el dominio actual → el link del email apunta
+       de vuelta a futurteck.pe/acceso, innovatechstore.pe/acceso, etc. */
+    const redirectBase = `${window.location.origin}/acceso`;
     const { data: authData, error: authErr } = await supabase.auth.signUp({
       email: regEmail,
       password: regPass,
-      options: { data: { full_name: regName } },
+      options: {
+        data: { full_name: regName },
+        emailRedirectTo: `${redirectBase}?type=signup`,
+      },
     });
     if (authErr) {
       setError(authErr.message === 'User already registered' ? 'Ya existe una cuenta con ese email. Inicia sesión.' : 'Error al registrarse.');
@@ -144,7 +210,15 @@ export default function AccesoSlugPage({ params }) {
       }, { onConflict: 'org_id,email', ignoreDuplicates: false });
     }
 
-    setSuccess('¡Cuenta creada! Revisa tu correo para confirmar tu registro, luego inicia sesión.');
+    /* 3. Si el email ya está confirmado (Supabase sin confirmación activada),
+          hay sesión directa → redirigir al portal */
+    if (authData.session) {
+      router.replace(`/cliente/${slug}`);
+      return;
+    }
+
+    /* 4. Si requiere confirmación, mostrar aviso */
+    setSuccess('¡Cuenta creada! Revisa tu correo para confirmar y luego inicia sesión aquí.');
     setLoading(false);
     setTab('login');
     setEmail(regEmail);
@@ -241,6 +315,57 @@ export default function AccesoSlugPage({ params }) {
           borderRadius:22, padding:'24px 22px',
         }}>
 
+          {/* ── PANTALLA: CAMBIAR CONTRASEÑA (viene del link de recovery) ── */}
+          {isRecovery && (
+            <form onSubmit={doChangePassword} style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              <div style={{ textAlign:'center', marginBottom:4 }}>
+                <p style={{ fontSize:18, fontWeight:800, color:'#fff', margin:'0 0 6px' }}>🔑 Nueva contraseña</p>
+                <p style={{ fontSize:13, color:'rgba(255,255,255,0.4)', margin:0 }}>Elige una contraseña segura para tu cuenta</p>
+              </div>
+              {error && <div style={{ background:'rgba(255,59,48,0.12)', border:'1px solid rgba(255,59,48,0.25)', borderRadius:10, padding:'10px 14px', color:'#FF3B30', fontSize:13 }}>{error}</div>}
+              {success && <div style={{ background:'rgba(48,209,88,0.12)', border:'1px solid rgba(48,209,88,0.25)', borderRadius:10, padding:'10px 14px', color:'#30D158', fontSize:13 }}>{success}</div>}
+              <div>
+                <label style={{ color:'rgba(255,255,255,0.45)', fontSize:11, fontWeight:700, letterSpacing:'0.6px', textTransform:'uppercase' }}>Nueva contraseña</label>
+                <input type="password" required minLength={6} value={newPass} onChange={e=>setNewPass(e.target.value)}
+                  placeholder="Mínimo 6 caracteres" className="acc-input" style={{ marginTop:6 }} />
+              </div>
+              <button type="submit" disabled={loading} className="acc-btn-main"
+                style={{ background: loading ? 'rgba(255,255,255,0.08)' : P, color: loading ? 'rgba(255,255,255,0.35)' : '#fff' }}>
+                {loading ? 'Guardando…' : 'Guardar nueva contraseña'}
+              </button>
+            </form>
+          )}
+
+          {/* ── PANTALLA: OLVIDÉ MI CONTRASEÑA ── */}
+          {!isRecovery && showForgot && (
+            <form onSubmit={doForgotPassword} style={{ display:'flex', flexDirection:'column', gap:14 }}>
+              <div style={{ textAlign:'center', marginBottom:4 }}>
+                <p style={{ fontSize:18, fontWeight:800, color:'#fff', margin:'0 0 6px' }}>📧 Recuperar contraseña</p>
+                <p style={{ fontSize:13, color:'rgba(255,255,255,0.4)', margin:0 }}>Te enviaremos un link a tu correo</p>
+              </div>
+              {error && <div style={{ background:'rgba(255,59,48,0.12)', border:'1px solid rgba(255,59,48,0.25)', borderRadius:10, padding:'10px 14px', color:'#FF3B30', fontSize:13 }}>{error}</div>}
+              {success && <div style={{ background:'rgba(48,209,88,0.12)', border:'1px solid rgba(48,209,88,0.25)', borderRadius:10, padding:'10px 14px', color:'#30D158', fontSize:13 }}>{success}</div>}
+              <div>
+                <label style={{ color:'rgba(255,255,255,0.45)', fontSize:11, fontWeight:700, letterSpacing:'0.6px', textTransform:'uppercase' }}>Tu email</label>
+                <input type="email" required value={forgotEmail} onChange={e=>setForgotEmail(e.target.value)}
+                  placeholder="tu@email.com" className="acc-input" style={{ marginTop:6 }} />
+              </div>
+              <button type="submit" disabled={loading} className="acc-btn-main"
+                style={{ background: loading ? 'rgba(255,255,255,0.08)' : P, color: loading ? 'rgba(255,255,255,0.35)' : '#fff' }}>
+                {loading ? 'Enviando…' : 'Enviar link de recuperación'}
+              </button>
+              <p style={{ textAlign:'center', color:'rgba(255,255,255,0.3)', fontSize:12, margin:0 }}>
+                <button type="button" onClick={() => { setShowForgot(false); clearAlerts(); }}
+                  style={{ background:'none', border:'none', cursor:'pointer', color: P, fontSize:12, fontWeight:700, fontFamily:'inherit' }}>
+                  ← Volver al login
+                </button>
+              </p>
+            </form>
+          )}
+
+          {/* ── FORMULARIOS NORMALES (login / registro) ── */}
+          {!isRecovery && !showForgot && (<>
+
           {/* Sub-tab cliente: login | registro */}
           {mode === 'cliente' && (
             <div style={{ display:'flex', marginBottom:18, gap:0,
@@ -305,6 +430,13 @@ export default function AccesoSlugPage({ params }) {
                 {loading ? 'Ingresando…' : mode === 'equipo' ? 'Ingresar al panel' : 'Ingresar'}
               </button>
 
+              <p style={{ textAlign:'center', margin:'2px 0 0' }}>
+                <button type="button" onClick={() => { setShowForgot(true); setForgotEmail(email); clearAlerts(); }}
+                  style={{ background:'none', border:'none', cursor:'pointer', color:'rgba(255,255,255,0.3)', fontSize:12, fontFamily:'inherit' }}>
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </p>
+
               {mode === 'cliente' && (
                 <p style={{ textAlign:'center', color:'rgba(255,255,255,0.3)', fontSize:12, margin:'4px 0 0' }}>
                   ¿No tienes cuenta?{' '}
@@ -319,7 +451,7 @@ export default function AccesoSlugPage({ params }) {
 
           {/* ── FORM REGISTRO CLIENTE ── */}
           {mode === 'cliente' && tab === 'register' && (
-            <form onSubmit={doRegister} style={{ display:'flex', flexDirection:'column', gap:12 }}>
+            <form onSubmit={doRegister} style={{ display:'flex', flexDirection:'column', gap:12 }} autoComplete="off">
               <div>
                 <label style={{ color:'rgba(255,255,255,0.45)', fontSize:11, fontWeight:700, letterSpacing:'0.6px', textTransform:'uppercase' }}>
                   Nombre completo
@@ -371,6 +503,9 @@ export default function AccesoSlugPage({ params }) {
               </p>
             </form>
           )}
+
+          {/* Cierre del bloque de formularios normales */}
+          </>)}
         </div>
 
         {/* Volver a la tienda */}

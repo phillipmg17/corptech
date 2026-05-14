@@ -8,8 +8,8 @@ const DOMAIN_MAP = {
   'www.innovatechstore.com.pe': '/tienda/innovatech',
   'futurteck.pe':               '/tienda/futurteck',
   'www.futurteck.pe':           '/tienda/futurteck',
-  'corptech.pe':                '/corp',
-  'www.corptech.pe':            '/corp',
+  'corptech.pe':                '/corp-landing',   // landing pública — sin login
+  'www.corptech.pe':            '/corp-landing',
 };
 
 export function middleware(request) {
@@ -19,29 +19,27 @@ export function middleware(request) {
   const targetPath = DOMAIN_MAP[hostname];
   if (!targetPath) return NextResponse.next();
 
-  // Si ya está en la ruta correcta o en login/dashboard/pos → pasar sin cambiar
-  // /acceso en dominio de tienda → mostrar login con logo de ESA tienda
+  // /acceso en dominio de tienda → login con logo de esa tienda
   if (pathname === '/acceso' && targetPath.startsWith('/tienda')) {
     const slug = targetPath.split('/').pop();
     return NextResponse.rewrite(new URL(`/acceso/${slug}`, request.url));
   }
 
-  // /cliente en dominio de tienda → portal de clientes de ESA tienda
-  if (pathname.startsWith('/cliente') && targetPath.startsWith('/tienda')) {
+  // /cliente exacto en dominio de tienda → portal de clientes con slug correcto
+  if (pathname === '/cliente' && targetPath.startsWith('/tienda')) {
     const slug = targetPath.split('/').pop();
-    const rest = pathname.replace('/cliente', '');
-    return NextResponse.rewrite(new URL(`/cliente/${slug}${rest}`, request.url));
+    return NextResponse.rewrite(new URL(`/cliente/${slug}`, request.url));
   }
 
-  const PASS_THROUGH = ['/tienda', '/corp', '/store', '/dashboard', '/pos', '/api', '/_next', '/wallet', '/acceso', '/cliente', '/login', '/superadmin'];
+  // Rutas que pasan directo sin reescribir (panel interno, APIs, etc.)
+  const PASS_THROUGH = [
+    '/tienda', '/corp', '/store', '/dashboard', '/pos',
+    '/api', '/_next', '/wallet', '/acceso', '/cliente',
+    '/login', '/superadmin', '/corp-landing',
+  ];
   if (PASS_THROUGH.some(p => pathname.startsWith(p))) return NextResponse.next();
 
-  // Si entra a /login en un dominio de tienda → mostrar login
-  if (pathname === '/login') {
-    return NextResponse.rewrite(new URL('/', request.url));
-  }
-
-  // Raíz del dominio → mostrar la página correspondiente sin cambiar la URL
+  // Raíz del dominio → página correspondiente
   if (pathname === '/') {
     return NextResponse.rewrite(new URL(targetPath, request.url));
   }
