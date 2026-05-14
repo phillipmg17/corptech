@@ -71,8 +71,9 @@ export default function SuperadminPage() {
   async function init() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/ingresar/corp'); return; }
-    const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', session.user.id).single();
-    if (roleRow?.role !== 'superadmin') { router.replace('/dashboard'); return; }
+    const { data: roleRows } = await supabase.from('user_roles').select('role').eq('user_id', session.user.id);
+    const roles = (roleRows || []).map(r => r.role);
+    if (!roles.includes('superadmin')) { router.replace('/ingresar/corp'); return; }
     const { data: prof } = await supabase.from('users').select('full_name').eq('id', session.user.id).single();
     setMe({ id: session.user.id, name: prof?.full_name });
     await loadDashboard();

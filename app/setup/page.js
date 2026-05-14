@@ -62,13 +62,15 @@ export default function SetupPage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/ingresar/corp'); return; }
     const uid = session.user.id;
-    const { data: roleRow } = await supabase.from('user_roles').select('role, org_id').eq('user_id', uid).single();
-    const r = roleRow?.role;
+    const { data: roleRows } = await supabase.from('user_roles').select('role, org_id').eq('user_id', uid);
+    const PRIORITY = ['superadmin','corp','admin_corp','store_admin','gerente','store_manager','vendedor'];
+    const allR = (roleRows || []).map(x => x.role);
+    const r = PRIORITY.find(p => allR.includes(p)) || allR[0];
     if (!['store_manager', 'corp', 'superadmin', 'admin_corp'].includes(r)) {
-      router.replace('/dashboard'); return;
+      router.replace('/ingresar/corp'); return;
     }
     const { data: prof } = await supabase.from('users').select('full_name, org_id').eq('id', uid).single();
-    const orgId = prof?.org_id || roleRow?.org_id;
+    const orgId = prof?.org_id || (roleRows||[])[0]?.org_id;
     setMe({ id: uid, name: prof?.full_name, role: r, org_id: orgId });
 
     // Cargar settings existentes si hay

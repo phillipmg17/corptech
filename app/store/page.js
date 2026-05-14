@@ -105,11 +105,13 @@ export default function StorePage() {
     if (!session) { router.replace('/ingresar'); return; }
     const uid = session.user.id;
     const { data: prof } = await supabase.from('users').select('org_id, full_name, organizations(name)').eq('id', uid).single();
-    const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
-    const r = roleRow?.role;
+    const { data: roleRows } = await supabase.from('user_roles').select('role').eq('user_id', uid);
+    const roles = (roleRows || []).map(row => row.role);
+    const PRIORITY = ['superadmin','corp','admin_corp','store_admin','gerente','store_manager','vendedor'];
+    const r = PRIORITY.find(p => roles.includes(p)) || roles[0];
     const ALLOWED = ['gerente','vendedor','superadmin','corp','store_manager','admin_corp','store_admin'];
     if (!r || !ALLOWED.includes(r)) {
-      router.replace('/dashboard'); return;
+      router.replace('/ingresar'); return;
     }
     setMe({ id: uid, name: prof?.full_name, role: r });
 

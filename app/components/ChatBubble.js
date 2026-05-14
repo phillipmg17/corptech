@@ -54,8 +54,10 @@ export default function ChatBubble() {
       const uid = session.user.id;
       setUserId(uid);
       const { data: prof }    = await supabase.from('users').select('*, organizations(name)').eq('id', uid).single();
-      const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
-      const r   = roleRow?.role || 'vendedor';
+      const { data: roleRows } = await supabase.from('user_roles').select('role').eq('user_id', uid);
+      const PRIORITY = ['superadmin','corp','admin_corp','store_admin','gerente','store_manager','vendedor'];
+      const allR = (roleRows || []).map(x => x.role);
+      const r = PRIORITY.find(p => allR.includes(p)) || allR[0] || 'vendedor';
       const oid = prof?.org_id;
       setProfile(prof);
       setRole(r);

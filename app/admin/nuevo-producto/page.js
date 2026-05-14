@@ -167,10 +167,12 @@ export default function NuevoProducto() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { router.replace('/ingresar/corp'); return; }
     const uid = session.user.id;
-    const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
-    const r = roleRow?.role;
+    const { data: roleRows } = await supabase.from('user_roles').select('role').eq('user_id', uid);
+    const PRIORITY = ['superadmin','corp','admin_corp','store_admin','gerente','store_manager','vendedor'];
+    const allR = (roleRows || []).map(x => x.role);
+    const r = PRIORITY.find(p => allR.includes(p)) || allR[0];
     if (!['corp','superadmin','admin_corp','store_admin'].includes(r)) {
-      router.replace('/dashboard'); return;
+      router.replace('/ingresar/corp'); return;
     }
     const { data: prof } = await supabase.from('users').select('full_name').eq('id', uid).single();
     setMe({ id: uid, name: prof?.full_name, role: r });
