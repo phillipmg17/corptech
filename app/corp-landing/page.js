@@ -115,17 +115,20 @@ export default function CorpLandingPage() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {/* Logo — 5 toques rápidos activan el acceso interno */}
-          <div
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="Corp Tech"
             onClick={handleLogoTap}
             style={{
-              width: 32, height: 32, borderRadius: 9,
-              background: 'linear-gradient(135deg, #007AFF, #BF5AF2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 15, fontWeight: 900,
+              width: 36, height: 36, borderRadius: 10,
+              objectFit: 'contain',
               cursor: 'default',
               userSelect: 'none',
               WebkitTapHighlightColor: 'transparent',
-            }}>CT</div>
+              display: 'block',
+            }}
+          />
           <span style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.3px' }}>Corp Tech</span>
         </div>
         {/* Sin botón de login visible */}
@@ -331,12 +334,8 @@ export default function CorpLandingPage() {
         flexWrap: 'wrap', gap: 12, maxWidth: 1200, margin: '0 auto',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: 6,
-            background: 'linear-gradient(135deg, #007AFF, #BF5AF2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 900, color:'#fff',
-          }}>CT</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Corp Tech" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'contain' }} />
           <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', fontWeight: 600 }}>
             Corp Tech © {year} · Lima, Perú
           </span>

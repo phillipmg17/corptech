@@ -6,6 +6,10 @@ export const metadata = {
 const CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  .access-card { border-radius:20px; padding:24px; border:1.5px solid; margin-bottom:14px; }
+  .click-dots { display:flex; gap:6px; justify-content:center; margin:16px 0 8px; }
+  .click-dot  { width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,0.2); }
+  .click-dot.active { background:#0A84FF; box-shadow:0 0 8px #0A84FF88; }
   :root {
     --blue:#0A84FF; --green:#30D158; --orange:#FF9F0A; --purple:#BF5AF2; --red:#FF453A;
     --bg:#08080C; --card:rgba(255,255,255,0.04); --border:rgba(255,255,255,0.08);
@@ -81,6 +85,131 @@ export default function GuiaPage() {
       </div>
 
       <div className="container">
+
+        {/* ── SECCIÓN 0: DÓNDE ESTÁN LOS BOTONES ── */}
+        <div className="section">
+          <div className="section-header">
+            <div className="section-num blue" style={{background:'rgba(255,255,255,0.08)',color:'#fff',fontSize:18}}>📍</div>
+            <div>
+              <div className="section-title">¿Dónde están los botones de acceso?</div>
+              <div className="section-subtitle">Cómo llegar al panel del equipo desde cada dominio</div>
+            </div>
+          </div>
+
+          {/* TIENDAS */}
+          <div className="access-card" style={{borderColor:'rgba(48,209,88,0.3)',background:'rgba(48,209,88,0.05)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+              <div style={{width:40,height:40,borderRadius:12,background:'rgba(48,209,88,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>🏪</div>
+              <div>
+                <div style={{fontWeight:800,fontSize:16}}>Tiendas — futurteck.pe · wetechperu.pe · etc.</div>
+                <div style={{fontSize:13,color:'rgba(255,255,255,0.4)',marginTop:2}}>2 formas de acceder al panel de trabajadores</div>
+              </div>
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+
+              {/* Opción A — URL directa */}
+              <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 18px',display:'flex',gap:14,alignItems:'flex-start'}}>
+                <div style={{background:'rgba(48,209,88,0.2)',color:'#30D158',borderRadius:8,padding:'4px 10px',fontWeight:900,fontSize:12,flexShrink:0,marginTop:2}}>A</div>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>URL directa <span style={{color:'#30D158'}}>(más fácil)</span></div>
+                  <div style={{fontSize:13,color:'rgba(255,255,255,0.5)',marginBottom:8}}>Escribe esta dirección directamente en el navegador:</div>
+                  <div className="url-pill">🔗 tutienda.pe<strong>/ingresar</strong></div>
+                  <div style={{fontSize:12,color:'rgba(255,255,255,0.3)',marginTop:6}}>Ejemplo: <span style={{color:'#30D158'}}>futurteck.pe/ingresar</span></div>
+                </div>
+              </div>
+
+              {/* Opción B — Footer */}
+              <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'16px 18px',display:'flex',gap:14,alignItems:'flex-start'}}>
+                <div style={{background:'rgba(48,209,88,0.2)',color:'#30D158',borderRadius:8,padding:'4px 10px',fontWeight:900,fontSize:12,flexShrink:0,marginTop:2}}>B</div>
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>Link en el pie de página de la tienda</div>
+                  <div style={{fontSize:13,color:'rgba(255,255,255,0.5)',marginBottom:10}}>Baja hasta el final de la tienda online. En la última línea, al lado de &quot;Política de privacidad&quot;, verás el link:</div>
+                  {/* Mini mockup del footer */}
+                  <div style={{background:'#1D1D1F',borderRadius:10,padding:'12px 16px',fontSize:12}}>
+                    <div style={{color:'rgba(255,255,255,0.3)',marginBottom:8,fontSize:11}}>— pie de página de la tienda —</div>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                      <span style={{color:'rgba(255,255,255,0.3)'}}>© 2025 Futurteck. Todos los derechos reservados.</span>
+                      <div style={{display:'flex',gap:16,alignItems:'center'}}>
+                        <span style={{color:'rgba(255,255,255,0.3)'}}>Política de privacidad</span>
+                        <span style={{color:'rgba(255,255,255,0.3)'}}>Términos</span>
+                        <span style={{color:'rgba(255,255,255,0.55)',fontWeight:700,border:'1px solid rgba(255,255,255,0.2)',padding:'2px 8px',borderRadius:5}}>Acceso equipo ←</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          {/* CORPTECH */}
+          <div className="access-card" style={{borderColor:'rgba(10,132,255,0.3)',background:'rgba(10,132,255,0.05)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+              <div style={{width:40,height:40,borderRadius:12,background:'rgba(10,132,255,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>🏢</div>
+              <div>
+                <div style={{fontWeight:800,fontSize:16}}>Corp Tech — corptech.pe</div>
+                <div style={{fontSize:13,color:'rgba(255,255,255,0.4)',marginTop:2}}>Acceso secreto · 5 clics en el logo</div>
+              </div>
+            </div>
+
+            <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'20px 18px'}}>
+              <div style={{fontSize:14,color:'rgba(255,255,255,0.6)',marginBottom:16,lineHeight:1.6}}>
+                En <strong style={{color:'#fff'}}>corptech.pe</strong> no hay ningún botón de login visible para el público. El acceso al panel interno está protegido con un <strong style={{color:'#0A84FF'}}>código secreto de 5 clics</strong> en el logo de Corp Tech.
+              </div>
+
+              {/* Mockup nav */}
+              <div style={{background:'#08080C',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,overflow:'hidden',marginBottom:20}}>
+                <div style={{background:'rgba(8,8,12,0.9)',borderBottom:'1px solid rgba(255,255,255,0.06)',padding:'0 20px',height:52,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#007AFF,#BF5AF2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:900,position:'relative'}}>
+                      CT
+                      <div style={{position:'absolute',top:-6,right:-6,background:'#FF9F0A',borderRadius:999,padding:'1px 5px',fontSize:9,fontWeight:900,color:'#000',whiteSpace:'nowrap'}}>← 5 clics</div>
+                    </div>
+                    <span style={{fontWeight:800,fontSize:14}}>Corp Tech</span>
+                  </div>
+                  <span style={{fontSize:11,color:'rgba(255,255,255,0.2)',fontWeight:600,letterSpacing:'1px',textTransform:'uppercase'}}>Holding Tecnológico</span>
+                </div>
+                <div style={{padding:'10px 20px',fontSize:11,color:'rgba(255,255,255,0.3)',textAlign:'center'}}>
+                  (resto del sitio público...)
+                </div>
+              </div>
+
+              {/* Indicador de progreso de clics */}
+              <div style={{textAlign:'center',marginBottom:12}}>
+                <div style={{fontSize:13,color:'rgba(255,255,255,0.5)',marginBottom:10}}>Progreso al hacer los 5 clics seguidos:</div>
+                <div className="click-dots">
+                  {[0,1,2,3,4].map(i => <div key={i} className={`click-dot${i<3?' active':''}`} />)}
+                </div>
+                <div style={{fontSize:11,color:'rgba(255,255,255,0.3)',marginTop:4}}>Clic 1 · Clic 2 · Clic 3 · Clic 4 · Clic 5 → 🚀 acceso</div>
+              </div>
+
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <div style={{display:'flex',gap:10,alignItems:'flex-start',fontSize:13,color:'rgba(255,255,255,0.5)'}}>
+                  <span style={{color:'#0A84FF',flexShrink:0}}>①</span>
+                  <span>Entra a <strong style={{color:'#fff'}}>corptech.pe</strong> desde el navegador.</span>
+                </div>
+                <div style={{display:'flex',gap:10,alignItems:'flex-start',fontSize:13,color:'rgba(255,255,255,0.5)'}}>
+                  <span style={{color:'#0A84FF',flexShrink:0}}>②</span>
+                  <span>Localiza el <strong style={{color:'#fff'}}>logo de Corp Tech</strong> en la barra de navegación superior izquierda.</span>
+                </div>
+                <div style={{display:'flex',gap:10,alignItems:'flex-start',fontSize:13,color:'rgba(255,255,255,0.5)'}}>
+                  <span style={{color:'#0A84FF',flexShrink:0}}>③</span>
+                  <span>Haz clic en él <strong style={{color:'#fff'}}>5 veces seguidas</strong> en menos de 2 segundos.</span>
+                </div>
+                <div style={{display:'flex',gap:10,alignItems:'flex-start',fontSize:13,color:'rgba(255,255,255,0.5)'}}>
+                  <span style={{color:'#30D158',flexShrink:0}}>④</span>
+                  <span>La pantalla hace un <strong style={{color:'#fff'}}>flash blanco</strong> y te redirige automáticamente al panel de acceso con los 4 métodos de login.</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="alert tip" style={{marginTop:12}}>
+              <div className="alert-icon">🤫</div>
+              <div>Este acceso es <strong>secreto por diseño</strong>. Los clientes no saben que existe. No lo menciones en público ni lo compartas fuera del equipo.</div>
+            </div>
+          </div>
+        </div>
 
         {/* ── SECCIÓN 1: CÓMO INGRESAN ── */}
         <div className="section">
