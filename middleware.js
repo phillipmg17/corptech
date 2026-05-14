@@ -21,7 +21,7 @@ export function middleware(request) {
 
   const slug = targetPath.split('/').pop();
   const isTienda = targetPath.startsWith('/tienda');
-  const isCorp   = targetPath === '/ingresar/corp';
+  const isCorp   = targetPath === '/corp-landing';
 
   // /acceso en dominio de tienda → login clientes
   if (pathname === '/acceso' && isTienda) {
