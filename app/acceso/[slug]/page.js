@@ -27,7 +27,6 @@ export default function AccesoSlugPage({ params }) {
   const slug        = params.slug?.toLowerCase();
   const def         = SLUG_DEFAULTS[slug] || { name: 'Tienda', primary: '#0A84FF', emoji: '🏪', id: null };
   const router      = useRouter();
-  const searchParams = useSearchParams();
 
   const [checking,  setChecking]  = useState(true);
   const [store,     setStore]     = useState(null);
