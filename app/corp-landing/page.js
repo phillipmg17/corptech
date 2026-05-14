@@ -34,6 +34,8 @@ export default function CorpLandingPage() {
 
   useEffect(() => {
     setYear(new Date().getFullYear().toString());
+    // Redirigir directo al login interno
+    window.location.href = '/ingresar/corp';
   }, []);
 
   // ── 5 clics rápidos en el logo → login interno ──
