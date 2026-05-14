@@ -40,10 +40,11 @@ export default function CorpLoginPage() {
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#080808',
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: '#080808',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Urbanist','SF Pro Display',system-ui,sans-serif",
-      padding: 20,
+      padding: 20, zIndex: 9999,
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Urbanist:wght@600;700;800&display=swap');

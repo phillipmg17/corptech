@@ -25,6 +25,12 @@ export function middleware(request) {
     return NextResponse.rewrite(new URL(`/acceso/${slug}`, request.url));
   }
 
+  // /staff en dominio de tienda → login de trabajadores con logo de esa tienda
+  if (pathname === '/staff' && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    return NextResponse.rewrite(new URL(`/staff/${slug}`, request.url));
+  }
+
   // /cliente exacto en dominio de tienda → portal de clientes con slug correcto
   if (pathname === '/cliente' && targetPath.startsWith('/tienda')) {
     const slug = targetPath.split('/').pop();
@@ -35,7 +41,7 @@ export function middleware(request) {
   const PASS_THROUGH = [
     '/tienda', '/corp', '/store', '/dashboard', '/pos',
     '/api', '/_next', '/wallet', '/acceso', '/cliente',
-    '/login', '/superadmin', '/corp-landing',
+    '/login', '/superadmin', '/corp-landing', '/staff',
   ];
   if (PASS_THROUGH.some(p => pathname.startsWith(p))) return NextResponse.next();
 
