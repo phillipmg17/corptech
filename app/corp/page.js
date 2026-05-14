@@ -1663,8 +1663,9 @@ export default function CorpPage() {
     { id: 'imei',          ico: '🔍', lbl: 'IMEI'          },
     { id: 'ventas',        ico: '📊', lbl: 'Ventas'        },
     { id: 'productos',     ico: '🗂️', lbl: 'Catálogo'      },
-    { id: 'equipo',        ico: '👥', lbl: 'Equipo'        },
-    { href: '/biometrics', ico: '🔐', lbl: 'Mi Carnet QR' },
+    { id: 'equipo',              ico: '👥', lbl: 'Equipo'        },
+    { href: '/asistencia-admin', ico: '🗓️', lbl: 'Asistencia'   },
+    { href: '/biometrics',       ico: '🔐', lbl: 'Mi Carnet QR' },
   ];
 
   return (

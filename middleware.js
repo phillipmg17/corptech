@@ -48,11 +48,34 @@ export function middleware(request) {
     return NextResponse.rewrite(new URL(`/cliente/${slug}`, request.url));
   }
 
+  // /asistencia en dominio de tienda → marcado con slug
+  if (pathname === '/asistencia' && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    return NextResponse.rewrite(new URL(`/asistencia/${slug}`, request.url));
+  }
+
+  // /asistencia-admin en dominio de tienda → panel admin con slug
+  if (pathname === '/asistencia-admin' && targetPath.startsWith('/tienda')) {
+    const slug = targetPath.split('/').pop();
+    return NextResponse.rewrite(new URL(`/asistencia-admin/${slug}`, request.url));
+  }
+
+  // /asistencia en corptech.pe → asistencia corp
+  if (pathname === '/asistencia' && targetPath === '/corp-landing') {
+    return NextResponse.rewrite(new URL('/asistencia/corp', request.url));
+  }
+
+  // /asistencia-admin en corptech.pe → panel admin corp
+  if (pathname === '/asistencia-admin' && targetPath === '/corp-landing') {
+    return NextResponse.rewrite(new URL('/asistencia-admin/corp', request.url));
+  }
+
   // Rutas que pasan directo sin reescribir (panel interno, APIs, etc.)
   const PASS_THROUGH = [
     '/tienda', '/corp', '/store', '/dashboard', '/pos',
     '/api', '/_next', '/wallet', '/acceso', '/cliente',
     '/login', '/superadmin', '/corp-landing', '/staff', '/ingresar', '/guia',
+    '/asistencia', '/asistencia-admin',
   ];
   if (PASS_THROUGH.some(p => pathname.startsWith(p))) return NextResponse.next();
 
