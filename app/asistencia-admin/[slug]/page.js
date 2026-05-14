@@ -306,9 +306,7 @@ export default function AsistenciaAdminPage({ params }) {
   const input  = theme==='dark' ? '#2C2C2E' : '#F2F2F7';
 
   if (loading) return (
-    <div style={{minHeight:'100vh',background:'#0A0A0F',display:'flex',alignItems:'center',justifyContent:'center'}}>
-      <div style={{color:'#fff',fontFamily:'system-ui',fontSize:16,opacity:0.5}}>Cargando...</div>
-    </div>
+    <div className="auth-screen"><div className="loading-wrap"><div className="spinner" /></div></div>
   );
 
   return (
