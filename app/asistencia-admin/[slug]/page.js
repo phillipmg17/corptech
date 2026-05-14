@@ -249,17 +249,23 @@ export default function AsistenciaAdminPage({ params }) {
       {/* ── NAV ── */}
       <div style={{ background:card, borderBottom:`1px solid ${border}`, padding:'14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:10 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <button onClick={() => history.back()} style={{ background:'none', border:'none', color:text, cursor:'pointer', fontSize:16, padding:'4px 8px 4px 0' }}>‹</button>
+          <button onClick={() => window.location.href='/dashboard'} style={{ background:'none', border:'none', color:text, cursor:'pointer', fontSize:18, padding:'4px 8px 4px 0', lineHeight:1 }}>‹</button>
           <div style={{ width:34, height:34, borderRadius:10, background:cfg.accent+'22', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>{cfg.emoji}</div>
           <div>
             <div style={{ fontSize:15, fontWeight:700 }}>Asistencia — {cfg.name}</div>
             <div style={{ fontSize:11, color:sub }}>Panel administrativo</div>
           </div>
         </div>
-        <button onClick={()=>setTheme(t=>t==='dark'?'light':'dark')}
-          style={{ background:border, border:'none', borderRadius:10, width:34, height:34, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          {theme==='dark'?'☀️':'🌙'}
-        </button>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <button onClick={() => window.location.href=`/asistencia/${slug}`}
+            style={{ background:cfg.accent+'22', border:'none', borderRadius:10, padding:'7px 12px', cursor:'pointer', fontSize:12, fontWeight:600, color:cfg.accent, fontFamily:'inherit' }}>
+            Marcar
+          </button>
+          <button onClick={()=>setTheme(t=>t==='dark'?'light':'dark')}
+            style={{ background:border, border:'none', borderRadius:10, width:34, height:34, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            {theme==='dark'?'☀️':'🌙'}
+          </button>
+        </div>
       </div>
 
       <div style={{ maxWidth:1100, margin:'0 auto', padding:'20px 16px' }}>

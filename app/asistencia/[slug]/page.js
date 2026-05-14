@@ -194,18 +194,28 @@ export default function AsistenciaPage({ params }) {
       `}</style>
 
       {/* ── HEADER ── */}
-      <div style={{ background:card, borderBottom:`1px solid ${border}`, padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:10 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <div style={{ width:36, height:36, borderRadius:10, background:cfg.accent+'22', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>{cfg.emoji}</div>
-          <div>
-            <div style={{ fontSize:15, fontWeight:700 }}>{cfg.name}</div>
-            <div style={{ fontSize:11, color:sub }}>Control de Asistencia</div>
+      <div style={{ background:card, borderBottom:`1px solid ${border}`, padding:'14px 20px', position:'sticky', top:0, zIndex:10 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <button onClick={() => window.location.href='/dashboard'}
+              style={{ background:'none', border:'none', color:text, cursor:'pointer', fontSize:18, padding:'4px 8px 4px 0', lineHeight:1 }}>‹</button>
+            <div style={{ width:36, height:36, borderRadius:10, background:cfg.accent+'22', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>{cfg.emoji}</div>
+            <div>
+              <div style={{ fontSize:15, fontWeight:700 }}>{cfg.name}</div>
+              <div style={{ fontSize:11, color:sub }}>Control de Asistencia</div>
+            </div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <button onClick={() => window.location.href=`/asistencia-admin/${slug}`}
+              style={{ background:cfg.accent+'22', border:'none', borderRadius:10, padding:'7px 12px', cursor:'pointer', fontSize:12, fontWeight:600, color:cfg.accent, fontFamily:'inherit' }}>
+              Panel
+            </button>
+            <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+              style={{ background:border, border:'none', borderRadius:10, width:36, height:36, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
           </div>
         </div>
-        <button onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-          style={{ background:border, border:'none', borderRadius:10, width:36, height:36, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
       </div>
 
       <div style={{ maxWidth:480, margin:'0 auto', padding:'20px 16px' }}>
