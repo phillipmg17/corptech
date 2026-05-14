@@ -2610,8 +2610,6 @@ export default function CorpPage() {
                         <option value="vendedor">🛒 Vendedor — solo POS de tienda</option>
                         <option value="store_admin">🏪 Admin Tienda — gestiona su tienda</option>
                         <option value="corp">🏢 Corp — panel corporativo</option>
-                        <option value="admin_corp">🏢 Admin Corp — panel corporativo</option>
-                        <option value="superadmin">👑 SuperAdmin — acceso total</option>
                       </select>
                     </div>
 
