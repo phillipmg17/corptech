@@ -284,21 +284,36 @@ export default function AsistenciaPage({ params }) {
 
       {/* ── DESKTOP SIDEBAR ── */}
       <div className="tab-bar tab-bar-branded">
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-top">
+            <div className="sidebar-brand-logo">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Corp Tech" />
+            </div>
+            <div className="sidebar-brand-info">
+              <div className="sidebar-brand-name-row">
+                <div className="sidebar-brand-company">{cfg.name}</div>
+                <span className="sidebar-brand-badge" style={{ background: slug === 'corp' ? 'var(--purple)' : 'var(--blue)' }}>
+                  {slug === 'corp' ? 'CORP' : 'STAFF'}
+                </span>
+              </div>
+              <div className="sidebar-brand-user">{perfil?.full_name || user?.email?.split('@')[0]}</div>
+            </div>
+          </div>
+          <div className="sidebar-brand-actions">
+            <button onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+            <button onClick={doLogout}>Salir</button>
+          </div>
+        </div>
         {NAV.map((t, i) => (
           <Link key={i} href={t.href} className={`tab-btn${t.active ? ' active' : ''}`}>
             <span className="ico">{t.ico}</span>
             <span>{t.lbl}</span>
           </Link>
         ))}
-        <div style={{ marginTop:'auto', paddingTop:12, display:'flex', flexDirection:'column', gap:6 }}>
-          <button onClick={toggleTheme} className="tab-btn" style={{ background:'none', border:'none', cursor:'pointer', width:'100%', display:'flex', alignItems:'center', gap:8, padding:'10px 12px', borderRadius:12, color:'var(--text2)', fontFamily:'inherit', fontSize:14 }}>
-            <span className="ico">{theme === 'dark' ? '☀️' : '🌙'}</span>
-            <span>{theme === 'dark' ? 'Claro' : 'Oscuro'}</span>
-          </button>
-          <button onClick={doLogout} className="tab-btn" style={{ background:'none', border:'none', cursor:'pointer', width:'100%', display:'flex', alignItems:'center', gap:8, padding:'10px 12px', borderRadius:12, color:'#FF3B30', fontFamily:'inherit', fontSize:14 }}>
-            <span className="ico">🚪</span>
-            <span>Salir</span>
-          </button>
+        <div className="sidebar-footer">
+          Desarrollado por<br />
+          <a href="https://pmg-studio.com" target="_blank" rel="noopener noreferrer">pmg-studio.com</a>
         </div>
       </div>
 
