@@ -26,11 +26,11 @@ export function middleware(request) {
     return NextResponse.rewrite(new URL(`/acceso/${slug}`, request.url));
   }
 
-  // /cliente exacto en dominio de tienda → portal de clientes con slug correcto
-  // (solo reescribir si NO tiene ya el slug para evitar /cliente/futurteck/futurteck)
-  if (pathname === '/cliente' && targetPath.startsWith('/tienda')) {
+  // /cliente en dominio de tienda → portal de clientes de ESA tienda
+  if (pathname.startsWith('/cliente') && targetPath.startsWith('/tienda')) {
     const slug = targetPath.split('/').pop();
-    return NextResponse.rewrite(new URL(`/cliente/${slug}`, request.url));
+    const rest = pathname.replace('/cliente', '');
+    return NextResponse.rewrite(new URL(`/cliente/${slug}${rest}`, request.url));
   }
 
   const PASS_THROUGH = ['/tienda', '/corp', '/store', '/dashboard', '/pos', '/api', '/_next', '/wallet', '/acceso', '/cliente', '/login', '/superadmin'];

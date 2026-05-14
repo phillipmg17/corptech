@@ -97,48 +97,7 @@ export default function TiendaPage({ params }) {
   const [mobileSearch, setMobileSearch] = useState(false);
   const [orderForm,  setOrderForm]  = useState({ name:'', phone:'', email:'', address:'', notes:'' });
   const [payMethod,  setPayMethod]  = useState('whatsapp');
-  const [orderSent,    setOrderSent]    = useState(false);
-  const [savedOrderId, setSavedOrderId] = useState(null);
-  const [session,      setSession]      = useState(null);
-  const [customerData, setCustomerData] = useState(null); // datos del cliente logueado
-
-  /* ── Verificar sesión y cargar datos del cliente ── */
-  useEffect(() => {
-    const loadSession = async () => {
-      const { data: { session: s } } = await supabase.auth.getSession();
-      setSession(s);
-      if (s?.user && orgId) {
-        // Cargar datos del cliente desde la tabla customers
-        const { data: cust } = await supabase
-          .from('customers')
-          .select('full_name, phone, email')
-          .eq('org_id', orgId)
-          .eq('email', s.user.email)
-          .maybeSingle();
-        if (cust) {
-          setCustomerData(cust);
-          setOrderForm({
-            name:    cust.full_name || '',
-            phone:   cust.phone    || '',
-            email:   cust.email    || s.user.email,
-            address: '',
-            notes:   '',
-          });
-        } else {
-          // Sin registro en customers aún, usar datos de auth
-          const meta = s.user.user_metadata || {};
-          setOrderForm(prev => ({
-            ...prev,
-            email: s.user.email,
-            name:  meta.full_name || prev.name,
-          }));
-        }
-      }
-    };
-    loadSession();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => setSession(s));
-    return () => subscription.unsubscribe();
-  }, [orgId]);
+  const [orderSent,  setOrderSent]  = useState(false);
 
   /* ── Colores dinámicos ── */
   const P   = settings?.color_primario || def.primary;
@@ -252,114 +211,23 @@ export default function TiendaPage({ params }) {
   }
   const cartTotal = cart.reduce((s,i) => s+i.price*i.qty, 0);
 
-  /* ── Guardar pedido en la base de datos ── */
-  async function saveOnlineOrder(paymentMethod) {
-    if (cart.length === 0 || !orgId) return null;
-    try {
-      const email = orderForm.email?.trim().toLowerCase();
-
-      /* 1. Buscar o crear cliente si hay email */
-      let customerId = null;
-      if (email) {
-        let { data: cust } = await supabase
-          .from('customers')
-          .select('id')
-          .eq('org_id', orgId)
-          .eq('email', email)
-          .maybeSingle();
-
-        if (!cust) {
-          const { data: newCust } = await supabase
-            .from('customers')
-            .insert({
-              org_id:    orgId,
-              full_name: orderForm.name || email.split('@')[0],
-              email:     email,
-              phone:     orderForm.phone || null,
-              auth_user_id: session?.user?.id || null,
-            })
-            .select('id')
-            .single();
-          cust = newCust;
-        } else if (session?.user?.id) {
-          /* Vincular cuenta si está logueado */
-          await supabase.from('customers')
-            .update({ auth_user_id: session.user.id })
-            .eq('id', cust.id);
-        }
-        customerId = cust?.id || null;
-      }
-
-      /* 2. Crear el pedido */
-      const items = cart.map(i => ({
-        name:    i.name,
-        variant: i.label,
-        qty:     i.qty,
-        price:   i.price,
-        subtotal: i.price * i.qty,
-      }));
-
-      const notes = [
-        orderForm.notes,
-        orderForm.address ? `Dirección: ${orderForm.address}` : '',
-      ].filter(Boolean).join(' | ');
-
-      const { data: order } = await supabase
-        .from('online_orders')
-        .insert({
-          org_id:          orgId,
-          customer_id:     customerId,
-          contact_name:    orderForm.name || null,
-          contact_email:   email || null,
-          contact_phone:   orderForm.phone || null,
-          delivery_address:orderForm.address || null,
-          items:           items,
-          total_amount:    cartTotal,
-          payment_method:  paymentMethod,
-          status:          'pendiente',
-          notes:           notes || null,
-        })
-        .select('id')
-        .single();
-
-      if (order?.id) setSavedOrderId(order.id);
-      return order?.id || null;
-    } catch (err) {
-      console.error('Error guardando pedido:', err);
-      return null;
-    }
-  }
-
   /* ── WhatsApp checkout ── */
   function buildWAMessage() {
     const items = cart.map(i => `• ${i.name} (${i.label}) x${i.qty} — ${fmt(i.price*i.qty)}`).join('\n');
     return encodeURIComponent(`Hola ${storeName}! Quiero hacer un pedido:\n\n${items}\n\n*TOTAL: ${fmt(cartTotal)}*\n\nMis datos:\nNombre: ${orderForm.name}\nTeléfono: ${orderForm.phone}\nEmail: ${orderForm.email}\n${orderForm.address?`Dirección: ${orderForm.address}\n`:''}${orderForm.notes?`Notas: ${orderForm.notes}`:''}`);
   }
-  async function handleWhatsApp() {
-    await saveOnlineOrder('whatsapp');
+  function handleWhatsApp() {
     const wa = (storeWA||'51999999999').replace(/\D/g,'');
     window.open(`https://wa.me/${wa}?text=${buildWAMessage()}`, '_blank');
     setOrderSent(true);
   }
-  async function handleIziPay() {
-    await saveOnlineOrder('izipay');
+  function handleIziPay() {
     if (izipayUrl) window.open(izipayUrl, '_blank');
     else alert('Pasarela IziPay no configurada. Configúrala en el panel admin → Configuración de tienda.');
-    setOrderSent(true);
   }
-  async function handleNiubiz() {
-    await saveOnlineOrder('niubiz');
+  function handleNiubiz() {
     if (niubizUrl) window.open(niubizUrl, '_blank');
     else alert('Pasarela Niubiz no configurada. Configúrala en el panel admin → Configuración de tienda.');
-    setOrderSent(true);
-  }
-  async function handleYape() {
-    await saveOnlineOrder('yape');
-    setOrderSent(true);
-  }
-  async function handleTransfer() {
-    await saveOnlineOrder('transferencia');
-    setOrderSent(true);
   }
 
   /* ── Imagen por color ── */
@@ -1196,55 +1064,21 @@ export default function TiendaPage({ params }) {
                 </div>
 
                 {/* Datos del comprador */}
-                {session ? (
-                  /* ── LOGUEADO: mostrar datos y permitir editar solo lo necesario ── */
-                  <div style={{ background:'#F0F9FF', border:'1.5px solid #BAE6FD', borderRadius:14, padding:'14px 16px', marginBottom:20 }}>
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                      <div>
-                        <p style={{ fontSize:13, fontWeight:700, color:'#0369A1', margin:'0 0 2px' }}>✅ Comprando como:</p>
-                        <p style={{ fontSize:15, fontWeight:800, color:'#1D1D1F', margin:'0 0 1px' }}>{orderForm.name || session.user.email}</p>
-                        <p style={{ fontSize:13, color:'#6E6E73', margin:0 }}>{orderForm.phone ? `${orderForm.phone} · ` : ''}{orderForm.email}</p>
-                      </div>
-                      <a href="/acceso" style={{ fontSize:12, color:'#6E6E73', textDecoration:'none', fontWeight:600 }}>Cambiar</a>
-                    </div>
+                <p style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>Tus datos</p>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+                  <div>
+                    <label style={{ fontSize:12, fontWeight:600, color:'#6E6E73', display:'block', marginBottom:6 }}>Nombre *</label>
+                    <input type="text" placeholder="Juan Pérez" value={orderForm.name} onChange={e=>setOrderForm(f=>({...f,name:e.target.value}))} required />
                   </div>
-                ) : (
-                  /* ── NO LOGUEADO: formulario completo ── */
-                  <>
-                  <div style={{ background:'#FFF7ED', border:'1.5px solid #FED7AA', borderRadius:14, padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:10 }}>
-                    <span style={{ fontSize:20 }}>👤</span>
-                    <div>
-                      <p style={{ fontSize:13, fontWeight:700, color:'#9A3412', margin:'0 0 1px' }}>¿Ya tienes cuenta?</p>
-                      <p style={{ fontSize:12, color:'#C2410C', margin:0 }}>
-                        <a href="/acceso" style={{ color:'#EA580C', fontWeight:700 }}>Inicia sesión</a> para ver tus pedidos después.
-                      </p>
-                    </div>
+                  <div>
+                    <label style={{ fontSize:12, fontWeight:600, color:'#6E6E73', display:'block', marginBottom:6 }}>Teléfono *</label>
+                    <input type="tel" placeholder="+51 999 999 999" value={orderForm.phone} onChange={e=>setOrderForm(f=>({...f,phone:e.target.value}))} required />
                   </div>
-                  </>
-                )}
-
-                <p style={{ fontSize:15, fontWeight:700, marginBottom:12 }}>
-                  {session ? 'Datos de entrega' : 'Tus datos'}
-                </p>
-
-                {!session && (
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
-                    <div>
-                      <label style={{ fontSize:12, fontWeight:600, color:'#6E6E73', display:'block', marginBottom:6 }}>Nombre *</label>
-                      <input type="text" placeholder="Juan Pérez" value={orderForm.name} onChange={e=>setOrderForm(f=>({...f,name:e.target.value}))} required />
-                    </div>
-                    <div>
-                      <label style={{ fontSize:12, fontWeight:600, color:'#6E6E73', display:'block', marginBottom:6 }}>Teléfono *</label>
-                      <input type="tel" placeholder="+51 999 999 999" value={orderForm.phone} onChange={e=>setOrderForm(f=>({...f,phone:e.target.value}))} required />
-                    </div>
-                  </div>
-                )}
-                {!session && (
-                  <div style={{ marginBottom:12 }}>
-                    <label style={{ fontSize:12, fontWeight:600, color:'#6E6E73', display:'block', marginBottom:6 }}>Email</label>
-                    <input type="email" placeholder="tu@email.com" value={orderForm.email} onChange={e=>setOrderForm(f=>({...f,email:e.target.value}))} />
-                  </div>
-                )}
+                </div>
+                <div style={{ marginBottom:12 }}>
+                  <label style={{ fontSize:12, fontWeight:600, color:'#6E6E73', display:'block', marginBottom:6 }}>Email</label>
+                  <input type="email" placeholder="tu@email.com" value={orderForm.email} onChange={e=>setOrderForm(f=>({...f,email:e.target.value}))} />
+                </div>
                 <div style={{ marginBottom:12 }}>
                   <label style={{ fontSize:12, fontWeight:600, color:'#6E6E73', display:'block', marginBottom:6 }}>Dirección de entrega</label>
                   <input type="text" placeholder="Av. Arequipa 1234, Miraflores, Lima" value={orderForm.address} onChange={e=>setOrderForm(f=>({...f,address:e.target.value}))} />
