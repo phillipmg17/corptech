@@ -345,8 +345,9 @@ export default function PosPage() {
       {/* ── TOP BAR ── */}
       <div className="top-bar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Link href="/dashboard" className="top-btn">🏠</Link>
-          <Link href="/store"     className="top-btn">🏪</Link>
+          <Link href="/dashboard"  className="top-btn">🏠</Link>
+          <Link href="/store"      className="top-btn">🏪</Link>
+          <Link href="/asistencia" className="top-btn">🗓️</Link>
           <div>
             <div className="top-bar-title">🛒 POS Smart</div>
             <div className="top-bar-sub">{me?.name}</div>

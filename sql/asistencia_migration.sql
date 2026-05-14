@@ -14,7 +14,6 @@ CREATE TABLE IF NOT EXISTS asistencia_registros (
 
   -- Timestamp del servidor (no del cliente)
   timestamp       TIMESTAMPTZ DEFAULT now() NOT NULL,
-  fecha           DATE        GENERATED ALWAYS AS (timestamp::date) STORED,
 
   -- Geolocalización
   lat             DOUBLE PRECISION,
@@ -33,8 +32,10 @@ CREATE TABLE IF NOT EXISTS asistencia_registros (
 -- 2. ÍNDICES PARA PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_asistencia_user_id    ON asistencia_registros(user_id);
 CREATE INDEX IF NOT EXISTS idx_asistencia_org_id     ON asistencia_registros(org_id);
-CREATE INDEX IF NOT EXISTS idx_asistencia_fecha      ON asistencia_registros(fecha);
 CREATE INDEX IF NOT EXISTS idx_asistencia_timestamp  ON asistencia_registros(timestamp DESC);
+-- Índice funcional para filtrar por fecha (reemplaza la columna generada)
+CREATE INDEX IF NOT EXISTS idx_asistencia_fecha
+  ON asistencia_registros( (timestamp AT TIME ZONE 'America/Lima')::date );
 
 -- 3. HABILITAR RLS
 ALTER TABLE asistencia_registros ENABLE ROW LEVEL SECURITY;
@@ -68,62 +69,5 @@ CREATE POLICY "corp_admin_gestionar" ON asistencia_registros
     )
   );
 
--- 5. FUNCIÓN: Obtener sesiones del día (pares entrada/salida)
-CREATE OR REPLACE FUNCTION get_sesiones_asistencia(
-  p_org_id  UUID,
-  p_fecha   DATE DEFAULT CURRENT_DATE
-)
-RETURNS TABLE (
-  user_id         UUID,
-  nombre          TEXT,
-  email           TEXT,
-  rol             TEXT,
-  entrada_ts      TIMESTAMPTZ,
-  salida_ts       TIMESTAMPTZ,
-  entrada_lat     DOUBLE PRECISION,
-  entrada_lng     DOUBLE PRECISION,
-  salida_lat      DOUBLE PRECISION,
-  salida_lng      DOUBLE PRECISION,
-  horas_trabajadas NUMERIC
-)
-LANGUAGE sql STABLE SECURITY DEFINER AS $$
-  WITH entradas AS (
-    SELECT DISTINCT ON (r.user_id)
-      r.user_id, r.timestamp, r.lat, r.lng
-    FROM asistencia_registros r
-    WHERE r.org_id = p_org_id AND r.fecha = p_fecha AND r.tipo = 'entrada'
-    ORDER BY r.user_id, r.timestamp ASC
-  ),
-  salidas AS (
-    SELECT DISTINCT ON (r.user_id)
-      r.user_id, r.timestamp, r.lat, r.lng
-    FROM asistencia_registros r
-    WHERE r.org_id = p_org_id AND r.fecha = p_fecha AND r.tipo = 'salida'
-    ORDER BY r.user_id, r.timestamp DESC
-  )
-  SELECT
-    e.user_id,
-    COALESCE(p.full_name, u.email) AS nombre,
-    u.email,
-    ur.role AS rol,
-    e.timestamp  AS entrada_ts,
-    s.timestamp  AS salida_ts,
-    e.lat        AS entrada_lat,
-    e.lng        AS entrada_lng,
-    s.lat        AS salida_lat,
-    s.lng        AS salida_lng,
-    CASE WHEN s.timestamp IS NOT NULL
-      THEN ROUND(EXTRACT(EPOCH FROM (s.timestamp - e.timestamp)) / 3600.0, 2)
-      ELSE NULL
-    END AS horas_trabajadas
-  FROM entradas e
-  LEFT JOIN salidas     s  ON s.user_id  = e.user_id
-  LEFT JOIN auth.users  u  ON u.id       = e.user_id
-  LEFT JOIN profiles    p  ON p.user_id  = e.user_id
-  LEFT JOIN user_roles  ur ON ur.user_id = e.user_id AND ur.org_id = p_org_id
-  ORDER BY e.timestamp ASC;
-$$;
-
--- 6. GRANT DE PERMISOS
+-- 5. GRANT DE PERMISOS
 GRANT SELECT, INSERT ON asistencia_registros TO authenticated;
-GRANT EXECUTE ON FUNCTION get_sesiones_asistencia(UUID, DATE) TO authenticated;

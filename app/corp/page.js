@@ -1664,6 +1664,7 @@ export default function CorpPage() {
     { id: 'ventas',        ico: '📊', lbl: 'Ventas'        },
     { id: 'productos',     ico: '🗂️', lbl: 'Catálogo'      },
     { id: 'equipo',              ico: '👥', lbl: 'Equipo'        },
+    { href: '/asistencia',       ico: '✅', lbl: 'Marcar'        },
     { href: '/asistencia-admin', ico: '🗓️', lbl: 'Asistencia'   },
     { href: '/biometrics',       ico: '🔐', lbl: 'Mi Carnet QR' },
   ];

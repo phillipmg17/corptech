@@ -465,6 +465,7 @@ export default function StorePage() {
     { id: 'ventas',              ico: '📊', lbl: 'Ventas'       },
     { id: 'deudas',              ico: '💳', lbl: 'Deudas'       },
     { id: 'config',              ico: '⚙️', lbl: 'Config'       },
+    { href: '/asistencia',       ico: '✅', lbl: 'Marcar'        },
     { href: '/asistencia-admin', ico: '🗓️', lbl: 'Asistencia'   },
     { href: '/biometrics',       ico: '🔐', lbl: 'Mi Carnet QR' },
   ];
