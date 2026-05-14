@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 /* ── Config por defecto de cada tienda (fallback si DB falla) ── */
@@ -37,19 +37,19 @@ export default function AccesoSlugPage({ params }) {
   const [error,     setError]     = useState('');
   const [success,   setSuccess]   = useState('');
 
-  /* ── Detectar tipo de redirect desde email ── */
+  /* ── Detectar tipo de redirect desde email (sin useSearchParams) ── */
   useEffect(() => {
-    const type = searchParams.get('type');
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const type = params.get('type');
     if (type === 'signup' || type === 'email_change') {
       setSuccess('✅ ¡Email confirmado! Ya puedes iniciar sesión con tu correo y contraseña.');
       setTab('login');
-      setChecking(false);
     }
     if (type === 'recovery') {
       setIsRecovery(true);
-      setChecking(false);
     }
-  }, [searchParams]);
+  }, []);
 
   /* Campos login */
   const [email,     setEmail]     = useState('');
@@ -87,26 +87,39 @@ export default function AccesoSlugPage({ params }) {
 
   /* ── Redirect si ya hay sesión ── */
   useEffect(() => {
+    let mounted = true;
+
     const check = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
+        if (session && mounted) {
           const dest = await getRedirectPath(session.user.id);
           router.replace(dest);
+          // No llamar setChecking aquí — el redirect hace unmount
+          return;
         }
       } catch (_) {}
-      // Siempre mostrar el formulario (el redirect ocurre en paralelo)
-      setChecking(false);
+      // Sin sesión → mostrar formulario
+      if (mounted) setChecking(false);
     };
+
     check();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && mounted) {
         const dest = await getRedirectPath(session.user.id);
         router.replace(dest);
       }
     });
-    return () => subscription.unsubscribe();
+
+    // Fallback: si tarda más de 4 segundos, mostrar el formulario igual
+    const fallback = setTimeout(() => { if (mounted) setChecking(false); }, 4000);
+
+    return () => {
+      mounted = false;
+      clearTimeout(fallback);
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function getRedirectPath(userId) {
