@@ -49,14 +49,9 @@ export default function DashboardPage() {
     if (!session) { router.replace('/login'); return; }
     const uid = session.user.id;
 
-    const { data: prof } = await supabase.from('users').select('*, organizations(name)').eq('id', uid).maybeSingle();
-    const { data: roleRows } = await supabase.from('user_roles').select('role').eq('user_id', uid);
-    const roles = (roleRows || []).map(row => row.role);
-    // Elegir rol de mayor jerarquía
-    const r = roles.includes('superadmin')  ? 'superadmin'
-            : (roles.includes('corp') || roles.includes('admin_corp')) ? 'corp'
-            : (roles.includes('store_admin') || roles.includes('gerente') || roles.includes('store_manager')) ? 'store_admin'
-            : roles[0] || 'vendedor';
+    const { data: prof } = await supabase.from('users').select('*, organizations(name)').eq('id', uid).single();
+    const { data: roleRow } = await supabase.from('user_roles').select('role').eq('user_id', uid).single();
+    const r = roleRow?.role || 'vendedor';
     const oid = prof?.org_id;
 
     setProfile(prof);
@@ -65,10 +60,9 @@ export default function DashboardPage() {
     setOrgName(prof?.organizations?.name || 'Corp Tech');
 
     // Auto-redirect al panel correspondiente por rol
-    if (r === 'superadmin') { router.replace('/superadmin'); return; }
     if (r === 'corp' || r === 'admin_corp') { router.replace('/corp'); return; }
-    if (r === 'store_admin' || r === 'gerente' || r === 'store_manager') { router.replace('/store'); return; }
-    // vendedor se queda en dashboard
+    if (r === 'gerente' || r === 'store_manager' || r === 'store_admin') { router.replace('/store'); return; }
+    // superadmin y vendedor se quedan en dashboard
 
     setLoading(false);
     loadFx();

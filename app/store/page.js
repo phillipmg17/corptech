@@ -459,15 +459,12 @@ export default function StorePage() {
   const slug = SLUG_MAP[orgId] || '';
 
   const STORE_NAV = [
-    { href: '/pos',              ico: '🛒', lbl: 'POS'          },
-    { id: 'stock',               ico: '📦', lbl: 'Stock'        },
-    { id: 'clientes',            ico: '👥', lbl: 'Clientes'     },
-    { id: 'ventas',              ico: '📊', lbl: 'Ventas'       },
-    { id: 'deudas',              ico: '💳', lbl: 'Deudas'       },
-    { id: 'config',              ico: '⚙️', lbl: 'Config'       },
-    { href: '/asistencia',       ico: '✅', lbl: 'Marcar'        },
-    { href: '/asistencia-admin', ico: '🗓️', lbl: 'Asistencia'   },
-    { href: '/biometrics',       ico: '🔐', lbl: 'Mi Carnet QR' },
+    { id: 'stock',    ico: '📦', lbl: 'Stock'    },
+    { id: 'clientes', ico: '👥', lbl: 'Clientes' },
+    { id: 'ventas',   ico: '📊', lbl: 'Ventas'   },
+    { id: 'deudas',   ico: '💳', lbl: 'Deudas'   },
+    { id: 'config',   ico: '⚙️', lbl: 'Config'   },
+    { href: '/biometrics', ico: '🔐', lbl: 'Mi Carnet QR' },
   ];
 
   return (
