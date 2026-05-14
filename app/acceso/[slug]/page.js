@@ -88,13 +88,15 @@ export default function AccesoSlugPage({ params }) {
   /* ── Redirect si ya hay sesión ── */
   useEffect(() => {
     const check = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const dest = await getRedirectPath(session.user.id);
-        router.replace(dest);
-      } else {
-        setChecking(false);
-      }
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const dest = await getRedirectPath(session.user.id);
+          router.replace(dest);
+        }
+      } catch (_) {}
+      // Siempre mostrar el formulario (el redirect ocurre en paralelo)
+      setChecking(false);
     };
     check();
 
