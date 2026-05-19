@@ -370,6 +370,22 @@ export default function CorpPage() {
     loadWarehouses();
   }
 
+  async function editWarehouse(e) {
+    e.preventDefault();
+    const { error } = await supabase.from('warehouses').update({
+      name:      form.wh_name,
+      org_id:    form.wh_org_id,
+      type:      form.wh_type,
+      aisle:     form.wh_aisle || null,
+      shelf:     form.wh_shelf || null,
+      is_active: form.wh_active,
+    }).eq('id', form.wh_id);
+    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    showToast('Almacén actualizado ✓');
+    setModal(null); setForm({});
+    loadWarehouses();
+  }
+
   /* ── TRASLADOS ── */
   async function loadTransfers() {
     let q = supabase
@@ -2688,9 +2704,15 @@ export default function CorpPage() {
                         {w.shelf  && <span> · Estante: <b>{w.shelf}</b></span>}
                       </div>
                     </div>
-                    <span className={`badge badge-${w.is_active ? 'green' : 'red'}`}>
-                      {w.is_active ? 'Activo' : 'Inactivo'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className={`badge badge-${w.is_active ? 'green' : 'red'}`}>
+                        {w.is_active ? 'Activo' : 'Inactivo'}
+                      </span>
+                      <button
+                        onClick={() => { setModal('edit-warehouse'); setForm({ wh_id: w.id, wh_name: w.name, wh_org_id: w.org_id, wh_type: w.type, wh_aisle: w.aisle || '', wh_shelf: w.shelf || '', wh_active: w.is_active }); }}
+                        style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card2)', color: 'var(--text)', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >✏️ Editar</button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -5353,6 +5375,51 @@ export default function CorpPage() {
                     </div>
                   </div>
                   <button className="btn btn-primary" type="submit">Crear almacén</button>
+                </form>
+              </>
+            )}
+
+            {/* ── MODAL: Editar Almacén ── */}
+            {modal === 'edit-warehouse' && (
+              <>
+                <div className="modal-title">✏️ Editar almacén</div>
+                <form onSubmit={editWarehouse}>
+                  <div className="form-group">
+                    <label className="form-label">Nombre</label>
+                    <input className="form-input" required placeholder="Almacén Central Lima" value={form.wh_name || ''} onChange={e => setForm({ ...form, wh_name: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Organización</label>
+                    <select className="form-select" value={form.wh_org_id || CORP_ID} onChange={e => setForm({ ...form, wh_org_id: e.target.value })}>
+                      {ALL_ORGS.map(o => <option key={o.id} value={o.id}>{o.ico} {o.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Tipo</label>
+                    <select className="form-select" value={form.wh_type || 'central'} onChange={e => setForm({ ...form, wh_type: e.target.value })}>
+                      <option value="central">🏭 Central (Corp)</option>
+                      <option value="store">🏪 Tienda</option>
+                      <option value="personal">👤 Personal</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Pasillo</label>
+                      <input className="form-input" placeholder="A1" value={form.wh_aisle || ''} onChange={e => setForm({ ...form, wh_aisle: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Estante</label>
+                      <input className="form-input" placeholder="E3" value={form.wh_shelf || ''} onChange={e => setForm({ ...form, wh_shelf: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Estado</label>
+                    <select className="form-select" value={form.wh_active ? 'true' : 'false'} onChange={e => setForm({ ...form, wh_active: e.target.value === 'true' })}>
+                      <option value="true">✅ Activo</option>
+                      <option value="false">🔴 Inactivo</option>
+                    </select>
+                  </div>
+                  <button className="btn btn-primary" type="submit">Guardar cambios</button>
                 </form>
               </>
             )}
