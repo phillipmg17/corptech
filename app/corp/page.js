@@ -400,6 +400,14 @@ export default function CorpPage() {
     loadWarehouses();
   }
 
+  async function deleteWarehouse(id, name) {
+    if (!confirm(`¿Eliminar el almacén "${name}"? Esta acción no se puede deshacer.`)) return;
+    const { error } = await supabase.from('warehouses').delete().eq('id', id);
+    if (error) { showToast('Error al eliminar: ' + error.message, 'err'); return; }
+    showToast('Almacén eliminado ✓');
+    loadWarehouses();
+  }
+
   /* ── TRASLADOS ── */
   async function loadTransfers() {
     let q = supabase
@@ -2831,6 +2839,10 @@ export default function CorpPage() {
                         onClick={() => { setModal('edit-warehouse'); setForm({ wh_id: w.id, wh_name: w.name, wh_org_id: w.org_id, wh_type: w.type, wh_aisle: w.aisle || '', wh_shelf: w.shelf || '', wh_active: w.is_active }); }}
                         style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card2)', color: 'var(--text)', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >✏️ Editar</button>
+                      <button
+                        onClick={() => deleteWarehouse(w.id, w.name)}
+                        style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid #fee2e2', background: '#fff5f5', color: '#dc2626', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >🗑 Eliminar</button>
                     </div>
                   </div>
                 </div>
