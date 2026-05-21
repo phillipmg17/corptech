@@ -46,6 +46,13 @@ export default function CorpPage() {
 
   /* ── ALMACENES ── */
   const [warehouses,  setWarehouses]  = useState([]);
+  const DEFAULT_DEPTS = ['Lima', 'Delaware', 'Miami'];
+  const [departments, setDepartments] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wh_departments');
+      return saved ? JSON.parse(saved) : DEFAULT_DEPTS;
+    } catch { return DEFAULT_DEPTS; }
+  });
 
   /* ── TRASLADOS ── */
   const [transfers,   setTransfers]   = useState([]);
@@ -356,7 +363,38 @@ export default function CorpPage() {
       .from('warehouses')
       .select('id, name, type, aisle, shelf, org_id, is_active, department, city')
       .order('department', { ascending: true });
-    setWarehouses(data || []);
+    const whs = data || [];
+    setWarehouses(whs);
+    // Fusionar departamentos de BD con los guardados localmente
+    const fromDb = whs.map(w => w.department).filter(Boolean);
+    setDepartments(prev => {
+      const merged = [...new Set([...prev, ...fromDb])];
+      localStorage.setItem('wh_departments', JSON.stringify(merged));
+      return merged;
+    });
+  }
+
+  function addDepartment() {
+    const name = window.prompt('Nombre del nuevo estado / departamento:');
+    if (!name?.trim()) return;
+    const n = name.trim();
+    setDepartments(prev => {
+      if (prev.includes(n)) { showToast('Ya existe ese estado', 'err'); return prev; }
+      const next = [...prev, n];
+      localStorage.setItem('wh_departments', JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function removeDepartment(dept) {
+    const whs = warehouses.filter(w => (w.department || '') === dept);
+    if (whs.length > 0) { showToast(`Mueve o elimina los ${whs.length} almacén(es) de ${dept} primero`, 'err'); return; }
+    if (!confirm(`¿Eliminar el estado "${dept}"?`)) return;
+    setDepartments(prev => {
+      const next = prev.filter(d => d !== dept);
+      localStorage.setItem('wh_departments', JSON.stringify(next));
+      return next;
+    });
   }
 
   async function addWarehouse(e) {
@@ -2873,64 +2911,87 @@ export default function CorpPage() {
         ══════════════════════════════════════ */}
         {tab === 'almacenes' && (
           <div style={{ padding: '16px' }}>
-            <div className="section-header">
-              <div className="section-title">Almacenes</div>
-              <button className="section-action" onClick={() => { setModal('add-warehouse'); setForm({ wh_org_id: CORP_ID, wh_type: 'central' }); }}>+ Agregar</button>
+            {/* Header con botón agregar estado */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+              <div style={{ fontSize:15, fontWeight:700, color:'#111827' }}>Almacenes</div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={addDepartment}
+                  style={{ padding:'6px 14px', borderRadius:7, border:'1px solid #1a56db', background:'#eff6ff', color:'#1a56db', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                  + Agregar estado
+                </button>
+              </div>
             </div>
 
-            {warehouses.length === 0 ? (
-              <div className="empty-msg">Sin almacenes registrados</div>
-            ) : (() => {
-              // Agrupar por departamento
-              const deptMap = {};
-              warehouses.forEach(w => {
-                const dept = w.department || 'Sin departamento';
-                if (!deptMap[dept]) deptMap[dept] = [];
-                deptMap[dept].push(w);
-              });
-              return Object.entries(deptMap).map(([dept, whList]) => (
-                <div key={dept} style={{ marginBottom: 20 }}>
-                  {/* Cabecera de departamento */}
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, padding:'6px 10px', background:'#f1f5f9', borderRadius:8, border:'1px solid #e2e8f0' }}>
-                    <span style={{ fontSize:16 }}>📍</span>
-                    <div>
-                      <div style={{ fontWeight:800, fontSize:13, color:'#1e40af' }}>{dept}</div>
-                      <div style={{ fontSize:11, color:'#64748b' }}>{whList.length} almacén{whList.length !== 1 ? 'es' : ''}</div>
+            {/* Estados agrupados */}
+            {departments.map(dept => {
+              const whList = warehouses.filter(w => (w.department || '') === dept);
+              return (
+                <div key={dept} style={{ marginBottom:16, border:'1px solid #e2e8f0', borderRadius:12, overflow:'hidden' }}>
+                  {/* Cabecera del estado */}
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', background:'#1e3a8a' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <span style={{ fontSize:15 }}>📍</span>
+                      <div>
+                        <div style={{ fontWeight:800, fontSize:14, color:'#fff' }}>{dept}</div>
+                        <div style={{ fontSize:11, color:'#93c5fd' }}>{whList.length} almacén{whList.length !== 1 ? 'es' : ''}</div>
+                      </div>
+                    </div>
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button
+                        onClick={() => { setModal('add-warehouse'); setForm({ wh_org_id:CORP_ID, wh_type:'central', wh_department:dept }); }}
+                        style={{ padding:'4px 12px', borderRadius:6, border:'none', background:'rgba(255,255,255,0.2)', color:'#fff', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                        + Almacén
+                      </button>
+                      <button
+                        onClick={() => removeDepartment(dept)}
+                        style={{ padding:'4px 8px', borderRadius:6, border:'none', background:'rgba(239,68,68,0.3)', color:'#fca5a5', fontSize:11, fontWeight:700, cursor:'pointer' }}>
+                        ✕
+                      </button>
                     </div>
                   </div>
-                  {/* Almacenes del departamento */}
-                  {whList.map(w => (
-                    <div className="card" key={w.id} style={{ padding:'12px 14px', marginBottom:8, marginLeft:12, borderLeft:'3px solid #bfdbfe' }}>
-                      <div className="flex-between">
+
+                  {/* Almacenes del estado */}
+                  {whList.length === 0 ? (
+                    <div style={{ padding:'14px 16px', color:'#9ca3af', fontSize:13, textAlign:'center', background:'#fafafa' }}>
+                      Sin almacenes. Presiona "+ Almacén" para agregar uno.
+                    </div>
+                  ) : (
+                    whList.map((w, idx) => (
+                      <div key={w.id} style={{
+                        display:'flex', alignItems:'center', justifyContent:'space-between',
+                        padding:'11px 16px', background: idx%2===0 ? '#fff' : '#f9fafb',
+                        borderTop:'1px solid #f1f5f9',
+                      }}>
                         <div>
-                          <div style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:6 }}>
-                            <span>{w.type === 'central' ? '🏭' : w.type === 'store' ? '🏪' : '👤'}</span>
-                            {w.name}
-                            {!w.is_active && <span style={{ fontSize:10, padding:'1px 6px', borderRadius:4, background:'#fee2e2', color:'#dc2626', fontWeight:700 }}>Inactivo</span>}
+                          <div style={{ fontWeight:700, fontSize:13, color:'#111827', display:'flex', alignItems:'center', gap:6 }}>
+                            {w.type === 'central' ? '🏭' : w.type === 'store' ? '🏪' : '👤'} {w.name}
+                            {!w.is_active && <span style={{ fontSize:10, padding:'1px 5px', borderRadius:4, background:'#fee2e2', color:'#dc2626', fontWeight:700 }}>Inactivo</span>}
                           </div>
-                          <div style={{ fontSize:11, color:'#6b7280', marginTop:3, display:'flex', gap:8, flexWrap:'wrap' }}>
+                          <div style={{ fontSize:11, color:'#6b7280', marginTop:2, display:'flex', gap:8, flexWrap:'wrap' }}>
                             <span>{getOrgIco(w.org_id)} {getOrgName(w.org_id)}</span>
-                            {w.city && <span>📌 {w.city}</span>}
-                            {w.aisle && <span>Pasillo: <b>{w.aisle}</b></span>}
-                            {w.shelf  && <span>Estante: <b>{w.shelf}</b></span>}
+                            {w.city  && <span>📌 {w.city}</span>}
+                            {w.aisle && <span>Pasillo {w.aisle}</span>}
+                            {w.shelf && <span>Estante {w.shelf}</span>}
                           </div>
                         </div>
                         <div style={{ display:'flex', gap:6, flexShrink:0 }}>
                           <button
                             onClick={() => { setModal('edit-warehouse'); setForm({ wh_id:w.id, wh_name:w.name, wh_org_id:w.org_id, wh_type:w.type, wh_aisle:w.aisle||'', wh_shelf:w.shelf||'', wh_active:w.is_active, wh_department:w.department||'', wh_city:w.city||'' }); }}
-                            style={{ padding:'4px 10px', borderRadius:7, border:'1px solid #d1d5db', background:'#f9fafb', color:'#374151', fontSize:11, fontWeight:700, cursor:'pointer' }}
-                          >Editar</button>
+                            style={{ padding:'4px 10px', borderRadius:6, border:'1px solid #d1d5db', background:'#fff', color:'#374151', fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                            Editar
+                          </button>
                           <button
                             onClick={() => deleteWarehouse(w.id, w.name)}
-                            style={{ padding:'4px 10px', borderRadius:7, border:'1px solid #fee2e2', background:'#fff5f5', color:'#dc2626', fontSize:11, fontWeight:700, cursor:'pointer' }}
-                          >Eliminar</button>
+                            style={{ padding:'4px 10px', borderRadius:6, border:'1px solid #fee2e2', background:'#fff5f5', color:'#dc2626', fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                            Eliminar
+                          </button>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
-              ));
-            })()}
+              );
+            })}
 
             {/* Resumen de stock por tienda */}
             <div style={{ marginTop: 24 }}>
