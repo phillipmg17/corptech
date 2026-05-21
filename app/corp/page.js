@@ -61,10 +61,11 @@ export default function CorpPage() {
   const [txFilter,    setTxFilter]    = useState('all');
 
   /* ── IMPORTACIÓN ── */
-  const [batches,     setBatches]     = useState([]);
-  const [usdRate,     setUsdRate]     = useState('');
-  const [loadingRate, setLoadingRate] = useState(false);
-  const [tcMode,      setTcMode]      = useState('auto'); // 'auto' | 'manual'
+  const [batches,       setBatches]       = useState([]);
+  const [usdRate,       setUsdRate]       = useState('');
+  const [loadingRate,   setLoadingRate]   = useState(false);
+  const [tcMode,        setTcMode]        = useState('auto'); // 'auto' | 'manual'
+  const [excelImporting,setExcelImporting]= useState(false);
 
   /* ── FINANZAS ── */
   const [finFx,       setFinFx]       = useState(null);
@@ -189,6 +190,7 @@ export default function CorpPage() {
         loadKpis(),
         loadProducts(),
         loadGlobalStock(),
+        loadWarehouses(),
       ]);
 
       setLoading(false);
@@ -313,6 +315,7 @@ export default function CorpPage() {
     // Siempre traemos los campos esenciales para que el buscador funcione
     // Intentamos joins progresivamente — si una columna no existe caemos al siguiente intento
     const queries = [
+      'id, serial_number, imei, imei2, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), model_number, color_info, storage_info, warehouse_id, warehouses(name, city, department), lot_id, purchase_lots(numero_lote, proveedor, numero_factura)',
       'id, serial_number, imei, imei2, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), model_number, color_info, storage_info, lot_id, purchase_lots(numero_lote, proveedor, numero_factura)',
       'id, serial_number, imei, imei2, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), model_number, color_info, storage_info',
       'id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), model_number, color_info, storage_info',
@@ -1219,6 +1222,8 @@ export default function CorpPage() {
     // Columnas extras que pueden no existir si no se corrió la migración
     const colMissing = (msg) => msg && (msg.includes('column') || msg.includes('schema cache') || msg.includes('Could not find'));
 
+    const warehouseId = form.warehouse_id || null;
+
     const baseRow = (d) => ({
       owner_org_id:  form.owner_org_id || CORP_ID,
       product_id:    form.product_id,
@@ -1229,11 +1234,13 @@ export default function CorpPage() {
 
     // Intentos en orden de más completo a menos completo
     const attempts = [
-      // Con todo
-      (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, imei2: d.imei2?.trim()||null, ...(lotId ? {lot_id:lotId} : {}) }),
+      // Con todo (incluyendo warehouse_id)
+      (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, imei2: d.imei2?.trim()||null, ...(lotId ? {lot_id:lotId} : {}), ...(warehouseId ? {warehouse_id:warehouseId} : {}) }),
       // Sin imei2
-      (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, ...(lotId ? {lot_id:lotId} : {}) }),
+      (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, ...(lotId ? {lot_id:lotId} : {}), ...(warehouseId ? {warehouse_id:warehouseId} : {}) }),
       // Sin color/storage/imei2
+      (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, ...(lotId ? {lot_id:lotId} : {}), ...(warehouseId ? {warehouse_id:warehouseId} : {}) }),
+      // Sin warehouse
       (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, ...(lotId ? {lot_id:lotId} : {}) }),
       // Solo lo básico garantizado
       (d) => ({ ...baseRow(d) }),
@@ -1260,6 +1267,72 @@ export default function CorpPage() {
     showToast(`${validDevices.length} equipo${validDevices.length > 1 ? 's' : ''} agregado${validDevices.length > 1 ? 's' : ''}${loteMsg} ✓`);
     setModal(null); setForm({}); setProdSearch(''); setStockCatFilter('all');
     loadGlobalStock(); loadKpis();
+  }
+
+  /* ── IMPORTAR EXCEL AL STOCK (IMEI1, IMEI2, Serial) ── */
+  async function parseExcelFile(file) {
+    if (!file) return;
+    setExcelImporting(true);
+    try {
+      const ext = file.name.split('.').pop().toLowerCase();
+
+      // Para CSV: parseo nativo sin librería
+      if (ext === 'csv') {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) { showToast('CSV vacío o sin datos', 'err'); return; }
+        const headers = lines[0].split(',').map(h => h.replace(/"/g,'').trim().toLowerCase().replace(/[\s_-]/g,''));
+        const getIdx = (...keys) => { for (const k of keys) { const i = headers.findIndex(h => h.includes(k)); if (i >= 0) return i; } return -1; };
+        const i1 = getIdx('imei1','imei'); const i2 = getIdx('imei2'); const is = getIdx('serial','numeroserie','sn');
+        const devices = lines.slice(1).map(line => {
+          const cols = line.split(',').map(c => c.replace(/"/g,'').trim());
+          return { imei1: i1>=0?cols[i1]||'':'', imei2: i2>=0?cols[i2]||'':'', serial: is>=0?cols[is]||'':'' };
+        }).filter(d => d.imei1 || d.serial);
+        if (devices.length === 0) { showToast('CSV sin columnas IMEI1/IMEI2/Serial. Revisa el formato.', 'err'); return; }
+        setForm(f => ({ ...f, devices }));
+        showToast(`${devices.length} equipo${devices.length>1?'s':''} cargados del CSV ✓`);
+        return;
+      }
+
+      // Para XLSX: usar librería xlsx (instalada via package.json)
+      let XLSXmod;
+      try { XLSXmod = await import('xlsx'); } catch(_) {
+        showToast('Librería Excel no disponible. Exporta como CSV e intenta de nuevo.', 'err'); return;
+      }
+      const XLSX = XLSXmod.default || XLSXmod;
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      if (rows.length === 0) { showToast('Excel vacío o sin datos', 'err'); return; }
+
+      const norm = (s) => String(s||'').toLowerCase().replace(/[\s_\-\.]/g,'');
+      const getCol = (row, ...keys) => {
+        for (const k of keys) {
+          const found = Object.keys(row).find(rk => norm(rk).includes(norm(k)));
+          if (found) { const v = String(row[found]||'').trim(); if (v && v !== '0') return v; }
+        }
+        return '';
+      };
+
+      const devices = rows
+        .map(row => ({
+          imei1:  getCol(row,'imei1','imei','imeiprincipal','imeinumber','imei_1','imeinro1'),
+          imei2:  getCol(row,'imei2','imeisecundario','imei_2','imeinro2','imei2number'),
+          serial: getCol(row,'serial','serialnumber','numeroserie','sn','serie','serialno'),
+        }))
+        .filter(d => d.imei1 || d.serial);
+
+      if (devices.length === 0) {
+        showToast('Excel sin datos válidos. Columnas esperadas: IMEI1, IMEI2, Serial', 'err'); return;
+      }
+      setForm(f => ({ ...f, devices }));
+      showToast(`${devices.length} equipo${devices.length>1?'s':''} importados del Excel ✓`);
+    } catch(err) {
+      showToast('Error al leer el archivo: ' + err.message, 'err');
+    } finally {
+      setExcelImporting(false);
+    }
   }
 
   /* ── EXTRAER INFO DEL IMEI RESULT ── */
@@ -2289,11 +2362,12 @@ export default function CorpPage() {
                             </div>
                           )}
                         </div>
-                        {/* Color + GB + modelo */}
+                        {/* Color + GB + modelo + almacén */}
                         <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignContent:'flex-start' }}>
                           {s.storage_info && <span style={{ fontSize:11, padding:'2px 8px', borderRadius:4, background:'#eff6ff', color:'#1a56db', fontWeight:700, border:'1px solid #bfdbfe' }}>{s.storage_info}</span>}
                           {s.color_info   && <span style={{ fontSize:11, padding:'2px 8px', borderRadius:4, background:'#f9fafb', color:'#374151', border:'1px solid #d1d5db', fontWeight:600 }}>{s.color_info}</span>}
                           {s.model_number && <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:'#f9fafb', color:'#9ca3af', border:'1px solid #e5e7eb' }}>{s.model_number}</span>}
+                          {s.warehouses?.name && <span style={{ fontSize:10, padding:'2px 7px', borderRadius:4, background:'#f0fdf4', color:'#166534', border:'1px solid #bbf7d0', fontWeight:600 }}>🏭 {s.warehouses.name}{s.warehouses.city?` · ${s.warehouses.city}`:''}</span>}
                         </div>
                         {/* Precio */}
                         <div>
@@ -5189,16 +5263,34 @@ export default function CorpPage() {
 
               return (
                 <>
-                  <div className="modal-title">Agregar equipos al stock</div>
+                  <div className="modal-title">📦 Agregar equipos al stock</div>
                   <form onSubmit={addStock}>
 
-                    {/* Asignar a */}
-                    <div className="form-group">
-                      <label className="form-label">Asignar a</label>
-                      <select className="form-select" value={form.owner_org_id || CORP_ID} onChange={e => setForm({ ...form, owner_org_id: e.target.value })}>
-                        <option value={CORP_ID}>Corp Tech — Almacén Central</option>
-                        {STORES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
+                    {/* Asignar a + Almacén destino */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:4 }}>
+                      <div className="form-group" style={{ marginBottom:0 }}>
+                        <label className="form-label">Empresa</label>
+                        <select className="form-select" value={form.owner_org_id || CORP_ID} onChange={e => setForm({ ...form, owner_org_id: e.target.value })}>
+                          <option value={CORP_ID}>🏢 Corp Tech</option>
+                          {STORES.map(s => <option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ marginBottom:0 }}>
+                        <label className="form-label">🏭 Almacén destino</label>
+                        <select className="form-select" value={form.warehouse_id||''} onChange={e=>setForm({...form,warehouse_id:e.target.value})}>
+                          <option value="">— Sin asignar —</option>
+                          {(() => {
+                            const depts = [...new Set(warehouses.map(w=>w.department||'Sin estado'))];
+                            return depts.map(dept => (
+                              <optgroup key={dept} label={`📍 ${dept}`}>
+                                {warehouses.filter(w=>(w.department||'Sin estado')===dept).map(w=>(
+                                  <option key={w.id} value={w.id}>{w.name}{w.city?` — ${w.city}`:''}</option>
+                                ))}
+                              </optgroup>
+                            ));
+                          })()}
+                        </select>
+                      </div>
                     </div>
 
                     {/* Selector de modelo */}
@@ -5301,6 +5393,27 @@ export default function CorpPage() {
                           <label className="form-label">P. Venta (S/)</label>
                           <input className="form-input" type="number" min="0" step="0.01" placeholder="0.00" value={form.sale_price_stock||''} onChange={e=>setForm({...form,sale_price_stock:e.target.value})} />
                         </div>
+                      </div>
+
+                      {/* ── Importar desde Excel / CSV ── */}
+                      <div style={{ background:'linear-gradient(135deg,#f0f9ff,#e0f2fe)', border:'1px solid #bae6fd', borderRadius:10, padding:'12px 14px', marginBottom:10 }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10 }}>
+                          <div>
+                            <div style={{ fontSize:12, fontWeight:700, color:'#0369a1' }}>📊 Importar desde Excel / CSV</div>
+                            <div style={{ fontSize:10, color:'#0284c7', marginTop:2 }}>Sube un .xlsx o .csv con columnas: <b>IMEI1, IMEI2, Serial</b></div>
+                          </div>
+                          <label style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:8, background: excelImporting?'#7dd3fc':'#0ea5e9', color:'#fff', fontSize:12, fontWeight:700, cursor: excelImporting?'wait':'pointer', whiteSpace:'nowrap', userSelect:'none' }}>
+                            {excelImporting ? '⏳ Leyendo...' : '📂 Elegir archivo'}
+                            <input type="file" accept=".xlsx,.xls,.csv" style={{ display:'none' }}
+                              disabled={excelImporting}
+                              onChange={e => { const f = e.target.files?.[0]; if(f) parseExcelFile(f); e.target.value=''; }} />
+                          </label>
+                        </div>
+                        {validCount > 0 && (
+                          <div style={{ marginTop:8, padding:'5px 10px', background:'#dcfce7', borderRadius:6, fontSize:11, fontWeight:700, color:'#166534' }}>
+                            ✅ {validCount} equipo{validCount>1?'s':''} listos para guardar
+                          </div>
+                        )}
                       </div>
 
                       {/* ── Lista de equipos ── */}
