@@ -613,7 +613,7 @@ export default function CorpPage() {
     e.preventDefault();
     const tc  = parseFloat(usdRate) || parseFloat(form.imp_rate) || 3.75;
     const C   = calcLanded(form, tc);
-    const { error } = await supabase.from('import_batches').insert({
+    const { error, data: batchData } = await supabase.from('import_batches').insert({
       org_id:              CORP_ID,
       descripcion:         form.imp_desc || '',
       proveedor:           form.imp_proveedor || '',
@@ -637,11 +637,65 @@ export default function CorpPage() {
       precio_sugerido_pen: C.precioSug,
       notas:               form.imp_notas || '',
       created_by:          me?.id,
-    });
+    }).select('id').single();
     if (error) { showToast('Error: ' + error.message, 'err'); return; }
-    showToast('Lote de importación registrado ✓');
+
+    // ── Si hay equipos ingresados → guardar a stock_items ──
+    const impDevices = (form.imp_devices || []).filter(d => d.imei1?.trim() || d.serial?.trim());
+    if (impDevices.length > 0 && form.imp_product_id) {
+      // Crear purchase_lot vinculado al batch
+      let lotId = null;
+      try {
+        const numeroLote = form.imp_desc?.trim()
+          ? `IMP-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`
+          : `IMP-${String(Date.now()).slice(-6)}`;
+        const { data: lotData } = await supabase.from('purchase_lots').insert({
+          corp_id: CORP_ID,
+          numero_lote: numeroLote,
+          proveedor: form.imp_proveedor?.trim() || null,
+          fecha_compra: form.imp_fecha_compra || new Date().toISOString().split('T')[0],
+          total_unidades: impDevices.length,
+          notas: form.imp_desc || null,
+        }).select('id').single();
+        if (lotData?.id) lotId = lotData.id;
+      } catch(_) {}
+
+      const colMissing = (msg) => msg && (msg.includes('column') || msg.includes('schema cache') || msg.includes('Could not find'));
+      const purchasePrice = parseFloat(form.imp_purchase_price) || C.costoPorUnd || null;
+      const resellerPrice = parseFloat(form.imp_reseller_price) || null;
+      const salePrice     = parseFloat(form.imp_sale_price) || C.precioSug || null;
+      const colorInfo     = form.imp_color_info?.trim() || null;
+      const storageInfo   = form.imp_storage_info?.trim() || null;
+      const warehouseId   = form.imp_warehouse_id || null;
+
+      const baseRow = (d) => ({
+        owner_org_id: CORP_ID, product_id: form.imp_product_id,
+        imei: d.imei1?.trim()||null, serial_number: d.serial?.trim()||null, status: 'available',
+      });
+      const attempts = [
+        (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, imei2: d.imei2?.trim()||null, ...(lotId?{lot_id:lotId}:{}), ...(warehouseId?{warehouse_id:warehouseId}:{}) }),
+        (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, ...(lotId?{lot_id:lotId}:{}), ...(warehouseId?{warehouse_id:warehouseId}:{}) }),
+        (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, ...(lotId?{lot_id:lotId}:{}) }),
+        (d) => ({ ...baseRow(d) }),
+      ];
+      let saved = false;
+      for (const build of attempts) {
+        const rows = impDevices.map(build);
+        const { error: se } = await supabase.from('stock_items').insert(rows);
+        if (!se) { saved = true; break; }
+        if (!colMissing(se.message)) { showToast('Error al guardar equipos: ' + se.message, 'err'); break; }
+      }
+      if (saved) {
+        showToast(`Lote registrado + ${impDevices.length} equipo${impDevices.length>1?'s':''} al stock ✓`);
+      } else {
+        showToast('Lote registrado. Equipos no guardados (corre MIGRATION_STOCK_COLUMNS.sql)', 'err');
+      }
+    } else {
+      showToast('Lote de importación registrado ✓');
+    }
+
     setModal(null); setForm({});
-    loadBatches();
+    loadBatches(); loadGlobalStock(); loadKpis();
   }
 
   async function updateBatchStatus(id, estado) {
@@ -6035,7 +6089,172 @@ export default function CorpPage() {
                       </div>
                     )}
 
-                    <button className="btn btn-primary" type="submit">💾 Guardar lote</button>
+                    {/* ══ SECCIÓN EQUIPOS (opcional) ══ */}
+                    <div style={{ borderTop:'2px solid #e2e8f0', marginTop:16, paddingTop:14 }}>
+                      <div style={{ fontSize:12, fontWeight:800, color:'#1a56db', textTransform:'uppercase', letterSpacing:0.8, marginBottom:10 }}>
+                        📱 Equipos del lote <span style={{ fontWeight:400, fontSize:11, color:'#9ca3af', textTransform:'none' }}>(opcional — agrega directo al stock)</span>
+                      </div>
+
+                      {/* Modelo del lote */}
+                      {(() => {
+                        const selProd = products.find(p => p.id === form.imp_product_id);
+                        const filteredProds = products.filter(p => !prodSearch || p.name.toLowerCase().includes(prodSearch.toLowerCase()));
+                        return (
+                          <div className="form-group">
+                            <label className="form-label">Modelo</label>
+                            {selProd ? (
+                              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'rgba(10,132,255,0.08)', border:'1px solid rgba(10,132,255,0.25)', borderRadius:8 }}>
+                                <div style={{ flex:1, fontWeight:700, fontSize:13 }}>{selProd.name}</div>
+                                <button type="button" onClick={() => { setForm(f=>({...f,imp_product_id:'',imp_devices:[{imei1:'',imei2:'',serial:''}]})); setProdSearch(''); }}
+                                  style={{ background:'none',border:'none',color:'#9ca3af',cursor:'pointer',fontSize:16 }}>✕</button>
+                              </div>
+                            ) : (
+                              <>
+                                <input className="form-input" placeholder="Buscar modelo..." value={prodSearch} onChange={e=>setProdSearch(e.target.value)} autoComplete="off" />
+                                {filteredProds.length > 0 && prodSearch && (
+                                  <div style={{ border:'1px solid var(--border)',borderRadius:8,marginTop:4,background:'var(--card)',maxHeight:150,overflowY:'auto' }}>
+                                    {filteredProds.map((p,i) => (
+                                      <div key={p.id} onMouseDown={()=>{setForm(f=>({...f,imp_product_id:p.id}));setProdSearch('');}}
+                                        style={{ padding:'8px 12px',cursor:'pointer',borderBottom:i<filteredProds.length-1?'1px solid var(--border)':'none',fontSize:13,fontWeight:600 }}
+                                        onMouseEnter={e=>e.currentTarget.style.background='rgba(10,132,255,0.07)'}
+                                        onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                        {p.name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {form.imp_product_id && (<>
+                        {/* Color + GB + Almacén */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:8 }}>
+                          <div className="form-group" style={{ marginBottom:0 }}>
+                            <label className="form-label">Color</label>
+                            <input className="form-input" placeholder="Negro, Blanco..." value={form.imp_color_info||''} onChange={e=>setForm({...form,imp_color_info:e.target.value})} />
+                          </div>
+                          <div className="form-group" style={{ marginBottom:0 }}>
+                            <label className="form-label">GB</label>
+                            <input className="form-input" placeholder="128GB, 256GB..." value={form.imp_storage_info||''} onChange={e=>setForm({...form,imp_storage_info:e.target.value})} />
+                          </div>
+                          <div className="form-group" style={{ marginBottom:0 }}>
+                            <label className="form-label">🏭 Almacén</label>
+                            <select className="form-select" value={form.imp_warehouse_id||''} onChange={e=>setForm({...form,imp_warehouse_id:e.target.value})}>
+                              <option value="">— Sin asignar —</option>
+                              {[...new Set(warehouses.map(w=>w.department||'Sin estado'))].map(dept=>(
+                                <optgroup key={dept} label={`📍 ${dept}`}>
+                                  {warehouses.filter(w=>(w.department||'Sin estado')===dept).map(w=>(
+                                    <option key={w.id} value={w.id}>{w.name}{w.city?` — ${w.city}`:''}</option>
+                                  ))}
+                                </optgroup>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Precios por equipo */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:10 }}>
+                          <div className="form-group" style={{ marginBottom:0 }}>
+                            <label className="form-label">P. Compra (S/)</label>
+                            <input className="form-input" type="number" min="0" step="0.01" placeholder={`≈${(parseFloat(calcLanded(form,parseFloat(usdRate)||3.75).costoPorUnd)||0).toFixed(0)}`} value={form.imp_purchase_price||''} onChange={e=>setForm({...form,imp_purchase_price:e.target.value})} />
+                          </div>
+                          <div className="form-group" style={{ marginBottom:0 }}>
+                            <label className="form-label">P. Revendedor (S/)</label>
+                            <input className="form-input" type="number" min="0" step="0.01" placeholder="0.00" value={form.imp_reseller_price||''} onChange={e=>setForm({...form,imp_reseller_price:e.target.value})} />
+                          </div>
+                          <div className="form-group" style={{ marginBottom:0 }}>
+                            <label className="form-label">P. Venta (S/)</label>
+                            <input className="form-input" type="number" min="0" step="0.01" placeholder={`≈${(parseFloat(calcLanded(form,parseFloat(usdRate)||3.75).precioSug)||0).toFixed(0)}`} value={form.imp_sale_price||''} onChange={e=>setForm({...form,imp_sale_price:e.target.value})} />
+                          </div>
+                        </div>
+
+                        {/* Excel import */}
+                        <div style={{ background:'linear-gradient(135deg,#f0f9ff,#e0f2fe)',border:'1px solid #bae6fd',borderRadius:8,padding:'10px 12px',marginBottom:8 }}>
+                          <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',gap:8 }}>
+                            <div>
+                              <div style={{ fontSize:11,fontWeight:700,color:'#0369a1' }}>📊 Importar Excel / CSV</div>
+                              <div style={{ fontSize:10,color:'#0284c7',marginTop:1 }}>Columnas: <b>IMEI1, IMEI2, Serial</b></div>
+                            </div>
+                            <label style={{ display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderRadius:7,background:excelImporting?'#7dd3fc':'#0ea5e9',color:'#fff',fontSize:11,fontWeight:700,cursor:excelImporting?'wait':'pointer',whiteSpace:'nowrap' }}>
+                              {excelImporting ? '⏳ Leyendo...' : '📂 Elegir archivo'}
+                              <input type="file" accept=".xlsx,.xls,.csv" style={{ display:'none' }} disabled={excelImporting}
+                                onChange={e => {
+                                  const f = e.target.files?.[0];
+                                  if (!f) return;
+                                  // Reusar parseExcelFile pero guardar en imp_devices
+                                  (async () => {
+                                    setExcelImporting(true);
+                                    try {
+                                      const ext = f.name.split('.').pop().toLowerCase();
+                                      let devices = [];
+                                      if (ext === 'csv') {
+                                        const text = await f.text();
+                                        const lines = text.split(/\r?\n/).filter(l=>l.trim());
+                                        if (lines.length < 2) { showToast('CSV vacío','err'); return; }
+                                        const hdrs = lines[0].split(',').map(h=>h.replace(/"/g,'').trim().toLowerCase().replace(/[\s_-]/g,''));
+                                        const gi = (...ks) => { for(const k of ks){const i=hdrs.findIndex(h=>h.includes(k));if(i>=0)return i;} return -1; };
+                                        const i1=gi('imei1','imei'),i2=gi('imei2'),is=gi('serial','sn','serie');
+                                        devices = lines.slice(1).map(l=>{const c=l.split(',').map(x=>x.replace(/"/g,'').trim());return{imei1:i1>=0?c[i1]||'':'',imei2:i2>=0?c[i2]||'':'',serial:is>=0?c[is]||'':''}}).filter(d=>d.imei1||d.serial);
+                                      } else {
+                                        let XM; try{XM=await import('xlsx');}catch(_){showToast('Usa CSV en su lugar','err');return;}
+                                        const XLSX=XM.default||XM;
+                                        const buf=await f.arrayBuffer();
+                                        const wb=XLSX.read(buf,{type:'array'});
+                                        const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+                                        const norm=s=>String(s||'').toLowerCase().replace(/[\s_\-.]/g,'');
+                                        const gc=(row,...ks)=>{for(const k of ks){const fk=Object.keys(row).find(rk=>norm(rk).includes(norm(k)));if(fk){const v=String(row[fk]||'').trim();if(v&&v!=='0')return v;}}return '';};
+                                        devices=rows.map(r=>({imei1:gc(r,'imei1','imei'),imei2:gc(r,'imei2'),serial:gc(r,'serial','sn','serie')})).filter(d=>d.imei1||d.serial);
+                                      }
+                                      if (!devices.length){showToast('Sin datos válidos. Columnas: IMEI1, IMEI2, Serial','err');return;}
+                                      setForm(f2=>({...f2,imp_devices:devices,imp_unidades:String(devices.length)}));
+                                      showToast(`${devices.length} equipo${devices.length>1?'s':''} cargados ✓`);
+                                    } catch(err){showToast('Error: '+err.message,'err');}
+                                    finally{setExcelImporting(false);}
+                                  })();
+                                  e.target.value='';
+                                }} />
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Tabla manual de equipos */}
+                        {(() => {
+                          const impDevs = form.imp_devices || [{ imei1:'',imei2:'',serial:'' }];
+                          const updImpDev = (idx,field,val) => setForm(f=>({...f,imp_devices:impDevs.map((d,i)=>i===idx?{...d,[field]:val}:d)}));
+                          const addImpDev = () => setForm(f=>({...f,imp_devices:[...(f.imp_devices||[{imei1:'',imei2:'',serial:''}]),{imei1:'',imei2:'',serial:''}]}));
+                          const remImpDev = (idx) => setForm(f=>({...f,imp_devices:(f.imp_devices||[]).filter((_,i)=>i!==idx)}));
+                          const validImpCount = impDevs.filter(d=>d.imei1?.trim()||d.serial?.trim()).length;
+                          return (
+                            <div>
+                              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4 }}>
+                                <label className="form-label" style={{ margin:0,fontSize:11 }}>
+                                  Equipos del lote
+                                  {validImpCount>0 && <span style={{ marginLeft:6,fontSize:11,fontWeight:700,color:'#1a56db',background:'#eff6ff',padding:'1px 7px',borderRadius:4,border:'1px solid #bfdbfe' }}>{validImpCount} equipo{validImpCount>1?'s':''}</span>}
+                                </label>
+                                <button type="button" onClick={addImpDev} style={{ padding:'3px 10px',borderRadius:5,border:'1px solid #1a56db',background:'#eff6ff',color:'#1a56db',fontSize:11,fontWeight:700,cursor:'pointer' }}>+ Agregar</button>
+                              </div>
+                              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr 28px',gap:3,padding:'3px 5px',background:'#f3f4f6',borderRadius:'5px 5px 0 0',fontSize:9,fontWeight:700,color:'#6b7280',textTransform:'uppercase',letterSpacing:0.5 }}>
+                                <span>IMEI 1</span><span>IMEI 2</span><span>N° Serie</span><span></span>
+                              </div>
+                              {impDevs.map((d,idx)=>(
+                                <div key={idx} style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr 28px',gap:3,padding:'3px 5px',background:idx%2===0?'#fff':'#fafafa',border:'1px solid #e5e7eb',borderTop:'none',borderRadius:idx===impDevs.length-1?'0 0 5px 5px':0 }}>
+                                  <input style={{ padding:'5px 7px',border:'1px solid #d1d5db',borderRadius:4,fontSize:11,fontFamily:'monospace',width:'100%',boxSizing:'border-box',background:d.imei1?.trim()?'#f0fdf4':'#fff' }} placeholder="352999..." value={d.imei1||''} onChange={e=>updImpDev(idx,'imei1',e.target.value)} />
+                                  <input style={{ padding:'5px 7px',border:'1px solid #d1d5db',borderRadius:4,fontSize:11,fontFamily:'monospace',width:'100%',boxSizing:'border-box' }} placeholder="opcional" value={d.imei2||''} onChange={e=>updImpDev(idx,'imei2',e.target.value)} />
+                                  <input style={{ padding:'5px 7px',border:'1px solid #d1d5db',borderRadius:4,fontSize:11,fontFamily:'monospace',width:'100%',boxSizing:'border-box' }} placeholder="DNXXX..." value={d.serial||''} onChange={e=>updImpDev(idx,'serial',e.target.value)} />
+                                  <button type="button" onClick={()=>remImpDev(idx)} disabled={impDevs.length===1} style={{ padding:'3px',borderRadius:4,border:'none',background:impDevs.length===1?'transparent':'#fee2e2',color:impDevs.length===1?'#d1d5db':'#dc2626',cursor:impDevs.length===1?'default':'pointer',fontSize:12 }}>✕</button>
+                                </div>
+                              ))}
+                              <div style={{ fontSize:10,color:'#9ca3af',marginTop:3 }}>IMEI 1 o N° Serie requerido. IMEI 2 opcional.</div>
+                            </div>
+                          );
+                        })()}
+                      </>)}
+                    </div>
+
+                    <button className="btn btn-primary" type="submit" style={{ marginTop:14 }}>💾 Guardar lote</button>
                   </form>
                 </>
               );
