@@ -300,26 +300,37 @@ export default function CorpPage() {
   }
 
   async function loadGlobalStock() {
-    // Siempre cargamos TODO — el filtro se aplica en cliente para que los contadores sean correctos
-    // Intentamos con purchase_lots; si la tabla no existe, cargamos sin el join
-    let data = null;
+    // Intento 1: query completa con todos los campos y joins
     const { data: d1, error: e1 } = await supabase
       .from('stock_items')
       .select('id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), imei_check_id, model_number, color_info, storage_info, lot_id, purchase_lots(numero_lote, proveedor, numero_factura)')
       .order('created_at', { ascending: false })
       .limit(500);
-    if (!e1) {
-      data = d1;
-    } else {
-      // Fallback sin purchase_lots (tabla aún no creada)
-      const { data: d2 } = await supabase
-        .from('stock_items')
-        .select('id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), imei_check_id, model_number, color_info, storage_info')
-        .order('created_at', { ascending: false })
-        .limit(500);
-      data = d2;
-    }
-    setStocks(data || []);
+    if (!e1 && d1) { setStocks(d1); return; }
+
+    // Intento 2: sin purchase_lots (tabla no creada aún)
+    const { data: d2, error: e2 } = await supabase
+      .from('stock_items')
+      .select('id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), model_number, color_info, storage_info')
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (!e2 && d2) { setStocks(d2); return; }
+
+    // Intento 3: sin columnas extras (migraciones no corridas)
+    const { data: d3, error: e3 } = await supabase
+      .from('stock_items')
+      .select('id, imei, status, sale_price, owner_org_id, product_id, products(name)')
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (!e3 && d3) { setStocks(d3); return; }
+
+    // Intento 4: ultra-mínimo garantizado
+    const { data: d4 } = await supabase
+      .from('stock_items')
+      .select('id, imei, status, sale_price, owner_org_id')
+      .order('created_at', { ascending: false })
+      .limit(500);
+    setStocks(d4 || []);
   }
 
   async function loadAllSales() {
