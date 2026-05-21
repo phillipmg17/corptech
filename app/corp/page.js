@@ -5,28 +5,22 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
 function useTheme() {
-  const [theme, setTheme] = useState('dark');
+  const theme = 'light';
   useEffect(() => {
-    const saved = localStorage.getItem('theme') || 'dark';
-    setTheme(saved);
-    document.documentElement.setAttribute('data-theme', saved);
+    document.documentElement.setAttribute('data-theme', 'light');
+    localStorage.setItem('theme', 'light');
   }, []);
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    localStorage.setItem('theme', next);
-    document.documentElement.setAttribute('data-theme', next);
-  }
+  function toggleTheme() {}
   return { theme, toggleTheme };
 }
 
 const CORP_ID  = '00000000-0000-0000-0000-000000000001';
 const STORES = [
-  { id: '00000000-0000-0000-0000-000000000002', name: 'Futurteck',   ico: '🔵' },
-  { id: '00000000-0000-0000-0000-000000000003', name: 'Innovatech',  ico: '🟣' },
-  { id: '00000000-0000-0000-0000-000000000004', name: 'WeTech Peru', ico: '🟢' },
+  { id: '00000000-0000-0000-0000-000000000002', name: 'Futurteck',   ico: 'F' },
+  { id: '00000000-0000-0000-0000-000000000003', name: 'Innovatech',  ico: 'I' },
+  { id: '00000000-0000-0000-0000-000000000004', name: 'WeTech Peru', ico: 'W' },
 ];
-const ALL_ORGS = [{ id: CORP_ID, name: 'Corp Tech', ico: '🏢' }, ...STORES];
+const ALL_ORGS = [{ id: CORP_ID, name: 'Corp Tech', ico: 'C' }, ...STORES];
 
 export default function CorpPage() {
   const router = useRouter();
@@ -2035,7 +2029,7 @@ export default function CorpPage() {
             </div>
 
             <div className="section-header">
-              <div className="section-title">📦 Stock Global</div>
+              <div className="section-title">Stock Global</div>
               <button className="section-action" onClick={() => { setModal('add-stock'); setForm({}); }}>+ Agregar</button>
             </div>
 
@@ -2095,7 +2089,7 @@ export default function CorpPage() {
         ══════════════════════════════════════ */}
         {tab === 'ventas' && (
           <div style={{ padding: '16px' }}>
-            <div className="section-title">📊 Ventas consolidadas</div>
+            <div className="section-title">Ventas consolidadas</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
               {[{ id: 'all', name: 'Todas', ico: '🌐' }, ...STORES].map(s => (
                 <button key={s.id} onClick={() => setStoreFilter(s.id)}
@@ -2128,32 +2122,27 @@ export default function CorpPage() {
         ══════════════════════════════════════ */}
         {tab === 'productos' && (() => {
           const CATS = [
-            { id: 'all',      lbl: 'Todos',      ico: '🗂️' },
-            { id: 'iphone',   lbl: 'iPhone',     ico: '📱' },
-            { id: 'ipad',     lbl: 'iPad',       ico: '📟' },
-            { id: 'mac',      lbl: 'Mac',        ico: '💻' },
-            { id: 'airpods',  lbl: 'AirPods',    ico: '🎧' },
-            { id: 'samsung',  lbl: 'Samsung',    ico: '📲' },
-            { id: 'accesorio',lbl: 'Accesorios', ico: '🔌' },
-            { id: 'otro',     lbl: 'Otro',       ico: '📦' },
+            { id: 'all',       lbl: 'Todos'      },
+            { id: 'iphone',    lbl: 'iPhone'     },
+            { id: 'ipad',      lbl: 'iPad'       },
+            { id: 'mac',       lbl: 'Mac'        },
+            { id: 'airpods',   lbl: 'AirPods'   },
+            { id: 'samsung',   lbl: 'Samsung'    },
+            { id: 'accesorio', lbl: 'Accesorios' },
+            { id: 'otro',      lbl: 'Otro'       },
           ];
-          const CAT_COLORS = {
-            iphone: '#0A84FF', ipad: '#5E5CE6', mac: '#636366',
-            airpods: '#30D158', samsung: '#FF9F0A', accesorio: '#BF5AF2', otro: '#8E8E93',
-          };
           const [catFilter, setCatFilter] = [
             form._cat_filter || 'all',
             (v) => setForm(f => ({ ...f, _cat_filter: v })),
           ];
-          const visible = catFilter === 'all'
-            ? products
-            : products.filter(p => (p.category || 'otro') === catFilter);
 
           // Filtros adicionales
-          const gbFilter   = form._gb_filter   || 'all';
-          const subFilter  = form._sub_filter  || 'all';
-          const setGbFilter  = v => setForm(f => ({ ...f, _gb_filter:  v }));
-          const setSubFilter = v => setForm(f => ({ ...f, _sub_filter: v }));
+          const gbFilter      = form._gb_filter    || 'all';
+          const subFilter     = form._sub_filter   || 'all';
+          const colorFilter   = form._color_filter || 'all';
+          const setGbFilter    = v => setForm(f => ({ ...f, _gb_filter:    v }));
+          const setSubFilter   = v => setForm(f => ({ ...f, _sub_filter:   v }));
+          const setColorFilter = v => setForm(f => ({ ...f, _color_filter: v }));
 
           // Subcategorías únicas presentes en los productos filtrados por categoría
           const subsAvail = [...new Set(
@@ -2169,18 +2158,24 @@ export default function CorpPage() {
             return n(a) - n(b);
           });
 
+          // Colores únicos presentes
+          const colorsAvail = [...new Set(
+            products.flatMap(p => p.default_colors || []).filter(Boolean)
+          )].sort();
+
           // Filtrar productos
           const visible = products
-            .filter(p => catFilter === 'all' || (p.category||'otro') === catFilter)
-            .filter(p => subFilter === 'all' || p.subcategory === subFilter)
-            .filter(p => gbFilter  === 'all' || (p.default_capacities||[]).includes(gbFilter));
+            .filter(p => catFilter    === 'all' || (p.category||'otro') === catFilter)
+            .filter(p => subFilter    === 'all' || p.subcategory === subFilter)
+            .filter(p => gbFilter     === 'all' || (p.default_capacities||[]).includes(gbFilter))
+            .filter(p => colorFilter  === 'all' || (p.default_colors||[]).includes(colorFilter));
 
           const PILL = (active, onClick, label) => (
             <button type="button" onClick={onClick} style={{
-              flexShrink: 0, padding: '5px 13px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-              border: `1px solid ${active ? '#0A84FF' : 'var(--border)'}`,
-              background: active ? 'rgba(10,132,255,0.12)' : 'transparent',
-              color: active ? '#0A84FF' : 'var(--text3)',
+              flexShrink: 0, padding: '4px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              border: `1px solid ${active ? '#1a56db' : '#d1d5db'}`,
+              background: active ? '#1a56db' : '#fff',
+              color: active ? '#fff' : '#374151',
               cursor: 'pointer', transition: 'all .15s',
             }}>{label}</button>
           );
@@ -2189,115 +2184,132 @@ export default function CorpPage() {
             <div style={{ padding: '16px' }}>
 
               {/* Header */}
-              <div className="section-header">
-                <div className="section-title" style={{ fontSize: 16, fontWeight: 700 }}>Catálogo de modelos</div>
-                <button className="section-action" onClick={() => { setModal('add-product'); setForm({ emoji: '📱', category: 'iphone' }); }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color:'#111827' }}>Catálogo de modelos</div>
+                <button onClick={() => { setModal('add-product'); setForm({ category: 'iphone' }); }}
+                  style={{ padding:'6px 16px', borderRadius:6, border:'none', background:'#1a56db', color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer' }}>
                   + Nuevo modelo
                 </button>
               </div>
 
               {/* Filtro categoría */}
-              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 10, paddingBottom: 2 }}>
-                {CATS.map(c => PILL(catFilter === c.id, () => { setCatFilter(c.id); setSubFilter('all'); setGbFilter('all'); },
-                  c.id === 'all' ? 'Todos' : `${c.lbl}${c.id !== 'all' ? ' ' + products.filter(p=>(p.category||'otro')===c.id).length : ''}`
-                ))}
+              <div style={{ marginBottom:8 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:1, marginBottom:5 }}>Categoría</div>
+                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+                  {CATS.map(c => PILL(catFilter === c.id, () => { setCatFilter(c.id); setSubFilter('all'); setGbFilter('all'); setColorFilter('all'); },
+                    c.id === 'all' ? `Todos (${products.length})` : `${c.lbl} (${products.filter(p=>(p.category||'otro')===c.id).length})`
+                  ))}
+                </div>
               </div>
 
               {/* Filtro subcategoría (serie) — solo si hay */}
               {subsAvail.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 10, paddingBottom: 2 }}>
-                  {PILL(subFilter === 'all', () => setSubFilter('all'), 'Todas las series')}
-                  {subsAvail.map(s => PILL(subFilter === s, () => setSubFilter(s), `Serie ${s}`))}
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:1, marginBottom:5 }}>Serie / Generación</div>
+                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+                    {PILL(subFilter === 'all', () => setSubFilter('all'), 'Todas')}
+                    {subsAvail.map(s => PILL(subFilter === s, () => setSubFilter(s), `Serie ${s}`))}
+                  </div>
                 </div>
               )}
 
               {/* Filtro GB */}
               {gbsAvail.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 14, paddingBottom: 2 }}>
-                  {PILL(gbFilter === 'all', () => setGbFilter('all'), 'Todos los GB')}
-                  {gbsAvail.map(g => PILL(gbFilter === g, () => setGbFilter(g), g))}
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:1, marginBottom:5 }}>Almacenamiento</div>
+                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+                    {PILL(gbFilter === 'all', () => setGbFilter('all'), 'Todos')}
+                    {gbsAvail.map(g => PILL(gbFilter === g, () => setGbFilter(g), g))}
+                  </div>
                 </div>
               )}
 
-              {/* Lista de productos */}
+              {/* Filtro Color */}
+              {colorsAvail.length > 0 && (
+                <div style={{ marginBottom:14 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:1, marginBottom:5 }}>Color</div>
+                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+                    {PILL(colorFilter === 'all', () => setColorFilter('all'), 'Todos')}
+                    {colorsAvail.map(c => PILL(colorFilter === c, () => setColorFilter(c), c))}
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de productos — estilo tabla */}
               {products.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-                  <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 6 }}>Sin modelos aún</div>
-                  <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Crea el primer modelo base del catálogo</div>
-                  <button className="section-action" onClick={() => { setModal('add-product'); setForm({ emoji: '📱', category: 'iphone' }); }}>
+                <div style={{ textAlign: 'center', padding: '60px 20px', background:'#fff', borderRadius:8, border:'1px solid #e5e7eb' }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6, color:'#111827' }}>Sin modelos aún</div>
+                  <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>Crea el primer modelo del catálogo</div>
+                  <button onClick={() => { setModal('add-product'); setForm({ category: 'iphone' }); }}
+                    style={{ padding:'7px 18px', borderRadius:6, border:'none', background:'#1a56db', color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer' }}>
                     + Crear primer modelo
                   </button>
                 </div>
               ) : visible.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)', fontSize: 13 }}>
+                <div style={{ textAlign: 'center', padding: '32px 20px', color: '#6b7280', fontSize: 13, background:'#fff', borderRadius:8, border:'1px solid #e5e7eb' }}>
                   Sin modelos con estos filtros
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {visible.map(p => {
+                <div style={{ background:'#fff', borderRadius:8, border:'1px solid #e5e7eb', overflow:'hidden' }}>
+                  {/* Cabecera tabla */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 120px 120px 100px', padding:'8px 14px', background:'#f9fafb', borderBottom:'1px solid #e5e7eb', fontSize:11, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
+                    <span>Modelo</span>
+                    <span>Serie</span>
+                    <span>Almacenamiento</span>
+                    <span>Colores</span>
+                    <span style={{ textAlign:'right' }}>Acciones</span>
+                  </div>
+                  {visible.map((p, idx) => {
                     const catInfo = CATS.find(c => c.id === (p.category || 'otro'));
                     return (
                       <div key={p.id} style={{
-                        background: 'var(--card)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 14,
-                        display: 'flex', alignItems: 'center', gap: 14,
-                        padding: '12px 14px',
-                        transition: 'border-color .15s',
+                        display:'grid', gridTemplateColumns:'1fr 100px 120px 120px 100px',
+                        padding: '10px 14px', alignItems:'center',
+                        borderBottom: idx < visible.length-1 ? '1px solid #f3f4f6' : 'none',
+                        background: idx % 2 === 0 ? '#fff' : '#fafafa',
+                        transition: 'background .1s',
                       }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(10,132,255,0.35)'}
-                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                        onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                        onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fafafa'}
                       >
-                        {/* Miniatura */}
-                        <div style={{
-                          width: 56, height: 56, flexShrink: 0, borderRadius: 10,
-                          background: 'var(--card2)', border: '1px solid var(--border)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          overflow: 'hidden',
-                        }}>
-                          {p.image_url
-                            ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={e => { e.target.style.display='none'; }} />
-                            : <span style={{ fontSize: 26 }}>{p.emoji || '📦'}</span>
-                          }
-                        </div>
-
-                        {/* Info */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {p.name}
+                        {/* Nombre + categoría */}
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13, color:'#111827' }}>{p.name}</div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>
+                            {catInfo?.lbl}{p.chip ? ` · ${p.chip}` : ''}{p.sale_price > 0 ? ` · S/ ${parseFloat(p.sale_price).toFixed(0)}` : ''}
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            {catInfo && <span>{catInfo.lbl}</span>}
-                            {p.subcategory && <span style={{ color: '#0A84FF', fontWeight: 600 }}>Serie {p.subcategory}</span>}
-                            {p.chip && <span>{p.chip}</span>}
-                            {p.sale_price > 0 && <span style={{ fontWeight: 700 }}>S/ {parseFloat(p.sale_price).toFixed(0)}</span>}
-                          </div>
-                          {/* Tags GB y colores */}
-                          {((p.default_capacities?.length > 0) || (p.default_colors?.length > 0)) && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                              {(p.default_capacities || []).slice(0, 5).map((c, i) => (
-                                <span key={i} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'rgba(10,132,255,0.1)', color: '#0A84FF', fontWeight: 600 }}>{c}</span>
-                              ))}
-                              {(p.default_colors || []).slice(0, 4).map((c, i) => (
-                                <span key={i} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'var(--card2)', color: 'var(--text3)', fontWeight: 500, border: '1px solid var(--border)' }}>{c}</span>
-                              ))}
-                            </div>
-                          )}
                         </div>
-
+                        {/* Serie */}
+                        <div style={{ fontSize:12, color: p.subcategory ? '#1a56db' : '#d1d5db', fontWeight: p.subcategory ? 600 : 400 }}>
+                          {p.subcategory || '—'}
+                        </div>
+                        {/* Almacenamiento */}
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
+                          {(p.default_capacities || []).slice(0,4).map((c,i) => (
+                            <span key={i} style={{ fontSize:10, padding:'2px 7px', borderRadius:4, background:'#eff6ff', color:'#1a56db', fontWeight:600, border:'1px solid #bfdbfe' }}>{c}</span>
+                          ))}
+                          {!(p.default_capacities?.length) && <span style={{ color:'#d1d5db', fontSize:11 }}>—</span>}
+                        </div>
+                        {/* Colores */}
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
+                          {(p.default_colors || []).slice(0,4).map((c,i) => (
+                            <span key={i} style={{ fontSize:10, padding:'2px 7px', borderRadius:4, background:'#f9fafb', color:'#374151', fontWeight:500, border:'1px solid #e5e7eb' }}>{c}</span>
+                          ))}
+                          {!(p.default_colors?.length) && <span style={{ color:'#d1d5db', fontSize:11 }}>—</span>}
+                        </div>
                         {/* Acciones */}
-                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent:'flex-end' }}>
                           <button
                             onClick={() => {
-                              setForm({ _edit_id: p.id, name: p.name, description: p.description || '', emoji: p.emoji || '📦', sale_price: p.sale_price || '', category: p.category || 'otro', subcategory: p.subcategory || '', chip: p.chip || '', colors_text: (p.default_colors || []).join(', '), capacities_text: (p.default_capacities || []).join(', '), image_url: p.image_url || '', color_images: p.color_images || {}, _cat_filter: form._cat_filter });
+                              setForm({ _edit_id: p.id, name: p.name, description: p.description || '', sale_price: p.sale_price || '', category: p.category || 'otro', subcategory: p.subcategory || '', chip: p.chip || '', colors_text: (p.default_colors || []).join(', '), capacities_text: (p.default_capacities || []).join(', '), image_url: p.image_url || '', color_images: p.color_images || {}, _cat_filter: form._cat_filter });
                               setModal('add-product');
                             }}
-                            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                            style={{ padding:'4px 12px', borderRadius:5, border:'1px solid #d1d5db', background:'#fff', color:'#374151', fontSize:11, fontWeight:600, cursor:'pointer' }}>
                             Editar
                           </button>
                           <button
                             onClick={() => deleteProduct(p.id, p.name)}
-                            style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(255,69,58,0.25)', background: 'transparent', color: 'rgba(255,69,58,0.7)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                            style={{ padding:'4px 8px', borderRadius:5, border:'1px solid #fca5a5', background:'#fff', color:'#ef4444', fontSize:11, fontWeight:600, cursor:'pointer' }}>
                             ✕
                           </button>
                         </div>
@@ -2317,7 +2329,7 @@ export default function CorpPage() {
           <div style={{ padding: '16px', paddingBottom: 48 }}>
 
             {/* ─ Acceso Rápido ─ */}
-            <div className="section-title" style={{ marginBottom: 12 }}>🏪 Acceso Rápido</div>
+            <div className="section-title" style={{ marginBottom: 12 }}>Acceso Rápido</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 24 }}>
               {STORES.map(s => (
                 <div key={s.id} style={{
@@ -2342,7 +2354,7 @@ export default function CorpPage() {
 
             {/* ─ Gestión de Usuarios ─ */}
             <div className="section-header">
-              <div className="section-title">👥 Usuarios por Tienda</div>
+              <div className="section-title">Usuarios por Tienda</div>
               <button className="section-action" onClick={() => {
                 setModal('create-user');
                 setNewUserForm({ full_name: '', email: '', password: '', role: 'vendedor', org_id: selectedStoreForUsers });
@@ -2433,7 +2445,7 @@ export default function CorpPage() {
 
               {/* Header */}
               <div className="section-header" style={{ marginBottom:16 }}>
-                <div className="section-title">👥 Equipo de trabajo</div>
+                <div className="section-title">Equipo de trabajo</div>
                 <button className="section-action" onClick={() => { setWorkerModal(true); setWorkerMsg(null); }}>
                   + Invitar trabajador
                 </button>
@@ -2663,7 +2675,7 @@ export default function CorpPage() {
         {tab === 'almacenes' && (
           <div style={{ padding: '16px' }}>
             <div className="section-header">
-              <div className="section-title">🏭 Almacenes</div>
+              <div className="section-title">Almacenes</div>
               <button className="section-action" onClick={() => { setModal('add-warehouse'); setForm({ wh_org_id: CORP_ID, wh_type: 'central' }); }}>+ Agregar</button>
             </div>
 
@@ -2699,7 +2711,7 @@ export default function CorpPage() {
 
             {/* Resumen de stock por tienda */}
             <div style={{ marginTop: 24 }}>
-              <div className="section-title" style={{ marginBottom: 12 }}>📊 Stock por organización</div>
+              <div className="section-title" style={{ marginBottom: 12 }}>Stock por organización</div>
               {[{ id: CORP_ID, name: 'Corp Tech (Almacén)', ico: '🏢' }, ...STORES].map(org => {
                 const count = stocks.filter(s => s.owner_org_id === org.id && s.status === 'available').length;
                 const transit = stocks.filter(s => s.owner_org_id === org.id && s.status === 'in_transit').length;
@@ -2731,7 +2743,7 @@ export default function CorpPage() {
         {tab === 'traslados' && (
           <div style={{ padding: '16px' }}>
             <div className="section-header">
-              <div className="section-title">🔄 Traslados de Stock</div>
+              <div className="section-title">Traslados de Stock</div>
               <button className="section-action" onClick={() => { setModal('new-transfer'); setForm({ tx_to_org: STORES[0].id }); setSelItems([]); }}>+ Nuevo</button>
             </div>
 
@@ -2911,7 +2923,7 @@ export default function CorpPage() {
               </button>
 
               {/* Lista de lotes */}
-              <div className="section-title" style={{ marginBottom: 12 }}>📥 Lotes de importación</div>
+              <div className="section-title" style={{ marginBottom: 12 }}>Lotes de importación</div>
               {batches.length === 0 ? (
                 <div className="empty-msg">Sin lotes. Registra tu primera importación.</div>
               ) : (
@@ -3129,7 +3141,7 @@ export default function CorpPage() {
                 <>
                   {/* Catálogo de plataformas */}
                   <div className="section-header" style={{ marginBottom: 12 }}>
-                    <div className="section-title">🏪 Catálogo de Plataformas</div>
+                    <div className="section-title">Catálogo de Plataformas</div>
                     <button className="section-action"
                       onClick={() => { setModal('add-plataforma'); setForm({ plat_periodicidad: 'mensual', plat_metodo: 'transferencia', plat_emoji: '🏪' }); }}>
                       + Nueva
@@ -3161,7 +3173,7 @@ export default function CorpPage() {
 
                   {/* Reportes subidos por tiendas */}
                   <div className="section-header" style={{ marginBottom: 12 }}>
-                    <div className="section-title">📄 Reportes de plataformas</div>
+                    <div className="section-title">Reportes de plataformas</div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 }}>
                     {[{ id: 'all', name: 'Todas', ico: '🌐' }, ...STORES].map(s => (
@@ -3238,7 +3250,7 @@ export default function CorpPage() {
               {liqSubTab === 'calendario' && (
                 <>
                   <div className="section-header" style={{ marginBottom: 12 }}>
-                    <div className="section-title">📅 Próximas liquidaciones (30 días)</div>
+                    <div className="section-title">Próximas liquidaciones (30 días)</div>
                     <button className="section-action"
                       onClick={() => { setModal('add-calendario'); setForm({ cal_tipo: 'plataforma' }); }}>
                       + Evento
@@ -3285,7 +3297,7 @@ export default function CorpPage() {
                   )}
 
                   {/* Todos los eventos futuros */}
-                  <div className="section-title" style={{ marginTop: 20, marginBottom: 12 }}>📋 Todos los eventos</div>
+                  <div className="section-title" style={{ marginTop: 20, marginBottom: 12 }}>Todos los eventos</div>
                   {calendarioAll.length === 0 ? (
                     <div className="empty-msg">Sin eventos de calendario. Crea el primero.</div>
                   ) : (
@@ -3394,7 +3406,7 @@ export default function CorpPage() {
             </div>
 
             {/* ── Stock por empresa ── */}
-            <div className="section-title">📍 Stock por empresa</div>
+            <div className="section-title">Stock por empresa</div>
             <div className="card" style={{ marginBottom: 20 }}>
               {(finData.byStore || []).length === 0 ? (
                 <div style={{ padding: 20, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Sin stock registrado</div>
@@ -3423,7 +3435,7 @@ export default function CorpPage() {
 
             {/* ── Flujo de Caja ── */}
             <div className="section-header">
-              <div className="section-title">🏦 Flujo de Caja</div>
+              <div className="section-title">Flujo de Caja</div>
               <button className="section-action" onClick={() => { setModal('add-account'); setForm({ ca_tipo: 'banco', ca_moneda: 'PEN' }); }}>+ Cuenta</button>
             </div>
 
@@ -3907,7 +3919,7 @@ export default function CorpPage() {
 
           return (
           <div style={{ padding: '16px' }}>
-            <div className="section-title">🔍 IMEI Checker</div>
+            <div className="section-title">IMEI Checker</div>
 
             {/* Sin acceso */}
             {imeiConfig === null && (
