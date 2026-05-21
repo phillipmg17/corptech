@@ -302,9 +302,9 @@ export default function CorpPage() {
   async function loadGlobalStock() {
     let q = supabase
       .from('stock_items')
-      .select('id, serial_number, imei, status, sale_price, emoji, owner_org_id, product_id, products(name), imei_check_id, model_number, color_info, storage_info')
+      .select('id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), imei_check_id, model_number, color_info, storage_info, lot_id, purchase_lots(numero_lote, proveedor, numero_factura)')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(200);
     if (storeFilter !== 'all') q = q.eq('owner_org_id', storeFilter);
     const { data } = await q;
     setStocks(data || []);
@@ -1133,9 +1133,40 @@ export default function CorpPage() {
       .map(s => s.trim())
       .filter(Boolean);
     if (imeis.length === 0) { showToast('Ingresa al menos un IMEI', 'err'); return; }
-    const purchasePrice  = parseFloat(form.purchase_price)  || null;
-    const resellerPrice  = parseFloat(form.reseller_price)  || null;
+
+    const purchasePrice  = parseFloat(form.purchase_price)   || null;
+    const resellerPrice  = parseFloat(form.reseller_price)   || null;
     const salePrice      = parseFloat(form.sale_price_stock) || null;
+
+    // ── 1. Crear lote de compra (siempre, con o sin datos de factura) ──
+    let lotId = null;
+    const numeroLote = form.lot_numero?.trim() ||
+      `LOTE-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+
+    const lotPayload = {
+      corp_id:         CORP_ID,
+      numero_lote:     numeroLote,
+      proveedor:       form.lot_proveedor?.trim()  || null,
+      numero_factura:  form.lot_factura?.trim()    || null,
+      fecha_compra:    form.lot_fecha              || new Date().toISOString().split('T')[0],
+      total_unidades:  imeis.length,
+      costo_total:     purchasePrice ? purchasePrice * imeis.length : 0,
+      notas:           form.lot_notas?.trim()      || null,
+    };
+
+    const { data: lotData, error: lotError } = await supabase
+      .from('purchase_lots')
+      .insert(lotPayload)
+      .select('id')
+      .single();
+
+    if (lotError) {
+      showToast('Error al crear lote: ' + lotError.message, 'err');
+      return;
+    }
+    lotId = lotData.id;
+
+    // ── 2. Insertar stock items vinculados al lote ──
     const rows = imeis.map(imei => ({
       owner_org_id:    form.owner_org_id || CORP_ID,
       product_id:      form.product_id,
@@ -1144,10 +1175,18 @@ export default function CorpPage() {
       purchase_price:  purchasePrice,
       reseller_price:  resellerPrice,
       sale_price:      salePrice,
+      lot_id:          lotId,
     }));
+
     const { error } = await supabase.from('stock_items').insert(rows);
-    if (error) { showToast('Error: ' + error.message, 'err'); return; }
-    showToast(`${imeis.length} equipo${imeis.length > 1 ? 's' : ''} agregado${imeis.length > 1 ? 's' : ''} ✓`);
+    if (error) {
+      // Si fallan los items, borrar el lote creado para no dejar huérfano
+      await supabase.from('purchase_lots').delete().eq('id', lotId);
+      showToast('Error al agregar stock: ' + error.message, 'err');
+      return;
+    }
+
+    showToast(`${imeis.length} equipo${imeis.length > 1 ? 's' : ''} agregado${imeis.length > 1 ? 's' : ''} — Lote: ${numeroLote} ✓`);
     setModal(null); setForm({}); setProdSearch(''); setStockCatFilter('all');
     loadGlobalStock();
     loadKpis();
@@ -2085,15 +2124,15 @@ export default function CorpPage() {
                   </div>
                   {/* Tabla de stock */}
                   <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 180px 100px 90px', padding:'8px 14px', background:'#f3f4f6', borderBottom:'1px solid #e5e7eb', fontSize:11, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
-                      <span>Producto / IMEI</span>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 110px 90px', padding:'8px 14px', background:'#f3f4f6', borderBottom:'1px solid #e5e7eb', fontSize:11, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
+                      <span>Producto / IMEI / Lote</span>
                       <span>Detalle</span>
                       <span>Precio venta</span>
                       <span style={{ textAlign:'right' }}>Estado</span>
                     </div>
                     {org.items.map((s, idx) => (
                       <div key={s.id} style={{
-                        display:'grid', gridTemplateColumns:'1fr 180px 100px 90px',
+                        display:'grid', gridTemplateColumns:'1fr 160px 110px 90px',
                         padding:'12px 14px', alignItems:'center',
                         borderBottom: idx < org.items.length-1 ? '1px solid #f3f4f6' : 'none',
                         transition:'background .1s',
@@ -2101,18 +2140,44 @@ export default function CorpPage() {
                         onMouseEnter={e => e.currentTarget.style.background='#f0f7ff'}
                         onMouseLeave={e => e.currentTarget.style.background='#fff'}
                       >
+                        {/* Producto + IMEI + Lote */}
                         <div>
                           <div style={{ fontWeight:600, fontSize:14, color:'#111827' }}>{s.products?.name || 'Producto'}</div>
-                          <div style={{ fontSize:12, color:'#9ca3af', marginTop:2, fontFamily:'monospace' }}>{s.imei || s.serial_number || 'Sin serial'}</div>
+                          <div style={{ fontSize:12, color:'#6b7280', marginTop:2, fontFamily:'monospace' }}>{s.imei || s.serial_number || 'Sin serial'}</div>
+                          {s.purchase_lots && (
+                            <div style={{ display:'flex', gap:4, marginTop:4, flexWrap:'wrap' }}>
+                              <span style={{ fontSize:10, padding:'1px 7px', borderRadius:4, background:'#fef9c3', color:'#854d0e', fontWeight:700, border:'1px solid #fde68a' }}>
+                                {s.purchase_lots.numero_lote}
+                              </span>
+                              {s.purchase_lots.proveedor && (
+                                <span style={{ fontSize:10, padding:'1px 7px', borderRadius:4, background:'#f3f4f6', color:'#6b7280', border:'1px solid #e5e7eb' }}>
+                                  {s.purchase_lots.proveedor}
+                                </span>
+                              )}
+                              {s.purchase_lots.numero_factura && (
+                                <span style={{ fontSize:10, padding:'1px 7px', borderRadius:4, background:'#f0fdf4', color:'#166534', border:'1px solid #bbf7d0' }}>
+                                  Fact: {s.purchase_lots.numero_factura}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
+                        {/* Detalle */}
                         <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
                           {s.storage_info && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#eff6ff', color:'#1a56db', fontWeight:600, border:'1px solid #bfdbfe' }}>{s.storage_info}</span>}
                           {s.color_info   && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#f9fafb', color:'#374151', border:'1px solid #e5e7eb' }}>{s.color_info}</span>}
                           {s.model_number && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#f9fafb', color:'#6b7280', border:'1px solid #e5e7eb' }}>{s.model_number}</span>}
                         </div>
-                        <div style={{ fontWeight:700, fontSize:14, color:'#111827' }}>
-                          {s.sale_price > 0 ? `S/ ${parseFloat(s.sale_price).toFixed(0)}` : '—'}
+                        {/* Precio */}
+                        <div>
+                          <div style={{ fontWeight:700, fontSize:14, color:'#111827' }}>
+                            {s.sale_price > 0 ? `S/ ${parseFloat(s.sale_price).toFixed(0)}` : '—'}
+                          </div>
+                          {s.purchase_price > 0 && (
+                            <div style={{ fontSize:10, color:'#9ca3af', marginTop:1 }}>Costo: S/ {parseFloat(s.purchase_price).toFixed(0)}</div>
+                          )}
                         </div>
+                        {/* Estado */}
                         <div style={{ textAlign:'right' }}>
                           <span style={{
                             fontSize:11, padding:'3px 8px', borderRadius:5, fontWeight:600,
@@ -5000,40 +5065,110 @@ export default function CorpPage() {
                       )}
                     </div>
 
-                    {/* Precios — aparecen cuando se elige modelo */}
+                    {/* Lote + Precios — aparecen cuando se elige modelo */}
                     {selProd && (
-                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:4 }}>
-                        <div className="form-group" style={{ marginBottom:0 }}>
-                          <label className="form-label">Precio compra (S/)</label>
-                          <input
-                            className="form-input" type="number" min="0" step="0.01"
-                            placeholder="0.00"
-                            value={form.purchase_price || ''}
-                            onChange={e => setForm({ ...form, purchase_price: e.target.value })}
-                          />
-                          <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Lo que pagaste</div>
+                      <>
+                        {/* ── Sección Lote de Compra ── */}
+                        <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'12px 14px', marginBottom:10 }}>
+                          <div style={{ fontSize:11, fontWeight:700, color:'#1a56db', textTransform:'uppercase', letterSpacing:0.8, marginBottom:10 }}>
+                            Lote de compra
+                          </div>
+
+                          {/* Fila 1: Lote + Proveedor */}
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+                            <div>
+                              <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>N° de Lote</label>
+                              <input
+                                className="form-input"
+                                placeholder={`LOTE-${new Date().getFullYear()}-001`}
+                                value={form.lot_numero || ''}
+                                onChange={e => setForm({ ...form, lot_numero: e.target.value })}
+                                style={{ fontSize:13, fontWeight:700 }}
+                              />
+                              <div style={{ fontSize:10, color:'#9ca3af', marginTop:2 }}>Dejar vacío = auto</div>
+                            </div>
+                            <div>
+                              <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Proveedor</label>
+                              <input
+                                className="form-input"
+                                placeholder="Nombre del proveedor"
+                                value={form.lot_proveedor || ''}
+                                onChange={e => setForm({ ...form, lot_proveedor: e.target.value })}
+                                style={{ fontSize:13 }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Fila 2: Factura + Fecha */}
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+                            <div>
+                              <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>N° Factura / Boleta</label>
+                              <input
+                                className="form-input"
+                                placeholder="F001-00123456"
+                                value={form.lot_factura || ''}
+                                onChange={e => setForm({ ...form, lot_factura: e.target.value })}
+                                style={{ fontSize:13 }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Fecha de compra</label>
+                              <input
+                                className="form-input" type="date"
+                                value={form.lot_fecha || new Date().toISOString().split('T')[0]}
+                                onChange={e => setForm({ ...form, lot_fecha: e.target.value })}
+                                style={{ fontSize:13 }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Notas del lote */}
+                          <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Notas del lote <span style={{ color:'#9ca3af', fontWeight:400 }}>(opcional)</span></label>
+                            <input
+                              className="form-input"
+                              placeholder="Compra mensual USA, importación directa..."
+                              value={form.lot_notas || ''}
+                              onChange={e => setForm({ ...form, lot_notas: e.target.value })}
+                              style={{ fontSize:12 }}
+                            />
+                          </div>
                         </div>
-                        <div className="form-group" style={{ marginBottom:0 }}>
-                          <label className="form-label">Precio revendedor (S/)</label>
-                          <input
-                            className="form-input" type="number" min="0" step="0.01"
-                            placeholder="0.00"
-                            value={form.reseller_price || ''}
-                            onChange={e => setForm({ ...form, reseller_price: e.target.value })}
-                          />
-                          <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Precio mayorista</div>
+
+                        {/* ── Precios ── */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:4 }}>
+                          <div className="form-group" style={{ marginBottom:0 }}>
+                            <label className="form-label">Precio compra (S/)</label>
+                            <input
+                              className="form-input" type="number" min="0" step="0.01"
+                              placeholder="0.00"
+                              value={form.purchase_price || ''}
+                              onChange={e => setForm({ ...form, purchase_price: e.target.value })}
+                            />
+                            <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Lo que pagaste</div>
+                          </div>
+                          <div className="form-group" style={{ marginBottom:0 }}>
+                            <label className="form-label">Precio revendedor (S/)</label>
+                            <input
+                              className="form-input" type="number" min="0" step="0.01"
+                              placeholder="0.00"
+                              value={form.reseller_price || ''}
+                              onChange={e => setForm({ ...form, reseller_price: e.target.value })}
+                            />
+                            <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Precio mayorista</div>
+                          </div>
+                          <div className="form-group" style={{ marginBottom:0 }}>
+                            <label className="form-label">Precio venta (S/)</label>
+                            <input
+                              className="form-input" type="number" min="0" step="0.01"
+                              placeholder="0.00"
+                              value={form.sale_price_stock || ''}
+                              onChange={e => setForm({ ...form, sale_price_stock: e.target.value })}
+                            />
+                            <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Precio al público</div>
+                          </div>
                         </div>
-                        <div className="form-group" style={{ marginBottom:0 }}>
-                          <label className="form-label">Precio venta (S/)</label>
-                          <input
-                            className="form-input" type="number" min="0" step="0.01"
-                            placeholder="0.00"
-                            value={form.sale_price_stock || ''}
-                            onChange={e => setForm({ ...form, sale_price_stock: e.target.value })}
-                          />
-                          <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Precio al público</div>
-                        </div>
-                      </div>
+                      </>
                     )}
 
                     {/* IMEIs — solo aparece después de elegir modelo */}
