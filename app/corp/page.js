@@ -354,21 +354,25 @@ export default function CorpPage() {
   async function loadWarehouses() {
     const { data } = await supabase
       .from('warehouses')
-      .select('id, name, type, aisle, shelf, org_id, is_active')
-      .order('created_at', { ascending: false });
+      .select('id, name, type, aisle, shelf, org_id, is_active, department, city')
+      .order('department', { ascending: true });
     setWarehouses(data || []);
   }
 
   async function addWarehouse(e) {
     e.preventDefault();
-    const { error } = await supabase.from('warehouses').insert({
+    const payload = {
       org_id:    form.wh_org_id || CORP_ID,
       name:      form.wh_name,
       type:      form.wh_type || 'central',
       aisle:     form.wh_aisle || null,
       shelf:     form.wh_shelf || null,
       is_active: true,
-    });
+    };
+    // department/city opcionales — si la columna no existe, ignorar
+    if (form.wh_department?.trim()) payload.department = form.wh_department.trim();
+    if (form.wh_city?.trim())       payload.city       = form.wh_city.trim();
+    const { error } = await supabase.from('warehouses').insert(payload);
     if (error) { showToast('Error: ' + error.message, 'err'); return; }
     showToast('Almacén creado ✓');
     setModal(null); setForm({});
@@ -379,21 +383,18 @@ export default function CorpPage() {
     e.preventDefault();
     if (!form.wh_id) { showToast('Error: ID de almacén no encontrado', 'err'); return; }
     if (!form.wh_name?.trim()) { showToast('El nombre es obligatorio', 'err'); return; }
-    const { error } = await supabase
-      .from('warehouses')
-      .update({
-        name:      form.wh_name.trim(),
-        org_id:    form.wh_org_id,
-        type:      form.wh_type || 'central',
-        aisle:     form.wh_aisle || null,
-        shelf:     form.wh_shelf || null,
-        is_active: form.wh_active !== false,
-      })
-      .eq('id', form.wh_id);
-    if (error) {
-      showToast('Error al guardar: ' + error.message, 'err');
-      return;
-    }
+    const payload = {
+      name:      form.wh_name.trim(),
+      org_id:    form.wh_org_id,
+      type:      form.wh_type || 'central',
+      aisle:     form.wh_aisle || null,
+      shelf:     form.wh_shelf || null,
+      is_active: form.wh_active !== false,
+      department: form.wh_department?.trim() || null,
+      city:       form.wh_city?.trim()       || null,
+    };
+    const { error } = await supabase.from('warehouses').update(payload).eq('id', form.wh_id);
+    if (error) { showToast('Error al guardar: ' + error.message, 'err'); return; }
     showToast('Almacén actualizado ✓');
     setModal(null); setForm({});
     loadWarehouses();
@@ -2879,37 +2880,57 @@ export default function CorpPage() {
 
             {warehouses.length === 0 ? (
               <div className="empty-msg">Sin almacenes registrados</div>
-            ) : (
-              warehouses.map(w => (
-                <div className="card" key={w.id} style={{ padding: '14px', marginBottom: 10 }}>
-                  <div className="flex-between">
+            ) : (() => {
+              // Agrupar por departamento
+              const deptMap = {};
+              warehouses.forEach(w => {
+                const dept = w.department || 'Sin departamento';
+                if (!deptMap[dept]) deptMap[dept] = [];
+                deptMap[dept].push(w);
+              });
+              return Object.entries(deptMap).map(([dept, whList]) => (
+                <div key={dept} style={{ marginBottom: 20 }}>
+                  {/* Cabecera de departamento */}
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8, padding:'6px 10px', background:'#f1f5f9', borderRadius:8, border:'1px solid #e2e8f0' }}>
+                    <span style={{ fontSize:16 }}>📍</span>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 15 }}>
-                        {w.type === 'central' ? '🏭' : w.type === 'store' ? '🏪' : '👤'} {w.name}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
-                        {getOrgIco(w.org_id)} {getOrgName(w.org_id)}
-                        {w.aisle && <span> · Pasillo: <b>{w.aisle}</b></span>}
-                        {w.shelf  && <span> · Estante: <b>{w.shelf}</b></span>}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className={`badge badge-${w.is_active ? 'green' : 'red'}`}>
-                        {w.is_active ? 'Activo' : 'Inactivo'}
-                      </span>
-                      <button
-                        onClick={() => { setModal('edit-warehouse'); setForm({ wh_id: w.id, wh_name: w.name, wh_org_id: w.org_id, wh_type: w.type, wh_aisle: w.aisle || '', wh_shelf: w.shelf || '', wh_active: w.is_active }); }}
-                        style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card2)', color: 'var(--text)', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                      >✏️ Editar</button>
-                      <button
-                        onClick={() => deleteWarehouse(w.id, w.name)}
-                        style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid #fee2e2', background: '#fff5f5', color: '#dc2626', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                      >🗑 Eliminar</button>
+                      <div style={{ fontWeight:800, fontSize:13, color:'#1e40af' }}>{dept}</div>
+                      <div style={{ fontSize:11, color:'#64748b' }}>{whList.length} almacén{whList.length !== 1 ? 'es' : ''}</div>
                     </div>
                   </div>
+                  {/* Almacenes del departamento */}
+                  {whList.map(w => (
+                    <div className="card" key={w.id} style={{ padding:'12px 14px', marginBottom:8, marginLeft:12, borderLeft:'3px solid #bfdbfe' }}>
+                      <div className="flex-between">
+                        <div>
+                          <div style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:6 }}>
+                            <span>{w.type === 'central' ? '🏭' : w.type === 'store' ? '🏪' : '👤'}</span>
+                            {w.name}
+                            {!w.is_active && <span style={{ fontSize:10, padding:'1px 6px', borderRadius:4, background:'#fee2e2', color:'#dc2626', fontWeight:700 }}>Inactivo</span>}
+                          </div>
+                          <div style={{ fontSize:11, color:'#6b7280', marginTop:3, display:'flex', gap:8, flexWrap:'wrap' }}>
+                            <span>{getOrgIco(w.org_id)} {getOrgName(w.org_id)}</span>
+                            {w.city && <span>📌 {w.city}</span>}
+                            {w.aisle && <span>Pasillo: <b>{w.aisle}</b></span>}
+                            {w.shelf  && <span>Estante: <b>{w.shelf}</b></span>}
+                          </div>
+                        </div>
+                        <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                          <button
+                            onClick={() => { setModal('edit-warehouse'); setForm({ wh_id:w.id, wh_name:w.name, wh_org_id:w.org_id, wh_type:w.type, wh_aisle:w.aisle||'', wh_shelf:w.shelf||'', wh_active:w.is_active, wh_department:w.department||'', wh_city:w.city||'' }); }}
+                            style={{ padding:'4px 10px', borderRadius:7, border:'1px solid #d1d5db', background:'#f9fafb', color:'#374151', fontSize:11, fontWeight:700, cursor:'pointer' }}
+                          >Editar</button>
+                          <button
+                            onClick={() => deleteWarehouse(w.id, w.name)}
+                            style={{ padding:'4px 10px', borderRadius:7, border:'1px solid #fee2e2', background:'#fff5f5', color:'#dc2626', fontSize:11, fontWeight:700, cursor:'pointer' }}
+                          >Eliminar</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))
-            )}
+              ));
+            })()}
 
             {/* Resumen de stock por tienda */}
             <div style={{ marginTop: 24 }}>
@@ -5562,11 +5583,41 @@ export default function CorpPage() {
             {/* ── MODAL: Nuevo Almacén ── */}
             {modal === 'add-warehouse' && (
               <>
-                <div className="modal-title">🏭 Nuevo almacén</div>
+                <div className="modal-title">Nuevo almacén</div>
                 <form onSubmit={addWarehouse}>
                   <div className="form-group">
-                    <label className="form-label">Nombre</label>
-                    <input className="form-input" required placeholder="Almacén Central Lima" value={form.wh_name || ''} onChange={e => setForm({ ...form, wh_name: e.target.value })} />
+                    <label className="form-label">Nombre del almacén *</label>
+                    <input className="form-input" required placeholder="Ej: Almacén Miraflores Principal" value={form.wh_name || ''} onChange={e => setForm({ ...form, wh_name: e.target.value })} />
+                  </div>
+                  {/* Departamento + Ciudad */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Departamento / Estado</label>
+                      <select className="form-select" value={form.wh_department || ''} onChange={e => setForm({ ...form, wh_department: e.target.value })}>
+                        <option value="">— Seleccionar —</option>
+                        <option value="Lima">Lima</option>
+                        <option value="Arequipa">Arequipa</option>
+                        <option value="Cusco">Cusco</option>
+                        <option value="La Libertad">La Libertad</option>
+                        <option value="Piura">Piura</option>
+                        <option value="Lambayeque">Lambayeque</option>
+                        <option value="Junín">Junín</option>
+                        <option value="Áncash">Áncash</option>
+                        <option value="Puno">Puno</option>
+                        <option value="Cajamarca">Cajamarca</option>
+                        <option value="Loreto">Loreto</option>
+                        <option value="Ica">Ica</option>
+                        <option value="San Martín">San Martín</option>
+                        <option value="Ucayali">Ucayali</option>
+                        <option value="Huánuco">Huánuco</option>
+                        <option value="Internacional">Internacional</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Ciudad / Lugar puntual</label>
+                      <input className="form-input" placeholder="Ej: Miraflores, SJL, Centro..." value={form.wh_city || ''} onChange={e => setForm({ ...form, wh_city: e.target.value })} />
+                    </div>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Organización</label>
@@ -5577,18 +5628,18 @@ export default function CorpPage() {
                   <div className="form-group">
                     <label className="form-label">Tipo</label>
                     <select className="form-select" value={form.wh_type || 'central'} onChange={e => setForm({ ...form, wh_type: e.target.value })}>
-                      <option value="central">🏭 Central (Corp)</option>
-                      <option value="store">🏪 Tienda</option>
-                      <option value="personal">👤 Personal</option>
+                      <option value="central">Central (Corp)</option>
+                      <option value="store">Tienda</option>
+                      <option value="personal">Personal / Vendedor</option>
                     </select>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                     <div className="form-group">
-                      <label className="form-label">Pasillo</label>
+                      <label className="form-label">Pasillo <span style={{color:'#9ca3af',fontWeight:400}}>(opcional)</span></label>
                       <input className="form-input" placeholder="A1" value={form.wh_aisle || ''} onChange={e => setForm({ ...form, wh_aisle: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Estante</label>
+                      <label className="form-label">Estante <span style={{color:'#9ca3af',fontWeight:400}}>(opcional)</span></label>
                       <input className="form-input" placeholder="E3" value={form.wh_shelf || ''} onChange={e => setForm({ ...form, wh_shelf: e.target.value })} />
                     </div>
                   </div>
@@ -5600,11 +5651,40 @@ export default function CorpPage() {
             {/* ── MODAL: Editar Almacén ── */}
             {modal === 'edit-warehouse' && (
               <>
-                <div className="modal-title">✏️ Editar almacén</div>
+                <div className="modal-title">Editar almacén</div>
                 <form onSubmit={editWarehouse}>
                   <div className="form-group">
-                    <label className="form-label">Nombre</label>
-                    <input className="form-input" required placeholder="Almacén Central Lima" value={form.wh_name || ''} onChange={e => setForm({ ...form, wh_name: e.target.value })} />
+                    <label className="form-label">Nombre del almacén *</label>
+                    <input className="form-input" required value={form.wh_name || ''} onChange={e => setForm({ ...form, wh_name: e.target.value })} />
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Departamento / Estado</label>
+                      <select className="form-select" value={form.wh_department || ''} onChange={e => setForm({ ...form, wh_department: e.target.value })}>
+                        <option value="">— Seleccionar —</option>
+                        <option value="Lima">Lima</option>
+                        <option value="Arequipa">Arequipa</option>
+                        <option value="Cusco">Cusco</option>
+                        <option value="La Libertad">La Libertad</option>
+                        <option value="Piura">Piura</option>
+                        <option value="Lambayeque">Lambayeque</option>
+                        <option value="Junín">Junín</option>
+                        <option value="Áncash">Áncash</option>
+                        <option value="Puno">Puno</option>
+                        <option value="Cajamarca">Cajamarca</option>
+                        <option value="Loreto">Loreto</option>
+                        <option value="Ica">Ica</option>
+                        <option value="San Martín">San Martín</option>
+                        <option value="Ucayali">Ucayali</option>
+                        <option value="Huánuco">Huánuco</option>
+                        <option value="Internacional">Internacional</option>
+                        <option value="Otro">Otro</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Ciudad / Lugar puntual</label>
+                      <input className="form-input" placeholder="Miraflores, SJL..." value={form.wh_city || ''} onChange={e => setForm({ ...form, wh_city: e.target.value })} />
+                    </div>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Organización</label>
@@ -5615,12 +5695,12 @@ export default function CorpPage() {
                   <div className="form-group">
                     <label className="form-label">Tipo</label>
                     <select className="form-select" value={form.wh_type || 'central'} onChange={e => setForm({ ...form, wh_type: e.target.value })}>
-                      <option value="central">🏭 Central (Corp)</option>
-                      <option value="store">🏪 Tienda</option>
-                      <option value="personal">👤 Personal</option>
+                      <option value="central">Central (Corp)</option>
+                      <option value="store">Tienda</option>
+                      <option value="personal">Personal / Vendedor</option>
                     </select>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                     <div className="form-group">
                       <label className="form-label">Pasillo</label>
                       <input className="form-input" placeholder="A1" value={form.wh_aisle || ''} onChange={e => setForm({ ...form, wh_aisle: e.target.value })} />
@@ -5633,8 +5713,8 @@ export default function CorpPage() {
                   <div className="form-group">
                     <label className="form-label">Estado</label>
                     <select className="form-select" value={form.wh_active ? 'true' : 'false'} onChange={e => setForm({ ...form, wh_active: e.target.value === 'true' })}>
-                      <option value="true">✅ Activo</option>
-                      <option value="false">🔴 Inactivo</option>
+                      <option value="true">Activo</option>
+                      <option value="false">Inactivo</option>
                     </select>
                   </div>
                   <button className="btn btn-primary" type="submit">Guardar cambios</button>
