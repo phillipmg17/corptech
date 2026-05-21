@@ -367,21 +367,20 @@ export default function CorpPage() {
   async function editWarehouse(e) {
     e.preventDefault();
     if (!form.wh_id) { showToast('Error: ID de almacén no encontrado', 'err'); return; }
-    const { data, error } = await supabase
+    if (!form.wh_name?.trim()) { showToast('El nombre es obligatorio', 'err'); return; }
+    const { error } = await supabase
       .from('warehouses')
       .update({
-        name:      form.wh_name,
+        name:      form.wh_name.trim(),
         org_id:    form.wh_org_id,
-        type:      form.wh_type,
+        type:      form.wh_type || 'central',
         aisle:     form.wh_aisle || null,
         shelf:     form.wh_shelf || null,
-        is_active: form.wh_active,
+        is_active: form.wh_active !== false,
       })
-      .eq('id', form.wh_id)
-      .select();
-    if (error) { showToast('Error: ' + error.message, 'err'); return; }
-    if (!data || data.length === 0) {
-      showToast('Sin permiso para editar. Revisa el SQL Editor de Supabase.', 'err');
+      .eq('id', form.wh_id);
+    if (error) {
+      showToast('Error al guardar: ' + error.message, 'err');
       return;
     }
     showToast('Almacén actualizado ✓');
@@ -2032,59 +2031,103 @@ export default function CorpPage() {
               </div>
             </div>
 
-            <div className="section-header">
-              <div className="section-title">Stock Global</div>
-              <button className="section-action" onClick={() => { setModal('add-stock'); setForm({}); }}>+ Agregar</button>
+            {/* Header stock */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <div style={{ fontSize:15, fontWeight:700, color:'#111827' }}>Stock Global</div>
+              <button onClick={() => { setModal('add-stock'); setForm({}); }}
+                style={{ padding:'7px 16px', borderRadius:6, border:'none', background:'#1a56db', color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                + Agregar stock
+              </button>
             </div>
 
-            {/* Filtro por tienda */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto', paddingBottom: 4 }}>
-              {[{ id: 'all', name: 'Todas', ico: '🌐' }, { id: CORP_ID, name: 'Corp (Almacén)', ico: '🏢' }, ...STORES].map(s => (
+            {/* Filtro por almacén */}
+            <div style={{ display:'flex', gap:6, marginBottom:16, overflowX:'auto', paddingBottom:2 }}>
+              {[{ id:'all', name:'Todos los almacenes' }, { id:CORP_ID, name:'Corp Tech' }, ...STORES].map(s => (
                 <button key={s.id} onClick={() => setStoreFilter(s.id)}
-                  className={`btn btn-sm${storeFilter === s.id ? ' btn-primary' : ' btn-outline'}`}>
-                  {s.ico} {s.name}
+                  style={{ flexShrink:0, padding:'5px 14px', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer', border:`1px solid ${storeFilter===s.id?'#1a56db':'#d1d5db'}`, background:storeFilter===s.id?'#1a56db':'#fff', color:storeFilter===s.id?'#fff':'#374151', transition:'all .15s' }}>
+                  {s.name} {storeFilter===s.id ? '' : `(${stocks.filter(x => s.id==='all' || x.owner_org_id===s.id).length})`}
                 </button>
               ))}
             </div>
 
             {stocks.length === 0 ? (
-              <div className="empty-msg">Sin resultados</div>
-            ) : (
-              stocks.map(s => (
-                <div className="card" key={s.id} style={{ padding: '12px 14px', marginBottom: 8 }}>
-                  <div className="flex-between">
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                      <span style={{ fontSize: 26 }}>{s.emoji || '📦'}</span>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>
-                          {s.products?.name || 'Producto'}
-                          {s.imei_check_id && (
-                            <span
-                              title="Ver check IMEI"
-                              style={{ marginLeft: 6, fontSize: 11, background: 'rgba(10,132,255,0.15)', color: '#0A84FF', borderRadius: 6, padding: '1px 6px', fontWeight: 700, cursor: 'pointer' }}
-                              onClick={() => switchTab('imei')}
-                            >🔍 IMEI</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                          {s.imei || s.serial_number || 'Sin serial'}
-                          {s.model_number && <span style={{ marginLeft: 5, color: '#0A84FF', fontWeight: 700 }}>{s.model_number}</span>}
-                          {s.storage_info && <span style={{ marginLeft: 4, color: '#FF9F0A', fontWeight: 700 }}>{s.storage_info}</span>}
-                          {s.color_info   && <span style={{ marginLeft: 4, color: '#BF5AF2' }}>{s.color_info}</span>}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>{getOrgIco(s.owner_org_id)} {getOrgName(s.owner_org_id)}</div>
-                      </div>
+              <div style={{ textAlign:'center', padding:'40px 20px', background:'#fff', borderRadius:8, border:'1px solid #e5e7eb', color:'#6b7280', fontSize:13 }}>
+                Sin equipos en stock. Agrega el primer equipo con el botón de arriba.
+              </div>
+            ) : (() => {
+              // Agrupar por organización
+              const orgsWithStock = [
+                { id: CORP_ID, name: 'Corp Tech — Almacén Central' },
+                ...STORES,
+              ].map(org => ({
+                ...org,
+                items: stocks.filter(s => s.owner_org_id === org.id),
+              })).filter(org => {
+                if (storeFilter === 'all') return org.items.length > 0;
+                return org.id === storeFilter && org.items.length > 0;
+              });
+
+              if (orgsWithStock.length === 0) return (
+                <div style={{ textAlign:'center', padding:'32px', color:'#9ca3af', fontSize:13 }}>Sin stock con este filtro</div>
+              );
+
+              return orgsWithStock.map(org => (
+                <div key={org.id} style={{ marginBottom:20 }}>
+                  {/* Cabecera de almacén */}
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                    <div style={{ width:32, height:32, borderRadius:8, background:'#1a56db', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:800, fontSize:13, flexShrink:0 }}>
+                      {org.name.charAt(0)}
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 800, color: 'var(--green)', fontSize: 15 }}>S/{(s.sale_price || 0).toFixed(2)}</div>
-                      <span className={`badge badge-${s.status === 'available' ? 'green' : s.status === 'sold' ? 'orange' : s.status === 'in_transit' ? 'blue' : 'red'}`}>
-                        {s.status === 'available' ? 'Disponible' : s.status === 'sold' ? 'Vendido' : s.status === 'in_transit' ? 'En tránsito' : s.status}
-                      </span>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:14, color:'#111827' }}>{org.name}</div>
+                      <div style={{ fontSize:11, color:'#6b7280' }}>{org.items.length} equipo{org.items.length !== 1 ? 's' : ''} disponibles</div>
                     </div>
                   </div>
+                  {/* Tabla de stock */}
+                  <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 180px 100px 90px', padding:'8px 14px', background:'#f3f4f6', borderBottom:'1px solid #e5e7eb', fontSize:11, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
+                      <span>Producto / IMEI</span>
+                      <span>Detalle</span>
+                      <span>Precio venta</span>
+                      <span style={{ textAlign:'right' }}>Estado</span>
+                    </div>
+                    {org.items.map((s, idx) => (
+                      <div key={s.id} style={{
+                        display:'grid', gridTemplateColumns:'1fr 180px 100px 90px',
+                        padding:'12px 14px', alignItems:'center',
+                        borderBottom: idx < org.items.length-1 ? '1px solid #f3f4f6' : 'none',
+                        transition:'background .1s',
+                      }}
+                        onMouseEnter={e => e.currentTarget.style.background='#f0f7ff'}
+                        onMouseLeave={e => e.currentTarget.style.background='#fff'}
+                      >
+                        <div>
+                          <div style={{ fontWeight:600, fontSize:14, color:'#111827' }}>{s.products?.name || 'Producto'}</div>
+                          <div style={{ fontSize:12, color:'#9ca3af', marginTop:2, fontFamily:'monospace' }}>{s.imei || s.serial_number || 'Sin serial'}</div>
+                        </div>
+                        <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                          {s.storage_info && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#eff6ff', color:'#1a56db', fontWeight:600, border:'1px solid #bfdbfe' }}>{s.storage_info}</span>}
+                          {s.color_info   && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#f9fafb', color:'#374151', border:'1px solid #e5e7eb' }}>{s.color_info}</span>}
+                          {s.model_number && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#f9fafb', color:'#6b7280', border:'1px solid #e5e7eb' }}>{s.model_number}</span>}
+                        </div>
+                        <div style={{ fontWeight:700, fontSize:14, color:'#111827' }}>
+                          {s.sale_price > 0 ? `S/ ${parseFloat(s.sale_price).toFixed(0)}` : '—'}
+                        </div>
+                        <div style={{ textAlign:'right' }}>
+                          <span style={{
+                            fontSize:11, padding:'3px 8px', borderRadius:5, fontWeight:600,
+                            background: s.status==='available'?'#d1fae5': s.status==='sold'?'#fef3c7': s.status==='in_transit'?'#dbeafe':'#fee2e2',
+                            color: s.status==='available'?'#065f46': s.status==='sold'?'#92400e': s.status==='in_transit'?'#1e40af':'#991b1b',
+                          }}>
+                            {s.status==='available'?'Disponible': s.status==='sold'?'Vendido': s.status==='in_transit'?'En tránsito': s.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))
-            )}
+              ));
+            })()}
           </div>
         )}
 
@@ -2255,10 +2298,9 @@ export default function CorpPage() {
                 </div>
               ) : (
                 <div style={{ background:'#fff', borderRadius:8, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-                  {/* Cabecera tabla */}
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 120px 120px 100px', padding:'8px 14px', background:'#f9fafb', borderBottom:'1px solid #e5e7eb', fontSize:11, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
+                  {/* Cabecera tabla — sin columna Serie */}
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 180px 110px', padding:'10px 18px', background:'#f3f4f6', borderBottom:'1px solid #e5e7eb', fontSize:11, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
                     <span>Modelo</span>
-                    <span>Serie</span>
                     <span>Almacenamiento</span>
                     <span>Colores</span>
                     <span style={{ textAlign:'right' }}>Acciones</span>
@@ -2267,39 +2309,38 @@ export default function CorpPage() {
                     const catInfo = CATS.find(c => c.id === (p.category || 'otro'));
                     return (
                       <div key={p.id} style={{
-                        display:'grid', gridTemplateColumns:'1fr 100px 120px 120px 100px',
-                        padding: '10px 14px', alignItems:'center',
+                        display:'grid', gridTemplateColumns:'1fr 160px 180px 110px',
+                        padding: '14px 18px', alignItems:'center',
                         borderBottom: idx < visible.length-1 ? '1px solid #f3f4f6' : 'none',
-                        background: idx % 2 === 0 ? '#fff' : '#fafafa',
+                        background: '#fff',
                         transition: 'background .1s',
                       }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
-                        onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fafafa'}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f0f7ff'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#fff'}
                       >
-                        {/* Nombre + categoría */}
+                        {/* Nombre + categoría + serie */}
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: 13, color:'#111827' }}>{p.name}</div>
-                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>
-                            {catInfo?.lbl}{p.chip ? ` · ${p.chip}` : ''}{p.sale_price > 0 ? ` · S/ ${parseFloat(p.sale_price).toFixed(0)}` : ''}
+                          <div style={{ fontWeight: 700, fontSize: 15, color:'#111827' }}>{p.name}</div>
+                          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3, display:'flex', gap:8, flexWrap:'wrap' }}>
+                            <span>{catInfo?.lbl}</span>
+                            {p.subcategory && <span style={{ color:'#1a56db', fontWeight:600 }}>Serie {p.subcategory}</span>}
+                            {p.chip && <span>{p.chip}</span>}
+                            {p.sale_price > 0 && <span style={{ fontWeight:700, color:'#111827' }}>S/ {parseFloat(p.sale_price).toFixed(0)}</span>}
                           </div>
                         </div>
-                        {/* Serie */}
-                        <div style={{ fontSize:12, color: p.subcategory ? '#1a56db' : '#d1d5db', fontWeight: p.subcategory ? 600 : 400 }}>
-                          {p.subcategory || '—'}
-                        </div>
                         {/* Almacenamiento */}
-                        <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
-                          {(p.default_capacities || []).slice(0,4).map((c,i) => (
-                            <span key={i} style={{ fontSize:10, padding:'2px 7px', borderRadius:4, background:'#eff6ff', color:'#1a56db', fontWeight:600, border:'1px solid #bfdbfe' }}>{c}</span>
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                          {(p.default_capacities || []).slice(0,5).map((c,i) => (
+                            <span key={i} style={{ fontSize:11, padding:'3px 9px', borderRadius:5, background:'#eff6ff', color:'#1a56db', fontWeight:700, border:'1px solid #bfdbfe' }}>{c}</span>
                           ))}
-                          {!(p.default_capacities?.length) && <span style={{ color:'#d1d5db', fontSize:11 }}>—</span>}
+                          {!(p.default_capacities?.length) && <span style={{ color:'#d1d5db', fontSize:12 }}>—</span>}
                         </div>
                         {/* Colores */}
-                        <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
-                          {(p.default_colors || []).slice(0,4).map((c,i) => (
-                            <span key={i} style={{ fontSize:10, padding:'2px 7px', borderRadius:4, background:'#f9fafb', color:'#374151', fontWeight:500, border:'1px solid #e5e7eb' }}>{c}</span>
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                          {(p.default_colors || []).slice(0,5).map((c,i) => (
+                            <span key={i} style={{ fontSize:11, padding:'3px 9px', borderRadius:5, background:'#f9fafb', color:'#374151', fontWeight:500, border:'1px solid #e5e7eb' }}>{c}</span>
                           ))}
-                          {!(p.default_colors?.length) && <span style={{ color:'#d1d5db', fontSize:11 }}>—</span>}
+                          {!(p.default_colors?.length) && <span style={{ color:'#d1d5db', fontSize:12 }}>—</span>}
                         </div>
                         {/* Acciones */}
                         <div style={{ display: 'flex', gap: 6, justifyContent:'flex-end' }}>
@@ -2308,12 +2349,12 @@ export default function CorpPage() {
                               setForm({ _edit_id: p.id, name: p.name, description: p.description || '', sale_price: p.sale_price || '', category: p.category || 'otro', subcategory: p.subcategory || '', chip: p.chip || '', colors_text: (p.default_colors || []).join(', '), capacities_text: (p.default_capacities || []).join(', '), image_url: p.image_url || '', color_images: p.color_images || {}, _cat_filter: form._cat_filter });
                               setModal('add-product');
                             }}
-                            style={{ padding:'4px 12px', borderRadius:5, border:'1px solid #d1d5db', background:'#fff', color:'#374151', fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                            style={{ padding:'6px 14px', borderRadius:6, border:'1px solid #d1d5db', background:'#fff', color:'#374151', fontSize:12, fontWeight:600, cursor:'pointer' }}>
                             Editar
                           </button>
                           <button
                             onClick={() => deleteProduct(p.id, p.name)}
-                            style={{ padding:'4px 8px', borderRadius:5, border:'1px solid #fca5a5', background:'#fff', color:'#ef4444', fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                            style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #fca5a5', background:'#fff', color:'#ef4444', fontSize:12, fontWeight:600, cursor:'pointer' }}>
                             ✕
                           </button>
                         </div>
