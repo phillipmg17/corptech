@@ -300,13 +300,12 @@ export default function CorpPage() {
   }
 
   async function loadGlobalStock() {
-    let q = supabase
+    // Siempre cargamos TODO — el filtro se aplica en cliente para que los contadores sean correctos
+    const { data } = await supabase
       .from('stock_items')
       .select('id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), imei_check_id, model_number, color_info, storage_info, lot_id, purchase_lots(numero_lote, proveedor, numero_factura)')
       .order('created_at', { ascending: false })
-      .limit(200);
-    if (storeFilter !== 'all') q = q.eq('owner_org_id', storeFilter);
-    const { data } = await q;
+      .limit(500);
     setStocks(data || []);
   }
 
@@ -1138,55 +1137,61 @@ export default function CorpPage() {
     const resellerPrice  = parseFloat(form.reseller_price)   || null;
     const salePrice      = parseFloat(form.sale_price_stock) || null;
 
-    // ── 1. Crear lote de compra (siempre, con o sin datos de factura) ──
+    // ── 1. Crear lote de compra (opcional — si la tabla no existe, sigue sin lote) ──
     let lotId = null;
     const numeroLote = form.lot_numero?.trim() ||
       `LOTE-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
 
-    const lotPayload = {
-      corp_id:         CORP_ID,
-      numero_lote:     numeroLote,
-      proveedor:       form.lot_proveedor?.trim()  || null,
-      numero_factura:  form.lot_factura?.trim()    || null,
-      fecha_compra:    form.lot_fecha              || new Date().toISOString().split('T')[0],
-      total_unidades:  imeis.length,
-      costo_total:     purchasePrice ? purchasePrice * imeis.length : 0,
-      notas:           form.lot_notas?.trim()      || null,
-    };
+    const hayDatosLote = form.lot_proveedor || form.lot_factura || form.lot_numero || form.lot_notas;
 
-    const { data: lotData, error: lotError } = await supabase
-      .from('purchase_lots')
-      .insert(lotPayload)
-      .select('id')
-      .single();
+    try {
+      const lotPayload = {
+        corp_id:         CORP_ID,
+        numero_lote:     numeroLote,
+        proveedor:       form.lot_proveedor?.trim()  || null,
+        numero_factura:  form.lot_factura?.trim()    || null,
+        fecha_compra:    form.lot_fecha              || new Date().toISOString().split('T')[0],
+        total_unidades:  imeis.length,
+        costo_total:     purchasePrice ? purchasePrice * imeis.length : 0,
+        notas:           form.lot_notas?.trim()      || null,
+      };
 
-    if (lotError) {
-      showToast('Error al crear lote: ' + lotError.message, 'err');
-      return;
-    }
-    lotId = lotData.id;
+      const { data: lotData, error: lotError } = await supabase
+        .from('purchase_lots')
+        .insert(lotPayload)
+        .select('id')
+        .single();
 
-    // ── 2. Insertar stock items vinculados al lote ──
-    const rows = imeis.map(imei => ({
-      owner_org_id:    form.owner_org_id || CORP_ID,
-      product_id:      form.product_id,
-      imei:            imei,
-      status:          'available',
-      purchase_price:  purchasePrice,
-      reseller_price:  resellerPrice,
-      sale_price:      salePrice,
-      lot_id:          lotId,
-    }));
+      if (!lotError && lotData?.id) {
+        lotId = lotData.id;
+      }
+      // Si hay error en lote (tabla no existe aún), continuamos sin lot_id
+    } catch (_) { /* tabla purchase_lots no existe todavía — ignora */ }
+
+    // ── 2. Insertar stock items (con o sin lot_id) ──
+    const rows = imeis.map(imei => {
+      const row = {
+        owner_org_id:   form.owner_org_id || CORP_ID,
+        product_id:     form.product_id,
+        imei:           imei,
+        status:         'available',
+        purchase_price: purchasePrice,
+        reseller_price: resellerPrice,
+        sale_price:     salePrice,
+      };
+      if (lotId) row.lot_id = lotId;
+      return row;
+    });
 
     const { error } = await supabase.from('stock_items').insert(rows);
     if (error) {
-      // Si fallan los items, borrar el lote creado para no dejar huérfano
-      await supabase.from('purchase_lots').delete().eq('id', lotId);
+      if (lotId) await supabase.from('purchase_lots').delete().eq('id', lotId);
       showToast('Error al agregar stock: ' + error.message, 'err');
       return;
     }
 
-    showToast(`${imeis.length} equipo${imeis.length > 1 ? 's' : ''} agregado${imeis.length > 1 ? 's' : ''} — Lote: ${numeroLote} ✓`);
+    const loteMsg = lotId ? ` — Lote: ${numeroLote}` : '';
+    showToast(`${imeis.length} equipo${imeis.length > 1 ? 's' : ''} agregado${imeis.length > 1 ? 's' : ''}${loteMsg} ✓`);
     setModal(null); setForm({}); setProdSearch(''); setStockCatFilter('all');
     loadGlobalStock();
     loadKpis();
