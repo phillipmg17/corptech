@@ -1129,18 +1129,22 @@ export default function CorpPage() {
   async function addStock(e) {
     e.preventDefault();
     if (!form.product_id) { showToast('Selecciona un modelo primero', 'err'); return; }
-    const sel = products.find(p => p.id === form.product_id);
     const imeis = (form.imeis_bulk || '')
       .split('\n')
       .map(s => s.trim())
       .filter(Boolean);
     if (imeis.length === 0) { showToast('Ingresa al menos un IMEI', 'err'); return; }
+    const purchasePrice  = parseFloat(form.purchase_price)  || null;
+    const resellerPrice  = parseFloat(form.reseller_price)  || null;
+    const salePrice      = parseFloat(form.sale_price_stock) || null;
     const rows = imeis.map(imei => ({
-      owner_org_id: form.owner_org_id || CORP_ID,
-      product_id:   form.product_id,
-      imei:         imei,
-      emoji:        sel?.emoji || '📦',
-      status:       'available',
+      owner_org_id:    form.owner_org_id || CORP_ID,
+      product_id:      form.product_id,
+      imei:            imei,
+      status:          'available',
+      purchase_price:  purchasePrice,
+      reseller_price:  resellerPrice,
+      sale_price:      salePrice,
     }));
     const { error } = await supabase.from('stock_items').insert(rows);
     if (error) { showToast('Error: ' + error.message, 'err'); return; }
@@ -4955,13 +4959,49 @@ export default function CorpPage() {
                       )}
                     </div>
 
+                    {/* Precios — aparecen cuando se elige modelo */}
+                    {selProd && (
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:4 }}>
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label className="form-label">Precio compra (S/)</label>
+                          <input
+                            className="form-input" type="number" min="0" step="0.01"
+                            placeholder="0.00"
+                            value={form.purchase_price || ''}
+                            onChange={e => setForm({ ...form, purchase_price: e.target.value })}
+                          />
+                          <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Lo que pagaste</div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label className="form-label">Precio revendedor (S/)</label>
+                          <input
+                            className="form-input" type="number" min="0" step="0.01"
+                            placeholder="0.00"
+                            value={form.reseller_price || ''}
+                            onChange={e => setForm({ ...form, reseller_price: e.target.value })}
+                          />
+                          <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Precio mayorista</div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label className="form-label">Precio venta (S/)</label>
+                          <input
+                            className="form-input" type="number" min="0" step="0.01"
+                            placeholder="0.00"
+                            value={form.sale_price_stock || ''}
+                            onChange={e => setForm({ ...form, sale_price_stock: e.target.value })}
+                          />
+                          <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Precio al público</div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* IMEIs — solo aparece después de elegir modelo */}
                     {selProd && (
                       <div className="form-group">
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
                           <label className="form-label" style={{ margin:0 }}>IMEIs — uno por línea</label>
                           {imeiCount > 0 && (
-                            <span style={{ fontSize:12, fontWeight:700, color:'#0A84FF', background:'rgba(10,132,255,0.1)', padding:'2px 10px', borderRadius:20 }}>
+                            <span style={{ fontSize:12, fontWeight:700, color:'#1a56db', background:'#eff6ff', padding:'2px 10px', borderRadius:6, border:'1px solid #bfdbfe' }}>
                               {imeiCount} {imeiCount === 1 ? 'equipo' : 'equipos'}
                             </span>
                           )}
@@ -4973,9 +5013,8 @@ export default function CorpPage() {
                           value={form.imeis_bulk || ''}
                           onChange={e => setForm({ ...form, imeis_bulk: e.target.value })}
                           style={{ resize:'vertical', fontFamily:'monospace', fontSize:13, lineHeight:1.7 }}
-                          autoFocus
                         />
-                        <div style={{ fontSize:11, color:'var(--text3)', marginTop:5 }}>
+                        <div style={{ fontSize:11, color:'#9ca3af', marginTop:5 }}>
                           Pega o escribe cada IMEI en una línea. Puedes agregar 1 o 100 a la vez.
                         </div>
                       </div>
