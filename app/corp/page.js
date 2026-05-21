@@ -5593,26 +5593,7 @@ export default function CorpPage() {
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                     <div className="form-group">
                       <label className="form-label">Departamento / Estado</label>
-                      <select className="form-select" value={form.wh_department || ''} onChange={e => setForm({ ...form, wh_department: e.target.value })}>
-                        <option value="">— Seleccionar —</option>
-                        <option value="Lima">Lima</option>
-                        <option value="Arequipa">Arequipa</option>
-                        <option value="Cusco">Cusco</option>
-                        <option value="La Libertad">La Libertad</option>
-                        <option value="Piura">Piura</option>
-                        <option value="Lambayeque">Lambayeque</option>
-                        <option value="Junín">Junín</option>
-                        <option value="Áncash">Áncash</option>
-                        <option value="Puno">Puno</option>
-                        <option value="Cajamarca">Cajamarca</option>
-                        <option value="Loreto">Loreto</option>
-                        <option value="Ica">Ica</option>
-                        <option value="San Martín">San Martín</option>
-                        <option value="Ucayali">Ucayali</option>
-                        <option value="Huánuco">Huánuco</option>
-                        <option value="Internacional">Internacional</option>
-                        <option value="Otro">Otro</option>
-                      </select>
+                      <input className="form-input" placeholder="Ej: Lima, Arequipa, Miami..." value={form.wh_department || ''} onChange={e => setForm({ ...form, wh_department: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Ciudad / Lugar puntual</label>
@@ -5660,26 +5641,7 @@ export default function CorpPage() {
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                     <div className="form-group">
                       <label className="form-label">Departamento / Estado</label>
-                      <select className="form-select" value={form.wh_department || ''} onChange={e => setForm({ ...form, wh_department: e.target.value })}>
-                        <option value="">— Seleccionar —</option>
-                        <option value="Lima">Lima</option>
-                        <option value="Arequipa">Arequipa</option>
-                        <option value="Cusco">Cusco</option>
-                        <option value="La Libertad">La Libertad</option>
-                        <option value="Piura">Piura</option>
-                        <option value="Lambayeque">Lambayeque</option>
-                        <option value="Junín">Junín</option>
-                        <option value="Áncash">Áncash</option>
-                        <option value="Puno">Puno</option>
-                        <option value="Cajamarca">Cajamarca</option>
-                        <option value="Loreto">Loreto</option>
-                        <option value="Ica">Ica</option>
-                        <option value="San Martín">San Martín</option>
-                        <option value="Ucayali">Ucayali</option>
-                        <option value="Huánuco">Huánuco</option>
-                        <option value="Internacional">Internacional</option>
-                        <option value="Otro">Otro</option>
-                      </select>
+                      <input className="form-input" placeholder="Ej: Lima, Arequipa, Miami..." value={form.wh_department || ''} onChange={e => setForm({ ...form, wh_department: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Ciudad / Lugar puntual</label>
