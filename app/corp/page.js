@@ -40,6 +40,9 @@ export default function CorpPage() {
   const [toast,       setToast]       = useState(null);
   const [prodSearch,  setProdSearch]  = useState('');
   const [stockCatFilter, setStockCatFilter] = useState('all');
+  const [stockSearch,    setStockSearch]    = useState('');
+  const [stockGbFilter,  setStockGbFilter]  = useState('all');
+  const [stockColorFilter, setStockColorFilter] = useState('all');
 
   /* ── ALMACENES ── */
   const [warehouses,  setWarehouses]  = useState([]);
@@ -1155,78 +1158,76 @@ export default function CorpPage() {
     loadProducts();
   }
 
-  /* ── ADD STOCK (multi-IMEI) ── */
+  /* ── ADD STOCK (1 equipo: IMEI1, IMEI2, Serial) ── */
   async function addStock(e) {
     e.preventDefault();
     if (!form.product_id) { showToast('Selecciona un modelo primero', 'err'); return; }
-    const imeis = (form.imeis_bulk || '')
-      .split('\n')
-      .map(s => s.trim())
-      .filter(Boolean);
-    if (imeis.length === 0) { showToast('Ingresa al menos un IMEI', 'err'); return; }
+    const imei1 = form.imei1?.trim() || '';
+    const imei2 = form.imei2?.trim() || null;
+    const serialNum = form.serial_number?.trim() || null;
+    if (!imei1 && !serialNum) { showToast('Ingresa al menos el IMEI 1 o el número de serie', 'err'); return; }
 
     const purchasePrice  = parseFloat(form.purchase_price)   || null;
     const resellerPrice  = parseFloat(form.reseller_price)   || null;
     const salePrice      = parseFloat(form.sale_price_stock) || null;
+    const colorInfo      = form.color_info?.trim()   || null;
+    const storageInfo    = form.storage_info?.trim() || null;
 
-    // ── 1. Crear lote de compra (opcional — si la tabla no existe, sigue sin lote) ──
+    // ── 1. Crear lote de compra (opcional) ──
     let lotId = null;
     const numeroLote = form.lot_numero?.trim() ||
       `LOTE-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
-
-    const hayDatosLote = form.lot_proveedor || form.lot_factura || form.lot_numero || form.lot_notas;
-
     try {
       const lotPayload = {
-        corp_id:         CORP_ID,
-        numero_lote:     numeroLote,
-        proveedor:       form.lot_proveedor?.trim()  || null,
-        numero_factura:  form.lot_factura?.trim()    || null,
-        fecha_compra:    form.lot_fecha              || new Date().toISOString().split('T')[0],
-        total_unidades:  imeis.length,
-        costo_total:     purchasePrice ? purchasePrice * imeis.length : 0,
-        notas:           form.lot_notas?.trim()      || null,
+        corp_id:        CORP_ID,
+        numero_lote:    numeroLote,
+        proveedor:      form.lot_proveedor?.trim() || null,
+        numero_factura: form.lot_factura?.trim()   || null,
+        fecha_compra:   form.lot_fecha             || new Date().toISOString().split('T')[0],
+        total_unidades: 1,
+        costo_total:    purchasePrice || 0,
+        notas:          form.lot_notas?.trim()     || null,
       };
-
       const { data: lotData, error: lotError } = await supabase
-        .from('purchase_lots')
-        .insert(lotPayload)
-        .select('id')
-        .single();
+        .from('purchase_lots').insert(lotPayload).select('id').single();
+      if (!lotError && lotData?.id) lotId = lotData.id;
+    } catch (_) { /* tabla no existe aún */ }
 
-      if (!lotError && lotData?.id) {
-        lotId = lotData.id;
-      }
-      // Si hay error en lote (tabla no existe aún), continuamos sin lot_id
-    } catch (_) { /* tabla purchase_lots no existe todavía — ignora */ }
+    // ── 2. Insertar equipo ──
+    const row = {
+      owner_org_id:   form.owner_org_id || CORP_ID,
+      product_id:     form.product_id,
+      imei:           imei1 || null,
+      serial_number:  serialNum,
+      status:         'available',
+      purchase_price: purchasePrice,
+      reseller_price: resellerPrice,
+      sale_price:     salePrice,
+      color_info:     colorInfo,
+      storage_info:   storageInfo,
+    };
+    if (lotId) row.lot_id = lotId;
+    // imei2 — solo si la columna existe (post-migración IMEI2)
+    if (imei2) row.imei2 = imei2;
 
-    // ── 2. Insertar stock items (con o sin lot_id) ──
-    const rows = imeis.map(imei => {
-      const row = {
-        owner_org_id:   form.owner_org_id || CORP_ID,
-        product_id:     form.product_id,
-        imei:           imei,
-        status:         'available',
-        purchase_price: purchasePrice,
-        reseller_price: resellerPrice,
-        sale_price:     salePrice,
-      };
-      if (lotId) row.lot_id = lotId;
-      return row;
-    });
-
-    const { error } = await supabase.from('stock_items').insert(rows);
+    const { error } = await supabase.from('stock_items').insert(row);
     if (error) {
       if (lotId) await supabase.from('purchase_lots').delete().eq('id', lotId);
-      showToast('Error al agregar stock: ' + error.message, 'err');
-      return;
+      // Si imei2 no existe aún como columna, reintentar sin ella
+      if (error.message?.includes('imei2')) {
+        delete row.imei2;
+        const { error: e2 } = await supabase.from('stock_items').insert(row);
+        if (e2) { showToast('Error: ' + e2.message, 'err'); return; }
+      } else {
+        showToast('Error al agregar stock: ' + error.message, 'err');
+        return;
+      }
     }
 
     const loteMsg = lotId ? ` — Lote: ${numeroLote}` : '';
-    showToast(`${imeis.length} equipo${imeis.length > 1 ? 's' : ''} agregado${imeis.length > 1 ? 's' : ''}${loteMsg} ✓`);
+    showToast(`Equipo agregado${loteMsg} ✓`);
     setModal(null); setForm({}); setProdSearch(''); setStockCatFilter('all');
-    loadGlobalStock();
-    loadKpis();
+    loadGlobalStock(); loadKpis();
   }
 
   /* ── EXTRAER INFO DEL IMEI RESULT ── */
@@ -2117,7 +2118,7 @@ export default function CorpPage() {
             </div>
 
             {/* Filtro por almacén */}
-            <div style={{ display:'flex', gap:6, marginBottom:16, overflowX:'auto', paddingBottom:2 }}>
+            <div style={{ display:'flex', gap:6, marginBottom:10, overflowX:'auto', paddingBottom:2 }}>
               {[{ id:'all', name:'Todos los almacenes' }, { id:CORP_ID, name:'Corp Tech' }, ...STORES].map(s => (
                 <button key={s.id} onClick={() => setStoreFilter(s.id)}
                   style={{ flexShrink:0, padding:'5px 14px', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer', border:`1px solid ${storeFilter===s.id?'#1a56db':'#d1d5db'}`, background:storeFilter===s.id?'#1a56db':'#fff', color:storeFilter===s.id?'#fff':'#374151', transition:'all .15s' }}>
@@ -2126,18 +2127,68 @@ export default function CorpPage() {
               ))}
             </div>
 
+            {/* Buscador + filtros GB y Color */}
+            <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:14 }}>
+              <input
+                style={{ padding:'8px 12px', border:'1px solid #d1d5db', borderRadius:8, fontSize:13, outline:'none', width:'100%', boxSizing:'border-box' }}
+                placeholder="Buscar por IMEI, N° serie, modelo..."
+                value={stockSearch}
+                onChange={e => setStockSearch(e.target.value)}
+              />
+              {/* Filtros rápidos GB y Color */}
+              {(() => {
+                const gbVals = [...new Set(stocks.map(s => s.storage_info).filter(Boolean))];
+                const colorVals = [...new Set(stocks.map(s => s.color_info).filter(Boolean))];
+                return (gbVals.length > 0 || colorVals.length > 0) ? (
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                    {gbVals.length > 0 && <>
+                      <span style={{ fontSize:11, color:'#6b7280', alignSelf:'center', fontWeight:600 }}>GB:</span>
+                      {['all', ...gbVals].map(v => (
+                        <button key={v} onClick={() => setStockGbFilter(v)}
+                          style={{ padding:'3px 10px', borderRadius:5, fontSize:11, fontWeight:600, cursor:'pointer', border:`1px solid ${stockGbFilter===v?'#1a56db':'#d1d5db'}`, background:stockGbFilter===v?'#1a56db':'#fff', color:stockGbFilter===v?'#fff':'#374151' }}>
+                          {v === 'all' ? 'Todos' : v}
+                        </button>
+                      ))}
+                    </>}
+                    {colorVals.length > 0 && <>
+                      <span style={{ fontSize:11, color:'#6b7280', alignSelf:'center', fontWeight:600, marginLeft:6 }}>Color:</span>
+                      {['all', ...colorVals].map(v => (
+                        <button key={v} onClick={() => setStockColorFilter(v)}
+                          style={{ padding:'3px 10px', borderRadius:5, fontSize:11, fontWeight:600, cursor:'pointer', border:`1px solid ${stockColorFilter===v?'#1a56db':'#d1d5db'}`, background:stockColorFilter===v?'#1a56db':'#fff', color:stockColorFilter===v?'#fff':'#374151' }}>
+                          {v === 'all' ? 'Todos' : v}
+                        </button>
+                      ))}
+                    </>}
+                  </div>
+                ) : null;
+              })()}
+            </div>
+
             {stocks.length === 0 ? (
               <div style={{ textAlign:'center', padding:'40px 20px', background:'#fff', borderRadius:8, border:'1px solid #e5e7eb', color:'#6b7280', fontSize:13 }}>
                 Sin equipos en stock. Agrega el primer equipo con el botón de arriba.
               </div>
             ) : (() => {
+              // Filtrar por búsqueda + GB + Color
+              const searchLower = stockSearch.toLowerCase();
+              const filteredStocks = stocks.filter(s => {
+                if (stockSearch) {
+                  const haystack = [s.imei, s.imei2, s.serial_number, s.products?.name, s.model_number]
+                    .filter(Boolean).join(' ').toLowerCase();
+                  if (!haystack.includes(searchLower)) return false;
+                }
+                if (stockGbFilter !== 'all' && s.storage_info !== stockGbFilter) return false;
+                if (stockColorFilter !== 'all' && s.color_info !== stockColorFilter) return false;
+                return true;
+              });
+
               // Agrupar por organización
               const orgsWithStock = [
                 { id: CORP_ID, name: 'Corp Tech — Almacén Central' },
                 ...STORES,
               ].map(org => ({
                 ...org,
-                items: stocks.filter(s => s.owner_org_id === org.id),
+                items: filteredStocks.filter(s => s.owner_org_id === org.id),
               })).filter(org => {
                 if (storeFilter === 'all') return org.items.length > 0;
                 return org.id === storeFilter && org.items.length > 0;
@@ -2161,15 +2212,15 @@ export default function CorpPage() {
                   </div>
                   {/* Tabla de stock */}
                   <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 110px 90px', padding:'8px 14px', background:'#f3f4f6', borderBottom:'1px solid #e5e7eb', fontSize:11, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
-                      <span>Producto / IMEI / Lote</span>
-                      <span>Detalle</span>
+                    <div style={{ display:'grid', gridTemplateColumns:'2fr 180px 110px 90px', padding:'8px 14px', background:'#f3f4f6', borderBottom:'1px solid #e5e7eb', fontSize:11, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
+                      <span>Producto / Seriales</span>
+                      <span>Color / GB / Lote</span>
                       <span>Precio venta</span>
                       <span style={{ textAlign:'right' }}>Estado</span>
                     </div>
                     {org.items.map((s, idx) => (
                       <div key={s.id} style={{
-                        display:'grid', gridTemplateColumns:'1fr 160px 110px 90px',
+                        display:'grid', gridTemplateColumns:'2fr 180px 110px 90px',
                         padding:'12px 14px', alignItems:'center',
                         borderBottom: idx < org.items.length-1 ? '1px solid #f3f4f6' : 'none',
                         transition:'background .1s',
@@ -2177,12 +2228,17 @@ export default function CorpPage() {
                         onMouseEnter={e => e.currentTarget.style.background='#f0f7ff'}
                         onMouseLeave={e => e.currentTarget.style.background='#fff'}
                       >
-                        {/* Producto + IMEI + Lote */}
+                        {/* Producto + Seriales */}
                         <div>
                           <div style={{ fontWeight:600, fontSize:14, color:'#111827' }}>{s.products?.name || 'Producto'}</div>
-                          <div style={{ fontSize:12, color:'#6b7280', marginTop:2, fontFamily:'monospace' }}>{s.imei || s.serial_number || 'Sin serial'}</div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:1, marginTop:3 }}>
+                            {s.imei && <div style={{ fontSize:11, color:'#6b7280', fontFamily:'monospace' }}>IMEI 1: <span style={{ color:'#111827', fontWeight:600 }}>{s.imei}</span></div>}
+                            {s.imei2 && <div style={{ fontSize:11, color:'#6b7280', fontFamily:'monospace' }}>IMEI 2: <span style={{ color:'#111827', fontWeight:600 }}>{s.imei2}</span></div>}
+                            {s.serial_number && <div style={{ fontSize:11, color:'#6b7280', fontFamily:'monospace' }}>Serie: <span style={{ color:'#111827', fontWeight:600 }}>{s.serial_number}</span></div>}
+                            {!s.imei && !s.imei2 && !s.serial_number && <div style={{ fontSize:11, color:'#9ca3af' }}>Sin serial</div>}
+                          </div>
                           {s.purchase_lots && (
-                            <div style={{ display:'flex', gap:4, marginTop:4, flexWrap:'wrap' }}>
+                            <div style={{ display:'flex', gap:4, marginTop:5, flexWrap:'wrap' }}>
                               <span style={{ fontSize:10, padding:'1px 7px', borderRadius:4, background:'#fef9c3', color:'#854d0e', fontWeight:700, border:'1px solid #fde68a' }}>
                                 {s.purchase_lots.numero_lote}
                               </span>
@@ -2191,19 +2247,14 @@ export default function CorpPage() {
                                   {s.purchase_lots.proveedor}
                                 </span>
                               )}
-                              {s.purchase_lots.numero_factura && (
-                                <span style={{ fontSize:10, padding:'1px 7px', borderRadius:4, background:'#f0fdf4', color:'#166534', border:'1px solid #bbf7d0' }}>
-                                  Fact: {s.purchase_lots.numero_factura}
-                                </span>
-                              )}
                             </div>
                           )}
                         </div>
-                        {/* Detalle */}
-                        <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                          {s.storage_info && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#eff6ff', color:'#1a56db', fontWeight:600, border:'1px solid #bfdbfe' }}>{s.storage_info}</span>}
-                          {s.color_info   && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#f9fafb', color:'#374151', border:'1px solid #e5e7eb' }}>{s.color_info}</span>}
-                          {s.model_number && <span style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'#f9fafb', color:'#6b7280', border:'1px solid #e5e7eb' }}>{s.model_number}</span>}
+                        {/* Color + GB + modelo */}
+                        <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignContent:'flex-start' }}>
+                          {s.storage_info && <span style={{ fontSize:11, padding:'2px 8px', borderRadius:4, background:'#eff6ff', color:'#1a56db', fontWeight:700, border:'1px solid #bfdbfe' }}>{s.storage_info}</span>}
+                          {s.color_info   && <span style={{ fontSize:11, padding:'2px 8px', borderRadius:4, background:'#f9fafb', color:'#374151', border:'1px solid #d1d5db', fontWeight:600 }}>{s.color_info}</span>}
+                          {s.model_number && <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:'#f9fafb', color:'#9ca3af', border:'1px solid #e5e7eb' }}>{s.model_number}</span>}
                         </div>
                         {/* Precio */}
                         <div>
@@ -5041,8 +5092,6 @@ export default function CorpPage() {
             {/* ── MODAL: Agregar Stock (multi-IMEI) ── */}
             {modal === 'add-stock' && (() => {
               const selProd  = products.find(p => p.id === form.product_id);
-              const imeiList = (form.imeis_bulk || '').split('\n').map(s => s.trim()).filter(Boolean);
-              const imeiCount = imeiList.length;
               const filteredProds = products.filter(p =>
                 !prodSearch || p.name.toLowerCase().includes(prodSearch.toLowerCase())
               );
@@ -5069,7 +5118,7 @@ export default function CorpPage() {
                             <div style={{ fontWeight:700, fontSize:14 }}>{selProd.name}</div>
                             {selProd.subcategory && <div style={{ fontSize:11, color:'var(--text3)' }}>Serie {selProd.subcategory}</div>}
                           </div>
-                          <button type="button" onClick={() => { setForm(f=>({...f, product_id:'', imeis_bulk:''})); setProdSearch(''); }}
+                          <button type="button" onClick={() => { setForm(f=>({...f, product_id:'', imei1:'', imei2:'', serial_number:'', color_info:'', storage_info:''})); setProdSearch(''); }}
                             style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 4px' }}>✕</button>
                         </div>
                       ) : (
@@ -5212,34 +5261,78 @@ export default function CorpPage() {
                       </>
                     )}
 
-                    {/* IMEIs — solo aparece después de elegir modelo */}
+                    {/* Seriales + Color + GB — solo después de elegir modelo */}
                     {selProd && (
-                      <div className="form-group">
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
-                          <label className="form-label" style={{ margin:0 }}>IMEIs — uno por línea</label>
-                          {imeiCount > 0 && (
-                            <span style={{ fontSize:12, fontWeight:700, color:'#1a56db', background:'#eff6ff', padding:'2px 10px', borderRadius:6, border:'1px solid #bfdbfe' }}>
-                              {imeiCount} {imeiCount === 1 ? 'equipo' : 'equipos'}
-                            </span>
-                          )}
+                      <>
+                        {/* IMEI 1 + IMEI 2 */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:0 }}>
+                          <div className="form-group">
+                            <label className="form-label">IMEI 1 <span style={{ color:'#dc2626' }}>*</span></label>
+                            <input
+                              className="form-input"
+                              placeholder="352999111111111"
+                              value={form.imei1 || ''}
+                              onChange={e => setForm({ ...form, imei1: e.target.value })}
+                              style={{ fontFamily:'monospace', fontSize:13, letterSpacing:0.5 }}
+                              maxLength={20}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">IMEI 2 <span style={{ color:'#9ca3af', fontWeight:400 }}>(opcional)</span></label>
+                            <input
+                              className="form-input"
+                              placeholder="352999222222222"
+                              value={form.imei2 || ''}
+                              onChange={e => setForm({ ...form, imei2: e.target.value })}
+                              style={{ fontFamily:'monospace', fontSize:13, letterSpacing:0.5 }}
+                              maxLength={20}
+                            />
+                          </div>
                         </div>
-                        <textarea
-                          className="form-input"
-                          rows={8}
-                          placeholder={'352999111111111\n352999222222222\n352999333333333\n...'}
-                          value={form.imeis_bulk || ''}
-                          onChange={e => setForm({ ...form, imeis_bulk: e.target.value })}
-                          style={{ resize:'vertical', fontFamily:'monospace', fontSize:13, lineHeight:1.7 }}
-                        />
-                        <div style={{ fontSize:11, color:'#9ca3af', marginTop:5 }}>
-                          Pega o escribe cada IMEI en una línea. Puedes agregar 1 o 100 a la vez.
+
+                        {/* Serial Number */}
+                        <div className="form-group">
+                          <label className="form-label">N° de Serie <span style={{ color:'#9ca3af', fontWeight:400 }}>(opcional)</span></label>
+                          <input
+                            className="form-input"
+                            placeholder="DNXXXXXXXX"
+                            value={form.serial_number || ''}
+                            onChange={e => setForm({ ...form, serial_number: e.target.value })}
+                            style={{ fontFamily:'monospace', fontSize:13, letterSpacing:0.5 }}
+                          />
                         </div>
-                      </div>
+
+                        {/* Color + Almacenamiento */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                          <div className="form-group">
+                            <label className="form-label">Color</label>
+                            {selProd.default_colors?.length > 0 ? (
+                              <select className="form-select" value={form.color_info || ''} onChange={e => setForm({ ...form, color_info: e.target.value })}>
+                                <option value="">— Seleccionar —</option>
+                                {selProd.default_colors.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            ) : (
+                              <input className="form-input" placeholder="Ej: Negro, Blanco..." value={form.color_info || ''} onChange={e => setForm({ ...form, color_info: e.target.value })} />
+                            )}
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">Almacenamiento / GB</label>
+                            {selProd.default_capacities?.length > 0 ? (
+                              <select className="form-select" value={form.storage_info || ''} onChange={e => setForm({ ...form, storage_info: e.target.value })}>
+                                <option value="">— Seleccionar —</option>
+                                {selProd.default_capacities.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            ) : (
+                              <input className="form-input" placeholder="Ej: 128GB, 256GB..." value={form.storage_info || ''} onChange={e => setForm({ ...form, storage_info: e.target.value })} />
+                            )}
+                          </div>
+                        </div>
+                      </>
                     )}
 
-                    <button className="btn btn-primary" type="submit" disabled={!selProd || imeiCount === 0}
-                      style={{ opacity: (!selProd || imeiCount === 0) ? 0.4 : 1 }}>
-                      {imeiCount > 0 ? `Agregar ${imeiCount} equipo${imeiCount > 1 ? 's' : ''}` : 'Agregar equipos'}
+                    <button className="btn btn-primary" type="submit" disabled={!selProd || (!form.imei1?.trim() && !form.serial_number?.trim())}
+                      style={{ opacity: (!selProd || (!form.imei1?.trim() && !form.serial_number?.trim())) ? 0.4 : 1 }}>
+                      Agregar equipo al stock
                     </button>
                   </form>
                 </>
