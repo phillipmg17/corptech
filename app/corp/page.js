@@ -1131,25 +1131,26 @@ export default function CorpPage() {
     loadProducts();
   }
 
-  /* ── ADD STOCK ── */
+  /* ── ADD STOCK (multi-IMEI) ── */
   async function addStock(e) {
     e.preventDefault();
-    if (!form.product_id) { showToast('Selecciona un producto primero', 'err'); return; }
-    const { error } = await supabase.from('stock_items').insert({
-      owner_org_id:  form.owner_org_id || CORP_ID,
-      product_id:    form.product_id,
-      serial_number: form.serial_number || null,
-      imei:          form.imei || null,
-      sale_price:    parseFloat(form.sale_price) || 0,
-      emoji:         form.emoji || '📦',
-      status:        'available',
-      imei_check_id: form.imei_check_id || null,
-      model_number:  form.model_number  || null,
-      color_info:    form.color_info    || form.color   || null,
-      storage_info:  form.storage_info  || form.storage || null,
-    });
+    if (!form.product_id) { showToast('Selecciona un modelo primero', 'err'); return; }
+    const sel = products.find(p => p.id === form.product_id);
+    const imeis = (form.imeis_bulk || '')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (imeis.length === 0) { showToast('Ingresa al menos un IMEI', 'err'); return; }
+    const rows = imeis.map(imei => ({
+      owner_org_id: form.owner_org_id || CORP_ID,
+      product_id:   form.product_id,
+      imei:         imei,
+      emoji:        sel?.emoji || '📦',
+      status:       'available',
+    }));
+    const { error } = await supabase.from('stock_items').insert(rows);
     if (error) { showToast('Error: ' + error.message, 'err'); return; }
-    showToast('Stock agregado ✓');
+    showToast(`${imeis.length} equipo${imeis.length > 1 ? 's' : ''} agregado${imeis.length > 1 ? 's' : ''} ✓`);
     setModal(null); setForm({}); setProdSearch(''); setStockCatFilter('all');
     loadGlobalStock();
     loadKpis();
@@ -4892,169 +4893,108 @@ export default function CorpPage() {
               );
             })()}
 
-            {/* ── MODAL: Agregar Stock ── */}
-            {modal === 'add-stock' && (
-              <>
-                <div className="modal-title">📦 Agregar stock</div>
-                <form onSubmit={addStock}>
-                  <div className="form-group">
-                    <label className="form-label">Asignar a</label>
-                    <select className="form-select" value={form.owner_org_id || ''} onChange={e => setForm({ ...form, owner_org_id: e.target.value })}>
-                      <option value={CORP_ID}>🏢 Corp Tech (Almacén Central)</option>
-                      {STORES.map(s => <option key={s.id} value={s.id}>{s.ico} {s.name}</option>)}
-                    </select>
-                  </div>
-                  {/* ── Filtro de Categoría ── */}
-                  <div className="form-group">
-                    <label className="form-label">Categoría</label>
-                    <div style={{ display:'flex', gap:5, overflowX:'auto', paddingBottom:4, flexWrap:'nowrap' }}>
-                      {[
-                        { id:'all',       lbl:'Todos',    ico:'🗂️', color:'#636366' },
-                        { id:'iphone',    lbl:'iPhone',   ico:'📱', color:'#0A84FF' },
-                        { id:'ipad',      lbl:'iPad',     ico:'📟', color:'#5E5CE6' },
-                        { id:'mac',       lbl:'Mac',      ico:'💻', color:'#636366' },
-                        { id:'airpods',   lbl:'AirPods',  ico:'🎧', color:'#30D158' },
-                        { id:'samsung',   lbl:'Samsung',  ico:'📲', color:'#FF9F0A' },
-                        { id:'accesorio', lbl:'Acces.',   ico:'🔌', color:'#BF5AF2' },
-                        { id:'otro',      lbl:'Otro',     ico:'📦', color:'#8E8E93' },
-                      ].map(c => {
-                        const cnt   = c.id === 'all' ? products.length : products.filter(p => (p.category||'otro') === c.id).length;
-                        const active = stockCatFilter === c.id;
-                        return (
-                          <button key={c.id} type="button"
-                            onClick={() => { setStockCatFilter(c.id); setForm(f => ({ ...f, product_id:'' })); setProdSearch(''); }}
-                            style={{
-                              flexShrink:0, padding:'5px 10px', borderRadius:16, fontSize:11, fontWeight:700, cursor:'pointer',
-                              border:`1.5px solid ${active ? c.color : 'var(--border)'}`,
-                              background: active ? `${c.color}22` : 'transparent',
-                              color: active ? c.color : 'var(--text-muted)',
-                              transition:'all .15s',
-                            }}>
-                            {c.ico} {c.lbl}{cnt > 0 && c.id !== 'all' ? ` (${cnt})` : ''}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+            {/* ── MODAL: Agregar Stock (multi-IMEI) ── */}
+            {modal === 'add-stock' && (() => {
+              const selProd  = products.find(p => p.id === form.product_id);
+              const imeiList = (form.imeis_bulk || '').split('\n').map(s => s.trim()).filter(Boolean);
+              const imeiCount = imeiList.length;
+              const filteredProds = products.filter(p =>
+                !prodSearch || p.name.toLowerCase().includes(prodSearch.toLowerCase())
+              );
+              return (
+                <>
+                  <div className="modal-title">Agregar equipos al stock</div>
+                  <form onSubmit={addStock}>
 
-                  {/* ── Buscador + Lista de Producto ── */}
-                  <div className="form-group">
-                    <label className="form-label">Producto</label>
-                    {/* Input buscador */}
-                    <input
-                      className="form-input"
-                      placeholder={stockCatFilter === 'all' ? '🔍 Buscar por nombre...' : `🔍 Buscar en ${stockCatFilter}...`}
-                      value={prodSearch}
-                      onChange={e => { setProdSearch(e.target.value); setForm(f => ({ ...f, product_id:'' })); }}
-                      autoComplete="off"
-                      style={{ borderColor: form.product_id ? '#30D158' : undefined }}
-                    />
-                    {/* Chip de producto seleccionado */}
-                    {form.product_id && (() => {
-                      const sel = products.find(p => p.id === form.product_id);
-                      return sel ? (
-                        <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6, padding:'6px 10px', background:'rgba(48,209,88,0.1)', border:'1px solid rgba(48,209,88,0.3)', borderRadius:8 }}>
-                          <span style={{ fontSize:18 }}>{sel.emoji || '📦'}</span>
-                          <span style={{ fontSize:13, fontWeight:600, color:'#30D158', flex:1 }}>{sel.name}</span>
-                          <button type="button" onClick={() => { setForm(f=>({...f,product_id:''})); setProdSearch(''); }}
-                            style={{ background:'none', border:'none', color:'#FF453A', cursor:'pointer', fontSize:16, lineHeight:1 }}>✕</button>
+                    {/* Asignar a */}
+                    <div className="form-group">
+                      <label className="form-label">Asignar a</label>
+                      <select className="form-select" value={form.owner_org_id || CORP_ID} onChange={e => setForm({ ...form, owner_org_id: e.target.value })}>
+                        <option value={CORP_ID}>Corp Tech — Almacén Central</option>
+                        {STORES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Selector de modelo */}
+                    <div className="form-group">
+                      <label className="form-label">Modelo</label>
+                      {selProd ? (
+                        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(10,132,255,0.08)', border:'1px solid rgba(10,132,255,0.25)', borderRadius:10 }}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontWeight:700, fontSize:14 }}>{selProd.name}</div>
+                            {selProd.subcategory && <div style={{ fontSize:11, color:'var(--text3)' }}>Serie {selProd.subcategory}</div>}
+                          </div>
+                          <button type="button" onClick={() => { setForm(f=>({...f, product_id:'', imeis_bulk:''})); setProdSearch(''); }}
+                            style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 4px' }}>✕</button>
                         </div>
-                      ) : null;
-                    })()}
-                    {/* Lista filtrada por categoría + búsqueda */}
-                    {!form.product_id && (stockCatFilter !== 'all' || prodSearch) && (() => {
-                      const filtered = products.filter(p => {
-                        const catOk    = stockCatFilter === 'all' || (p.category||'otro') === stockCatFilter;
-                        const searchOk = !prodSearch || p.name.toLowerCase().includes(prodSearch.toLowerCase());
-                        return catOk && searchOk;
-                      });
-                      return (
-                        <div style={{ border:'1px solid var(--border)', borderRadius:10, maxHeight:220, overflowY:'auto', marginTop:4, background:'var(--card)', boxShadow:'0 8px 24px rgba(0,0,0,0.2)', position:'relative', zIndex:10 }}>
-                          {filtered.length === 0 ? (
-                            <div style={{ padding:'12px 14px', fontSize:13, color:'var(--text3)' }}>
-                              Sin productos{prodSearch ? ` para "${prodSearch}"` : ''} en esta categoría
+                      ) : (
+                        <>
+                          <input
+                            className="form-input"
+                            placeholder="Buscar modelo..."
+                            value={prodSearch}
+                            onChange={e => setProdSearch(e.target.value)}
+                            autoComplete="off"
+                            autoFocus
+                          />
+                          {filteredProds.length > 0 && (
+                            <div style={{ border:'1px solid var(--border)', borderRadius:10, marginTop:4, background:'var(--card)', maxHeight:200, overflowY:'auto' }}>
+                              {filteredProds.map((p, i) => (
+                                <div key={p.id}
+                                  onMouseDown={() => { setForm(f => ({ ...f, product_id: p.id })); setProdSearch(''); }}
+                                  style={{
+                                    padding:'10px 14px', cursor:'pointer', display:'flex', alignItems:'center', gap:10,
+                                    borderBottom: i < filteredProds.length-1 ? '1px solid var(--border)' : 'none',
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background='rgba(10,132,255,0.07)'}
+                                  onMouseLeave={e => e.currentTarget.style.background='transparent'}
+                                >
+                                  <div style={{ flex:1 }}>
+                                    <div style={{ fontWeight:600, fontSize:13 }}>{p.name}</div>
+                                    {p.subcategory && <div style={{ fontSize:11, color:'var(--text3)' }}>Serie {p.subcategory}</div>}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          ) : filtered.map((p, i) => (
-                            <div key={p.id}
-                              onMouseDown={() => { setForm(f => ({ ...f, product_id:p.id, emoji:p.emoji||'📦', sale_price: p.sale_price||'' })); setProdSearch(''); }}
-                              style={{
-                                padding:'10px 14px', cursor:'pointer',
-                                display:'flex', alignItems:'center', gap:10,
-                                fontSize:13, color:'var(--text)',
-                                borderBottom: i < filtered.length-1 ? '1px solid var(--border)' : 'none',
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.background='rgba(10,132,255,0.08)'}
-                              onMouseLeave={e => e.currentTarget.style.background='transparent'}
-                            >
-                              <span style={{ fontSize:20 }}>{p.emoji || '📦'}</span>
-                              <div>
-                                <div style={{ fontWeight:700 }}>{p.name}</div>
-                                {p.sale_price > 0 && <div style={{ fontSize:11, color:'#30D158', fontWeight:600 }}>S/ {parseFloat(p.sale_price).toFixed(2)}</div>}
-                              </div>
-                            </div>
-                          ))}
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* IMEIs — solo aparece después de elegir modelo */}
+                    {selProd && (
+                      <div className="form-group">
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                          <label className="form-label" style={{ margin:0 }}>IMEIs — uno por línea</label>
+                          {imeiCount > 0 && (
+                            <span style={{ fontSize:12, fontWeight:700, color:'#0A84FF', background:'rgba(10,132,255,0.1)', padding:'2px 10px', borderRadius:20 }}>
+                              {imeiCount} {imeiCount === 1 ? 'equipo' : 'equipos'}
+                            </span>
+                          )}
                         </div>
-                      );
-                    })()}
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">IMEI</label>
-                    <input className="form-input" placeholder="352999111111111" value={form.imei || ''} onChange={e => setForm({ ...form, imei: e.target.value })} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Serial</label>
-                    <input className="form-input" placeholder="SN123456" value={form.serial_number || ''} onChange={e => setForm({ ...form, serial_number: e.target.value })} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Precio de venta (S/) <span style={{ color:'var(--text3)', fontSize:11, fontWeight:400 }}>— opcional</span></label>
-                    <input className="form-input" type="number" placeholder="0.00" value={form.sale_price || ''} onChange={e => setForm({ ...form, sale_price: e.target.value })} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Color <span style={{ color:'var(--text3)', fontSize:11, fontWeight:400 }}>— opcional</span></label>
-                    {/* Chips de colores del modelo */}
-                    {form.product_id && (() => {
-                      const sel = products.find(p => p.id === form.product_id);
-                      const cols = sel?.default_colors || [];
-                      if (cols.length === 0) return null;
-                      return (
-                        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
-                          {cols.map(c => (
-                            <button key={c} type="button"
-                              onClick={() => setForm(f => ({ ...f, color_info: f.color_info === c ? '' : c }))}
-                              style={{ padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:`1.5px solid ${form.color_info===c?'#BF5AF2':'var(--border)'}`, background: form.color_info===c?'rgba(191,90,242,0.15)':'transparent', color: form.color_info===c?'#BF5AF2':'var(--text-muted)' }}>
-                              {c}
-                            </button>
-                          ))}
+                        <textarea
+                          className="form-input"
+                          rows={8}
+                          placeholder={'352999111111111\n352999222222222\n352999333333333\n...'}
+                          value={form.imeis_bulk || ''}
+                          onChange={e => setForm({ ...form, imeis_bulk: e.target.value })}
+                          style={{ resize:'vertical', fontFamily:'monospace', fontSize:13, lineHeight:1.7 }}
+                          autoFocus
+                        />
+                        <div style={{ fontSize:11, color:'var(--text3)', marginTop:5 }}>
+                          Pega o escribe cada IMEI en una línea. Puedes agregar 1 o 100 a la vez.
                         </div>
-                      );
-                    })()}
-                    <input className="form-input" placeholder="Ej: Deep Blue, Silver..." value={form.color_info || ''} onChange={e => setForm({ ...form, color_info: e.target.value })} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Capacidad (GB/TB) <span style={{ color:'var(--text3)', fontSize:11, fontWeight:400 }}>— opcional</span></label>
-                    {/* Chips de capacidades del modelo */}
-                    {form.product_id && (() => {
-                      const sel = products.find(p => p.id === form.product_id);
-                      const caps = sel?.default_capacities || [];
-                      if (caps.length === 0) return null;
-                      return (
-                        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:6 }}>
-                          {caps.map(c => (
-                            <button key={c} type="button"
-                              onClick={() => setForm(f => ({ ...f, storage_info: f.storage_info === c ? '' : c }))}
-                              style={{ padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer', border:`1.5px solid ${form.storage_info===c?'#FF9F0A':'var(--border)'}`, background: form.storage_info===c?'rgba(255,159,10,0.15)':'transparent', color: form.storage_info===c?'#FF9F0A':'var(--text-muted)' }}>
-                              {c}
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                    <input className="form-input" placeholder="Ej: 256GB, 512GB..." value={form.storage_info || ''} onChange={e => setForm({ ...form, storage_info: e.target.value })} />
-                  </div>
-                  <button className="btn btn-primary" type="submit">Guardar</button>
-                </form>
-              </>
-            )}
+                      </div>
+                    )}
+
+                    <button className="btn btn-primary" type="submit" disabled={!selProd || imeiCount === 0}
+                      style={{ opacity: (!selProd || imeiCount === 0) ? 0.4 : 1 }}>
+                      {imeiCount > 0 ? `Agregar ${imeiCount} equipo${imeiCount > 1 ? 's' : ''}` : 'Agregar equipos'}
+                    </button>
+                  </form>
+                </>
+              );
+            })()}
 
             {/* ── MODAL: Empleado ── */}
             {modal === 'add-employee' && (
