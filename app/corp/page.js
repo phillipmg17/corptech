@@ -372,15 +372,24 @@ export default function CorpPage() {
 
   async function editWarehouse(e) {
     e.preventDefault();
-    const { error } = await supabase.from('warehouses').update({
-      name:      form.wh_name,
-      org_id:    form.wh_org_id,
-      type:      form.wh_type,
-      aisle:     form.wh_aisle || null,
-      shelf:     form.wh_shelf || null,
-      is_active: form.wh_active,
-    }).eq('id', form.wh_id);
+    if (!form.wh_id) { showToast('Error: ID de almacén no encontrado', 'err'); return; }
+    const { data, error } = await supabase
+      .from('warehouses')
+      .update({
+        name:      form.wh_name,
+        org_id:    form.wh_org_id,
+        type:      form.wh_type,
+        aisle:     form.wh_aisle || null,
+        shelf:     form.wh_shelf || null,
+        is_active: form.wh_active,
+      })
+      .eq('id', form.wh_id)
+      .select();
     if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    if (!data || data.length === 0) {
+      showToast('Sin permiso para editar. Revisa el SQL Editor de Supabase.', 'err');
+      return;
+    }
     showToast('Almacén actualizado ✓');
     setModal(null); setForm({});
     loadWarehouses();
