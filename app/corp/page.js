@@ -1102,6 +1102,7 @@ export default function CorpPage() {
       emoji:               form.emoji               || '📦',
       sale_price:          parseFloat(form.sale_price) || 0,
       category:            form.category            || 'otro',
+      subcategory:         form.subcategory         || null,
       chip:                form.chip                || null,
       default_colors:      parseList(form.colors_text),
       default_capacities:  parseList(form.capacities_text),
@@ -2285,6 +2286,11 @@ export default function CorpPage() {
                         {/* Info */}
                         <div style={{ padding: '14px 16px', flex: 1 }}>
                           <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
+                          {p.subcategory && (
+                            <div style={{ fontSize: 10, color: '#0A84FF', fontWeight: 700, marginBottom: 3 }}>
+                              Serie {p.subcategory}
+                            </div>
+                          )}
                           {p.chip && (
                             <div style={{ fontSize: 11, color: '#FF9F0A', fontWeight: 700, marginBottom: 4 }}>⚡ {p.chip}</div>
                           )}
@@ -2319,7 +2325,7 @@ export default function CorpPage() {
                         <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px' }}>
                           <button
                             onClick={() => {
-                              setForm({ _edit_id: p.id, name: p.name, description: p.description || '', emoji: p.emoji || '📦', sale_price: p.sale_price || '', category: p.category || 'otro', chip: p.chip || '', colors_text: (p.default_colors || []).join(', '), capacities_text: (p.default_capacities || []).join(', '), image_url: p.image_url || '', color_images: p.color_images || {}, _cat_filter: form._cat_filter });
+                              setForm({ _edit_id: p.id, name: p.name, description: p.description || '', emoji: p.emoji || '📦', sale_price: p.sale_price || '', category: p.category || 'otro', subcategory: p.subcategory || '', chip: p.chip || '', colors_text: (p.default_colors || []).join(', '), capacities_text: (p.default_capacities || []).join(', '), image_url: p.image_url || '', color_images: p.color_images || {}, _cat_filter: form._cat_filter });
                               setModal('add-product');
                             }}
                             style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: 'rgba(10,132,255,0.12)', color: '#4DA8FF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
@@ -4643,7 +4649,10 @@ export default function CorpPage() {
                     <div>
                       <div style={{ fontWeight: 800, fontSize: 16 }}>{form.name || 'Nombre del modelo'}</div>
                       {form.chip && <div style={{ fontSize: 12, color: '#FF9F0A', fontWeight: 700 }}>⚡ {form.chip}</div>}
-                      {form.category && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{CATS_MODAL.find(c=>c.id===form.category)?.ico} {CATS_MODAL.find(c=>c.id===form.category)?.lbl}</div>}
+                      {form.category && <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        {CATS_MODAL.find(c=>c.id===form.category)?.ico} {CATS_MODAL.find(c=>c.id===form.category)?.lbl}
+                        {form.subcategory && <span style={{ color: '#0A84FF', fontWeight: 700 }}> · Serie {form.subcategory}</span>}
+                      </div>}
                     </div>
                   </div>
 
@@ -4666,6 +4675,21 @@ export default function CorpPage() {
                             {c.ico} {c.lbl}
                           </button>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Subcategoría */}
+                    <div className="form-group">
+                      <label className="form-label">Serie / Generación (subcategoría)</label>
+                      <input
+                        className="form-input"
+                        placeholder="Ej: 17  ·  16  ·  15  ·  iPad Pro  ·  M4"
+                        value={form.subcategory || ''}
+                        onChange={e => setForm({ ...form, subcategory: e.target.value })}
+                        style={{ fontWeight: 700 }}
+                      />
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                        Ejemplo: categoría = iPhone · subcategoría = 17 · nombre = iPhone 17 Pro
                       </div>
                     </div>
 
