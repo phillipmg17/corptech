@@ -303,37 +303,22 @@ export default function CorpPage() {
   }
 
   async function loadGlobalStock() {
-    // Intento 1: query completa con todos los campos y joins
-    const { data: d1, error: e1 } = await supabase
-      .from('stock_items')
-      .select('id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), imei_check_id, model_number, color_info, storage_info, lot_id, purchase_lots(numero_lote, proveedor, numero_factura)')
-      .order('created_at', { ascending: false })
-      .limit(500);
-    if (!e1 && d1) { setStocks(d1); return; }
-
-    // Intento 2: sin purchase_lots (tabla no creada aún)
-    const { data: d2, error: e2 } = await supabase
-      .from('stock_items')
-      .select('id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), model_number, color_info, storage_info')
-      .order('created_at', { ascending: false })
-      .limit(500);
-    if (!e2 && d2) { setStocks(d2); return; }
-
-    // Intento 3: sin columnas extras (migraciones no corridas)
-    const { data: d3, error: e3 } = await supabase
-      .from('stock_items')
-      .select('id, imei, status, sale_price, owner_org_id, product_id, products(name)')
-      .order('created_at', { ascending: false })
-      .limit(500);
-    if (!e3 && d3) { setStocks(d3); return; }
-
-    // Intento 4: ultra-mínimo garantizado
-    const { data: d4 } = await supabase
-      .from('stock_items')
-      .select('id, imei, status, sale_price, owner_org_id')
-      .order('created_at', { ascending: false })
-      .limit(500);
-    setStocks(d4 || []);
+    // Siempre traemos los campos esenciales para que el buscador funcione
+    // Intentamos joins progresivamente — si una columna no existe caemos al siguiente intento
+    const queries = [
+      'id, serial_number, imei, imei2, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), model_number, color_info, storage_info, lot_id, purchase_lots(numero_lote, proveedor, numero_factura)',
+      'id, serial_number, imei, imei2, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), model_number, color_info, storage_info',
+      'id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), model_number, color_info, storage_info',
+      'id, serial_number, imei, status, sale_price, owner_org_id, product_id, products(name)',
+      'id, serial_number, imei, status, sale_price, owner_org_id',
+    ];
+    for (const sel of queries) {
+      const { data, error } = await supabase
+        .from('stock_items').select(sel)
+        .order('created_at', { ascending: false }).limit(500);
+      if (!error && data) { setStocks(data); return; }
+    }
+    setStocks([]);
   }
 
   async function loadAllSales() {
@@ -1158,74 +1143,78 @@ export default function CorpPage() {
     loadProducts();
   }
 
-  /* ── ADD STOCK (1 equipo: IMEI1, IMEI2, Serial) ── */
+  /* ── ADD STOCK (lote: múltiples equipos, IMEI1+IMEI2+Serial por equipo) ── */
   async function addStock(e) {
     e.preventDefault();
     if (!form.product_id) { showToast('Selecciona un modelo primero', 'err'); return; }
-    const imei1 = form.imei1?.trim() || '';
-    const imei2 = form.imei2?.trim() || null;
-    const serialNum = form.serial_number?.trim() || null;
-    if (!imei1 && !serialNum) { showToast('Ingresa al menos el IMEI 1 o el número de serie', 'err'); return; }
+    const devices = (form.devices || [{ imei1:'', imei2:'', serial:'' }]);
+    const validDevices = devices.filter(d => d.imei1?.trim() || d.serial?.trim());
+    if (validDevices.length === 0) { showToast('Ingresa al menos IMEI 1 o N° serie en un equipo', 'err'); return; }
 
-    const purchasePrice  = parseFloat(form.purchase_price)   || null;
-    const resellerPrice  = parseFloat(form.reseller_price)   || null;
-    const salePrice      = parseFloat(form.sale_price_stock) || null;
-    const colorInfo      = form.color_info?.trim()   || null;
-    const storageInfo    = form.storage_info?.trim() || null;
+    const purchasePrice = parseFloat(form.purchase_price)   || null;
+    const resellerPrice = parseFloat(form.reseller_price)   || null;
+    const salePrice     = parseFloat(form.sale_price_stock) || null;
+    const colorInfo     = form.color_info?.trim()   || null;
+    const storageInfo   = form.storage_info?.trim() || null;
 
-    // ── 1. Crear lote de compra (opcional) ──
+    // ── 1. Lote de compra (opcional) ──
     let lotId = null;
     const numeroLote = form.lot_numero?.trim() ||
       `LOTE-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
     try {
-      const lotPayload = {
-        corp_id:        CORP_ID,
-        numero_lote:    numeroLote,
-        proveedor:      form.lot_proveedor?.trim() || null,
-        numero_factura: form.lot_factura?.trim()   || null,
-        fecha_compra:   form.lot_fecha             || new Date().toISOString().split('T')[0],
-        total_unidades: 1,
-        costo_total:    purchasePrice || 0,
-        notas:          form.lot_notas?.trim()     || null,
-      };
       const { data: lotData, error: lotError } = await supabase
-        .from('purchase_lots').insert(lotPayload).select('id').single();
+        .from('purchase_lots')
+        .insert({
+          corp_id: CORP_ID, numero_lote: numeroLote,
+          proveedor: form.lot_proveedor?.trim() || null,
+          numero_factura: form.lot_factura?.trim() || null,
+          fecha_compra: form.lot_fecha || new Date().toISOString().split('T')[0],
+          total_unidades: validDevices.length,
+          costo_total: purchasePrice ? purchasePrice * validDevices.length : 0,
+          notas: form.lot_notas?.trim() || null,
+        }).select('id').single();
       if (!lotError && lotData?.id) lotId = lotData.id;
     } catch (_) { /* tabla no existe aún */ }
 
-    // ── 2. Insertar equipo ──
-    const row = {
-      owner_org_id:   form.owner_org_id || CORP_ID,
-      product_id:     form.product_id,
-      imei:           imei1 || null,
-      serial_number:  serialNum,
-      status:         'available',
-      purchase_price: purchasePrice,
-      reseller_price: resellerPrice,
-      sale_price:     salePrice,
-      color_info:     colorInfo,
-      storage_info:   storageInfo,
+    // ── 2. Construir filas ──
+    const buildRow = (d, withImei2) => {
+      const row = {
+        owner_org_id:   form.owner_org_id || CORP_ID,
+        product_id:     form.product_id,
+        imei:           d.imei1?.trim() || null,
+        serial_number:  d.serial?.trim() || null,
+        status:         'available',
+        purchase_price: purchasePrice,
+        reseller_price: resellerPrice,
+        sale_price:     salePrice,
+        color_info:     colorInfo,
+        storage_info:   storageInfo,
+      };
+      if (lotId) row.lot_id = lotId;
+      if (withImei2 && d.imei2?.trim()) row.imei2 = d.imei2.trim();
+      return row;
     };
-    if (lotId) row.lot_id = lotId;
-    // imei2 — solo si la columna existe (post-migración IMEI2)
-    if (imei2) row.imei2 = imei2;
 
-    const { error } = await supabase.from('stock_items').insert(row);
+    // Intento con imei2
+    let rows = validDevices.map(d => buildRow(d, true));
+    const { error } = await supabase.from('stock_items').insert(rows);
     if (error) {
-      if (lotId) await supabase.from('purchase_lots').delete().eq('id', lotId);
-      // Si imei2 no existe aún como columna, reintentar sin ella
       if (error.message?.includes('imei2')) {
-        delete row.imei2;
-        const { error: e2 } = await supabase.from('stock_items').insert(row);
-        if (e2) { showToast('Error: ' + e2.message, 'err'); return; }
+        // imei2 columna no existe aún — reintentar sin ella
+        rows = validDevices.map(d => buildRow(d, false));
+        const { error: e2 } = await supabase.from('stock_items').insert(rows);
+        if (e2) {
+          if (lotId) await supabase.from('purchase_lots').delete().eq('id', lotId);
+          showToast('Error: ' + e2.message, 'err'); return;
+        }
       } else {
-        showToast('Error al agregar stock: ' + error.message, 'err');
-        return;
+        if (lotId) await supabase.from('purchase_lots').delete().eq('id', lotId);
+        showToast('Error: ' + error.message, 'err'); return;
       }
     }
 
-    const loteMsg = lotId ? ` — Lote: ${numeroLote}` : '';
-    showToast(`Equipo agregado${loteMsg} ✓`);
+    const loteMsg = lotId ? ` — ${numeroLote}` : '';
+    showToast(`${validDevices.length} equipo${validDevices.length > 1 ? 's' : ''} agregado${validDevices.length > 1 ? 's' : ''}${loteMsg} ✓`);
     setModal(null); setForm({}); setProdSearch(''); setStockCatFilter('all');
     loadGlobalStock(); loadKpis();
   }
@@ -2169,16 +2158,23 @@ export default function CorpPage() {
                 Sin equipos en stock. Agrega el primer equipo con el botón de arriba.
               </div>
             ) : (() => {
-              // Filtrar por búsqueda + GB + Color
-              const searchLower = stockSearch.toLowerCase();
+              // Filtrar: búsqueda directa sobre IMEI/serial + GB + Color
+              const sq = (stockSearch || '').trim().toLowerCase();
               const filteredStocks = stocks.filter(s => {
-                if (stockSearch) {
-                  const haystack = [s.imei, s.imei2, s.serial_number, s.products?.name, s.model_number]
-                    .filter(Boolean).join(' ').toLowerCase();
-                  if (!haystack.includes(searchLower)) return false;
+                // Búsqueda — compara contra IMEI1, IMEI2, serial, nombre producto
+                if (sq) {
+                  const fields = [
+                    String(s.imei || ''),
+                    String(s.imei2 || ''),
+                    String(s.serial_number || ''),
+                    String(s.products?.name || ''),
+                    String(s.model_number || ''),
+                  ];
+                  const found = fields.some(f => f.toLowerCase().includes(sq));
+                  if (!found) return false;
                 }
-                if (stockGbFilter !== 'all' && s.storage_info !== stockGbFilter) return false;
-                if (stockColorFilter !== 'all' && s.color_info !== stockColorFilter) return false;
+                if (stockGbFilter    !== 'all' && s.storage_info !== stockGbFilter)    return false;
+                if (stockColorFilter !== 'all' && s.color_info   !== stockColorFilter) return false;
                 return true;
               });
 
@@ -5091,10 +5087,20 @@ export default function CorpPage() {
 
             {/* ── MODAL: Agregar Stock (multi-IMEI) ── */}
             {modal === 'add-stock' && (() => {
-              const selProd  = products.find(p => p.id === form.product_id);
+              const selProd = products.find(p => p.id === form.product_id);
               const filteredProds = products.filter(p =>
                 !prodSearch || p.name.toLowerCase().includes(prodSearch.toLowerCase())
               );
+              const devices = form.devices || [{ imei1:'', imei2:'', serial:'' }];
+              const validCount = devices.filter(d => d.imei1?.trim() || d.serial?.trim()).length;
+
+              const updateDevice = (idx, field, val) => {
+                const updated = devices.map((d, i) => i === idx ? { ...d, [field]: val } : d);
+                setForm(f => ({ ...f, devices: updated }));
+              };
+              const addDevice = () => setForm(f => ({ ...f, devices: [...(f.devices || [{ imei1:'', imei2:'', serial:'' }]), { imei1:'', imei2:'', serial:'' }] }));
+              const removeDevice = (idx) => setForm(f => ({ ...f, devices: (f.devices || []).filter((_, i) => i !== idx) }));
+
               return (
                 <>
                   <div className="modal-title">Agregar equipos al stock</div>
@@ -5118,35 +5124,22 @@ export default function CorpPage() {
                             <div style={{ fontWeight:700, fontSize:14 }}>{selProd.name}</div>
                             {selProd.subcategory && <div style={{ fontSize:11, color:'var(--text3)' }}>Serie {selProd.subcategory}</div>}
                           </div>
-                          <button type="button" onClick={() => { setForm(f=>({...f, product_id:'', imei1:'', imei2:'', serial_number:'', color_info:'', storage_info:''})); setProdSearch(''); }}
+                          <button type="button" onClick={() => { setForm(f=>({...f, product_id:'', devices:[{imei1:'',imei2:'',serial:''}], color_info:'', storage_info:''})); setProdSearch(''); }}
                             style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 4px' }}>✕</button>
                         </div>
                       ) : (
                         <>
-                          <input
-                            className="form-input"
-                            placeholder="Buscar modelo..."
-                            value={prodSearch}
-                            onChange={e => setProdSearch(e.target.value)}
-                            autoComplete="off"
-                            autoFocus
-                          />
+                          <input className="form-input" placeholder="Buscar modelo..." value={prodSearch}
+                            onChange={e => setProdSearch(e.target.value)} autoComplete="off" autoFocus />
                           {filteredProds.length > 0 && (
                             <div style={{ border:'1px solid var(--border)', borderRadius:10, marginTop:4, background:'var(--card)', maxHeight:200, overflowY:'auto' }}>
                               {filteredProds.map((p, i) => (
-                                <div key={p.id}
-                                  onMouseDown={() => { setForm(f => ({ ...f, product_id: p.id })); setProdSearch(''); }}
-                                  style={{
-                                    padding:'10px 14px', cursor:'pointer', display:'flex', alignItems:'center', gap:10,
-                                    borderBottom: i < filteredProds.length-1 ? '1px solid var(--border)' : 'none',
-                                  }}
+                                <div key={p.id} onMouseDown={() => { setForm(f => ({ ...f, product_id: p.id })); setProdSearch(''); }}
+                                  style={{ padding:'10px 14px', cursor:'pointer', borderBottom: i < filteredProds.length-1 ? '1px solid var(--border)' : 'none' }}
                                   onMouseEnter={e => e.currentTarget.style.background='rgba(10,132,255,0.07)'}
-                                  onMouseLeave={e => e.currentTarget.style.background='transparent'}
-                                >
-                                  <div style={{ flex:1 }}>
-                                    <div style={{ fontWeight:600, fontSize:13 }}>{p.name}</div>
-                                    {p.subcategory && <div style={{ fontSize:11, color:'var(--text3)' }}>Serie {p.subcategory}</div>}
-                                  </div>
+                                  onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                  <div style={{ fontWeight:600, fontSize:13 }}>{p.name}</div>
+                                  {p.subcategory && <div style={{ fontSize:11, color:'var(--text3)' }}>Serie {p.subcategory}</div>}
                                 </div>
                               ))}
                             </div>
@@ -5155,184 +5148,126 @@ export default function CorpPage() {
                       )}
                     </div>
 
-                    {/* Lote + Precios — aparecen cuando se elige modelo */}
-                    {selProd && (
-                      <>
-                        {/* ── Sección Lote de Compra ── */}
-                        <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'12px 14px', marginBottom:10 }}>
-                          <div style={{ fontSize:11, fontWeight:700, color:'#1a56db', textTransform:'uppercase', letterSpacing:0.8, marginBottom:10 }}>
-                            Lote de compra
-                          </div>
+                    {selProd && (<>
+                      {/* ── Color + GB (compartido para todo el lote) ── */}
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label className="form-label">Color del lote</label>
+                          {selProd.default_colors?.length > 0 ? (
+                            <select className="form-select" value={form.color_info||''} onChange={e=>setForm({...form,color_info:e.target.value})}>
+                              <option value="">— Seleccionar —</option>
+                              {selProd.default_colors.map(c=><option key={c} value={c}>{c}</option>)}
+                            </select>
+                          ) : (
+                            <input className="form-input" placeholder="Ej: Negro, Blanco..." value={form.color_info||''} onChange={e=>setForm({...form,color_info:e.target.value})} />
+                          )}
+                        </div>
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label className="form-label">Almacenamiento / GB</label>
+                          {selProd.default_capacities?.length > 0 ? (
+                            <select className="form-select" value={form.storage_info||''} onChange={e=>setForm({...form,storage_info:e.target.value})}>
+                              <option value="">— Seleccionar —</option>
+                              {selProd.default_capacities.map(c=><option key={c} value={c}>{c}</option>)}
+                            </select>
+                          ) : (
+                            <input className="form-input" placeholder="Ej: 128GB, 256GB..." value={form.storage_info||''} onChange={e=>setForm({...form,storage_info:e.target.value})} />
+                          )}
+                        </div>
+                      </div>
 
-                          {/* Fila 1: Lote + Proveedor */}
-                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
-                            <div>
-                              <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>N° de Lote</label>
-                              <input
-                                className="form-input"
-                                placeholder={`LOTE-${new Date().getFullYear()}-001`}
-                                value={form.lot_numero || ''}
-                                onChange={e => setForm({ ...form, lot_numero: e.target.value })}
-                                style={{ fontSize:13, fontWeight:700 }}
-                              />
-                              <div style={{ fontSize:10, color:'#9ca3af', marginTop:2 }}>Dejar vacío = auto</div>
-                            </div>
-                            <div>
-                              <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Proveedor</label>
-                              <input
-                                className="form-input"
-                                placeholder="Nombre del proveedor"
-                                value={form.lot_proveedor || ''}
-                                onChange={e => setForm({ ...form, lot_proveedor: e.target.value })}
-                                style={{ fontSize:13 }}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Fila 2: Factura + Fecha */}
-                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
-                            <div>
-                              <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>N° Factura / Boleta</label>
-                              <input
-                                className="form-input"
-                                placeholder="F001-00123456"
-                                value={form.lot_factura || ''}
-                                onChange={e => setForm({ ...form, lot_factura: e.target.value })}
-                                style={{ fontSize:13 }}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Fecha de compra</label>
-                              <input
-                                className="form-input" type="date"
-                                value={form.lot_fecha || new Date().toISOString().split('T')[0]}
-                                onChange={e => setForm({ ...form, lot_fecha: e.target.value })}
-                                style={{ fontSize:13 }}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Notas del lote */}
+                      {/* ── Lote de compra ── */}
+                      <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'12px 14px', marginBottom:10 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:'#1a56db', textTransform:'uppercase', letterSpacing:0.8, marginBottom:8 }}>Lote de compra</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
                           <div>
-                            <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Notas del lote <span style={{ color:'#9ca3af', fontWeight:400 }}>(opcional)</span></label>
-                            <input
-                              className="form-input"
-                              placeholder="Compra mensual USA, importación directa..."
-                              value={form.lot_notas || ''}
-                              onChange={e => setForm({ ...form, lot_notas: e.target.value })}
-                              style={{ fontSize:12 }}
-                            />
+                            <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:3 }}>N° de Lote</label>
+                            <input className="form-input" placeholder={`LOTE-${new Date().getFullYear()}-001`} value={form.lot_numero||''} onChange={e=>setForm({...form,lot_numero:e.target.value})} style={{ fontSize:13 }} />
+                            <div style={{ fontSize:10, color:'#9ca3af', marginTop:2 }}>Vacío = auto</div>
+                          </div>
+                          <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:3 }}>Proveedor</label>
+                            <input className="form-input" placeholder="Nombre del proveedor" value={form.lot_proveedor||''} onChange={e=>setForm({...form,lot_proveedor:e.target.value})} style={{ fontSize:13 }} />
                           </div>
                         </div>
-
-                        {/* ── Precios ── */}
-                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:4 }}>
-                          <div className="form-group" style={{ marginBottom:0 }}>
-                            <label className="form-label">Precio compra (S/)</label>
-                            <input
-                              className="form-input" type="number" min="0" step="0.01"
-                              placeholder="0.00"
-                              value={form.purchase_price || ''}
-                              onChange={e => setForm({ ...form, purchase_price: e.target.value })}
-                            />
-                            <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Lo que pagaste</div>
-                          </div>
-                          <div className="form-group" style={{ marginBottom:0 }}>
-                            <label className="form-label">Precio revendedor (S/)</label>
-                            <input
-                              className="form-input" type="number" min="0" step="0.01"
-                              placeholder="0.00"
-                              value={form.reseller_price || ''}
-                              onChange={e => setForm({ ...form, reseller_price: e.target.value })}
-                            />
-                            <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Precio mayorista</div>
-                          </div>
-                          <div className="form-group" style={{ marginBottom:0 }}>
-                            <label className="form-label">Precio venta (S/)</label>
-                            <input
-                              className="form-input" type="number" min="0" step="0.01"
-                              placeholder="0.00"
-                              value={form.sale_price_stock || ''}
-                              onChange={e => setForm({ ...form, sale_price_stock: e.target.value })}
-                            />
-                            <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>Precio al público</div>
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Seriales + Color + GB — solo después de elegir modelo */}
-                    {selProd && (
-                      <>
-                        {/* IMEI 1 + IMEI 2 */}
-                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:0 }}>
-                          <div className="form-group">
-                            <label className="form-label">IMEI 1 <span style={{ color:'#dc2626' }}>*</span></label>
-                            <input
-                              className="form-input"
-                              placeholder="352999111111111"
-                              value={form.imei1 || ''}
-                              onChange={e => setForm({ ...form, imei1: e.target.value })}
-                              style={{ fontFamily:'monospace', fontSize:13, letterSpacing:0.5 }}
-                              maxLength={20}
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label">IMEI 2 <span style={{ color:'#9ca3af', fontWeight:400 }}>(opcional)</span></label>
-                            <input
-                              className="form-input"
-                              placeholder="352999222222222"
-                              value={form.imei2 || ''}
-                              onChange={e => setForm({ ...form, imei2: e.target.value })}
-                              style={{ fontFamily:'monospace', fontSize:13, letterSpacing:0.5 }}
-                              maxLength={20}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Serial Number */}
-                        <div className="form-group">
-                          <label className="form-label">N° de Serie <span style={{ color:'#9ca3af', fontWeight:400 }}>(opcional)</span></label>
-                          <input
-                            className="form-input"
-                            placeholder="DNXXXXXXXX"
-                            value={form.serial_number || ''}
-                            onChange={e => setForm({ ...form, serial_number: e.target.value })}
-                            style={{ fontFamily:'monospace', fontSize:13, letterSpacing:0.5 }}
-                          />
-                        </div>
-
-                        {/* Color + Almacenamiento */}
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-                          <div className="form-group">
-                            <label className="form-label">Color</label>
-                            {selProd.default_colors?.length > 0 ? (
-                              <select className="form-select" value={form.color_info || ''} onChange={e => setForm({ ...form, color_info: e.target.value })}>
-                                <option value="">— Seleccionar —</option>
-                                {selProd.default_colors.map(c => <option key={c} value={c}>{c}</option>)}
-                              </select>
-                            ) : (
-                              <input className="form-input" placeholder="Ej: Negro, Blanco..." value={form.color_info || ''} onChange={e => setForm({ ...form, color_info: e.target.value })} />
-                            )}
+                          <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:3 }}>N° Factura / Boleta</label>
+                            <input className="form-input" placeholder="F001-00123456" value={form.lot_factura||''} onChange={e=>setForm({...form,lot_factura:e.target.value})} style={{ fontSize:13 }} />
                           </div>
-                          <div className="form-group">
-                            <label className="form-label">Almacenamiento / GB</label>
-                            {selProd.default_capacities?.length > 0 ? (
-                              <select className="form-select" value={form.storage_info || ''} onChange={e => setForm({ ...form, storage_info: e.target.value })}>
-                                <option value="">— Seleccionar —</option>
-                                {selProd.default_capacities.map(c => <option key={c} value={c}>{c}</option>)}
-                              </select>
-                            ) : (
-                              <input className="form-input" placeholder="Ej: 128GB, 256GB..." value={form.storage_info || ''} onChange={e => setForm({ ...form, storage_info: e.target.value })} />
-                            )}
+                          <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:'#374151', display:'block', marginBottom:3 }}>Fecha de compra</label>
+                            <input className="form-input" type="date" value={form.lot_fecha||new Date().toISOString().split('T')[0]} onChange={e=>setForm({...form,lot_fecha:e.target.value})} style={{ fontSize:13 }} />
                           </div>
                         </div>
-                      </>
-                    )}
+                      </div>
 
-                    <button className="btn btn-primary" type="submit" disabled={!selProd || (!form.imei1?.trim() && !form.serial_number?.trim())}
-                      style={{ opacity: (!selProd || (!form.imei1?.trim() && !form.serial_number?.trim())) ? 0.4 : 1 }}>
-                      Agregar equipo al stock
+                      {/* ── Precios ── */}
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:12 }}>
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label className="form-label">P. Compra (S/)</label>
+                          <input className="form-input" type="number" min="0" step="0.01" placeholder="0.00" value={form.purchase_price||''} onChange={e=>setForm({...form,purchase_price:e.target.value})} />
+                        </div>
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label className="form-label">P. Revendedor (S/)</label>
+                          <input className="form-input" type="number" min="0" step="0.01" placeholder="0.00" value={form.reseller_price||''} onChange={e=>setForm({...form,reseller_price:e.target.value})} />
+                        </div>
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label className="form-label">P. Venta (S/)</label>
+                          <input className="form-input" type="number" min="0" step="0.01" placeholder="0.00" value={form.sale_price_stock||''} onChange={e=>setForm({...form,sale_price_stock:e.target.value})} />
+                        </div>
+                      </div>
+
+                      {/* ── Lista de equipos ── */}
+                      <div style={{ marginBottom:8 }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                          <label className="form-label" style={{ margin:0 }}>
+                            Equipos del lote
+                            {validCount > 0 && <span style={{ marginLeft:8, fontSize:12, fontWeight:700, color:'#1a56db', background:'#eff6ff', padding:'1px 8px', borderRadius:5, border:'1px solid #bfdbfe' }}>{validCount} equipo{validCount>1?'s':''}</span>}
+                          </label>
+                          <button type="button" onClick={addDevice}
+                            style={{ padding:'4px 12px', borderRadius:6, border:'1px solid #1a56db', background:'#eff6ff', color:'#1a56db', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                            + Agregar equipo
+                          </button>
+                        </div>
+
+                        {/* Cabecera columnas */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 32px', gap:4, padding:'4px 6px', background:'#f3f4f6', borderRadius:'6px 6px 0 0', fontSize:10, fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5 }}>
+                          <span>IMEI 1 *</span><span>IMEI 2</span><span>N° Serie</span><span></span>
+                        </div>
+
+                        {devices.map((d, idx) => (
+                          <div key={idx} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 32px', gap:4, padding:'4px 6px', background: idx%2===0?'#fff':'#fafafa', border:'1px solid #e5e7eb', borderTop:'none', borderRadius: idx===devices.length-1 ? '0 0 6px 6px' : 0 }}>
+                            <input
+                              style={{ padding:'6px 8px', border:'1px solid #d1d5db', borderRadius:5, fontSize:12, fontFamily:'monospace', outline:'none', width:'100%', boxSizing:'border-box', background: d.imei1?.trim()?'#f0fdf4':'#fff' }}
+                              placeholder="352999..."
+                              value={d.imei1||''}
+                              onChange={e=>updateDevice(idx,'imei1',e.target.value)}
+                            />
+                            <input
+                              style={{ padding:'6px 8px', border:'1px solid #d1d5db', borderRadius:5, fontSize:12, fontFamily:'monospace', outline:'none', width:'100%', boxSizing:'border-box' }}
+                              placeholder="opcional"
+                              value={d.imei2||''}
+                              onChange={e=>updateDevice(idx,'imei2',e.target.value)}
+                            />
+                            <input
+                              style={{ padding:'6px 8px', border:'1px solid #d1d5db', borderRadius:5, fontSize:12, fontFamily:'monospace', outline:'none', width:'100%', boxSizing:'border-box' }}
+                              placeholder="DNXXX..."
+                              value={d.serial||''}
+                              onChange={e=>updateDevice(idx,'serial',e.target.value)}
+                            />
+                            <button type="button" onClick={()=>removeDevice(idx)} disabled={devices.length===1}
+                              style={{ padding:'4px', borderRadius:5, border:'none', background: devices.length===1?'transparent':'#fee2e2', color: devices.length===1?'#d1d5db':'#dc2626', cursor: devices.length===1?'default':'pointer', fontSize:14, fontWeight:700 }}>
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                        <div style={{ fontSize:11, color:'#9ca3af', marginTop:4 }}>IMEI 1 o N° Serie es obligatorio por equipo. IMEI 2 es opcional (dual SIM).</div>
+                      </div>
+                    </>)}
+
+                    <button className="btn btn-primary" type="submit" disabled={!selProd || validCount === 0}
+                      style={{ opacity: (!selProd || validCount === 0) ? 0.4 : 1 }}>
+                      {validCount > 0 ? `Guardar ${validCount} equipo${validCount>1?'s':''} al stock` : 'Agregar equipos al stock'}
                     </button>
                   </form>
                 </>
