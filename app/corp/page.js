@@ -2148,193 +2148,156 @@ export default function CorpPage() {
             ? products
             : products.filter(p => (p.category || 'otro') === catFilter);
 
+          // Filtros adicionales
+          const gbFilter   = form._gb_filter   || 'all';
+          const subFilter  = form._sub_filter  || 'all';
+          const setGbFilter  = v => setForm(f => ({ ...f, _gb_filter:  v }));
+          const setSubFilter = v => setForm(f => ({ ...f, _sub_filter: v }));
+
+          // Subcategorías únicas presentes en los productos filtrados por categoría
+          const subsAvail = [...new Set(
+            (catFilter === 'all' ? products : products.filter(p => (p.category||'otro') === catFilter))
+              .map(p => p.subcategory).filter(Boolean)
+          )].sort();
+
+          // GB únicos presentes
+          const gbsAvail = [...new Set(
+            products.flatMap(p => p.default_capacities || []).filter(Boolean)
+          )].sort((a, b) => {
+            const n = s => parseFloat(s) * (s.includes('TB') ? 1024 : 1);
+            return n(a) - n(b);
+          });
+
+          // Filtrar productos
+          const visible = products
+            .filter(p => catFilter === 'all' || (p.category||'otro') === catFilter)
+            .filter(p => subFilter === 'all' || p.subcategory === subFilter)
+            .filter(p => gbFilter  === 'all' || (p.default_capacities||[]).includes(gbFilter));
+
+          const PILL = (active, onClick, label) => (
+            <button type="button" onClick={onClick} style={{
+              flexShrink: 0, padding: '5px 13px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+              border: `1px solid ${active ? '#0A84FF' : 'var(--border)'}`,
+              background: active ? 'rgba(10,132,255,0.12)' : 'transparent',
+              color: active ? '#0A84FF' : 'var(--text3)',
+              cursor: 'pointer', transition: 'all .15s',
+            }}>{label}</button>
+          );
+
           return (
             <div style={{ padding: '16px' }}>
+
               {/* Header */}
               <div className="section-header">
-                <div className="section-title">🗂️ Catálogo</div>
-                <button className="section-action"
-                  onClick={() => { setModal('add-product'); setForm({ emoji: '📱', category: 'iphone' }); }}>
-                  + Nuevo
+                <div className="section-title" style={{ fontSize: 16, fontWeight: 700 }}>Catálogo de modelos</div>
+                <button className="section-action" onClick={() => { setModal('add-product'); setForm({ emoji: '📱', category: 'iphone' }); }}>
+                  + Nuevo modelo
                 </button>
               </div>
 
-              {/* Tip */}
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, padding: '10px 14px', background: 'rgba(10,132,255,0.07)', borderRadius: 12, border: '1px solid rgba(10,132,255,0.18)' }}>
-                💡 Cada producto es una <b>plantilla de modelo</b>. Al registrar un equipo eliges el modelo y solo ingresas IMEI, color, GB y condición.
-              </div>
-
-              {/* ── Agregar Rápido por Categoría ── */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                  ➕ Nuevo modelo por categoría
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
-                  {[
-                    { id:'iphone',    lbl:'iPhone',    ico:'📱', color:'#0A84FF', emoji:'📱' },
-                    { id:'ipad',      lbl:'iPad',      ico:'📟', color:'#5E5CE6', emoji:'📟' },
-                    { id:'mac',       lbl:'Mac',       ico:'💻', color:'#636366', emoji:'💻' },
-                    { id:'airpods',   lbl:'AirPods',   ico:'🎧', color:'#30D158', emoji:'🎧' },
-                    { id:'samsung',   lbl:'Samsung',   ico:'📲', color:'#FF9F0A', emoji:'📲' },
-                    { id:'accesorio', lbl:'Accesorios',ico:'🔌', color:'#BF5AF2', emoji:'🔌' },
-                    { id:'otro',      lbl:'Otro',      ico:'📦', color:'#8E8E93', emoji:'📦' },
-                  ].map(c => (
-                    <button key={c.id} type="button"
-                      onClick={() => { setModal('add-product'); setForm({ emoji: c.emoji, category: c.id, _cat_filter: c.id }); }}
-                      style={{
-                        padding: '10px 6px', borderRadius: 14, border: `1.5px dashed ${c.color}55`,
-                        background: `${c.color}0d`, cursor: 'pointer', textAlign: 'center',
-                        color: c.color, fontWeight: 700, fontSize: 11, transition: 'all .15s',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background=`${c.color}22`; e.currentTarget.style.borderColor=c.color; }}
-                      onMouseLeave={e => { e.currentTarget.style.background=`${c.color}0d`; e.currentTarget.style.borderColor=`${c.color}55`; }}>
-                      <div style={{ fontSize: 20, marginBottom: 3 }}>{c.ico}</div>
-                      <div>{c.lbl}</div>
-                      <div style={{ fontSize: 10, opacity: 0.7, marginTop: 1 }}>
-                        {products.filter(p => (p.category||'otro') === c.id).length} modelos
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Filtro de categorías */}
-              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 14, paddingBottom: 4 }}>
-                {CATS.map(c => (
-                  <button key={c.id} type="button"
-                    onClick={() => setCatFilter(c.id)}
-                    style={{
-                      flexShrink: 0, padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-                      border: `1.5px solid ${catFilter === c.id ? (CAT_COLORS[c.id] || '#0A84FF') : 'var(--border)'}`,
-                      background: catFilter === c.id ? `${CAT_COLORS[c.id] || '#0A84FF'}20` : 'transparent',
-                      color: catFilter === c.id ? (CAT_COLORS[c.id] || '#0A84FF') : 'var(--text-muted)',
-                      cursor: 'pointer',
-                    }}>
-                    {c.ico} {c.lbl}
-                    {c.id !== 'all' && (
-                      <span style={{ marginLeft: 5, opacity: 0.7 }}>
-                        {products.filter(p => (p.category || 'otro') === c.id).length}
-                      </span>
-                    )}
-                  </button>
+              {/* Filtro categoría */}
+              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 10, paddingBottom: 2 }}>
+                {CATS.map(c => PILL(catFilter === c.id, () => { setCatFilter(c.id); setSubFilter('all'); setGbFilter('all'); },
+                  c.id === 'all' ? 'Todos' : `${c.lbl}${c.id !== 'all' ? ' ' + products.filter(p=>(p.category||'otro')===c.id).length : ''}`
                 ))}
               </div>
 
-              {/* Grid de productos */}
+              {/* Filtro subcategoría (serie) — solo si hay */}
+              {subsAvail.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 10, paddingBottom: 2 }}>
+                  {PILL(subFilter === 'all', () => setSubFilter('all'), 'Todas las series')}
+                  {subsAvail.map(s => PILL(subFilter === s, () => setSubFilter(s), `Serie ${s}`))}
+                </div>
+              )}
+
+              {/* Filtro GB */}
+              {gbsAvail.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 14, paddingBottom: 2 }}>
+                  {PILL(gbFilter === 'all', () => setGbFilter('all'), 'Todos los GB')}
+                  {gbsAvail.map(g => PILL(gbFilter === g, () => setGbFilter(g), g))}
+                </div>
+              )}
+
+              {/* Lista de productos */}
               {products.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-                  <div style={{ fontSize: 56, marginBottom: 14 }}>📦</div>
-                  <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 6 }}>Sin productos aún</div>
-                  <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Agrega el primer modelo base al catálogo</div>
+                  <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 6 }}>Sin modelos aún</div>
+                  <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Crea el primer modelo base del catálogo</div>
                   <button className="section-action" onClick={() => { setModal('add-product'); setForm({ emoji: '📱', category: 'iphone' }); }}>
-                    + Crear primer producto
+                    + Crear primer modelo
                   </button>
                 </div>
               ) : visible.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)' }}>Sin productos en esta categoría</div>
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text3)', fontSize: 13 }}>
+                  Sin modelos con estos filtros
+                </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {visible.map(p => {
-                    const catColor = CAT_COLORS[p.category || 'otro'] || '#8E8E93';
-                    const catInfo  = CATS.find(c => c.id === (p.category || 'otro'));
+                    const catInfo = CATS.find(c => c.id === (p.category || 'otro'));
                     return (
                       <div key={p.id} style={{
                         background: 'var(--card)',
                         border: '1px solid var(--border)',
-                        borderRadius: 20, overflow: 'hidden',
-                        display: 'flex', flexDirection: 'column',
-                        transition: 'box-shadow .2s, transform .2s',
-                        boxShadow: 'var(--shadow-sm)',
+                        borderRadius: 14,
+                        display: 'flex', alignItems: 'center', gap: 14,
+                        padding: '12px 14px',
+                        transition: 'border-color .15s',
                       }}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(10,132,255,0.35)'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
                       >
-                        {/* Imagen / emoji centrado */}
+                        {/* Miniatura */}
                         <div style={{
-                          height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: p.image_url ? 'var(--card2)' : `${catColor}0d`,
-                          borderBottom: `1px solid ${catColor}22`,
-                          position: 'relative',
+                          width: 56, height: 56, flexShrink: 0, borderRadius: 10,
+                          background: 'var(--card2)', border: '1px solid var(--border)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          overflow: 'hidden',
                         }}>
                           {p.image_url
-                            ? <img
-                                src={p.image_url}
-                                alt={p.name}
-                                style={{ maxHeight: 120, maxWidth: '85%', objectFit: 'contain' }}
-                                onError={e => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                            : null
+                            ? <img src={p.image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={e => { e.target.style.display='none'; }} />
+                            : <span style={{ fontSize: 26 }}>{p.emoji || '📦'}</span>
                           }
-                          <span style={{
-                            fontSize: 56,
-                            display: p.image_url ? 'none' : 'flex',
-                            alignItems: 'center', justifyContent: 'center',
-                          }}>{p.emoji || '📦'}</span>
-                          {/* Badge categoría */}
-                          <span style={{
-                            position: 'absolute', top: 10, right: 10,
-                            fontSize: 10, padding: '3px 8px', borderRadius: 20,
-                            background: `${catColor}22`, color: catColor, fontWeight: 700,
-                          }}>
-                            {catInfo?.ico} {catInfo?.lbl || 'Otro'}
-                          </span>
                         </div>
 
                         {/* Info */}
-                        <div style={{ padding: '14px 16px', flex: 1 }}>
-                          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
-                          {p.subcategory && (
-                            <div style={{ fontSize: 10, color: '#0A84FF', fontWeight: 700, marginBottom: 3 }}>
-                              Serie {p.subcategory}
-                            </div>
-                          )}
-                          {p.chip && (
-                            <div style={{ fontSize: 11, color: '#FF9F0A', fontWeight: 700, marginBottom: 4 }}>⚡ {p.chip}</div>
-                          )}
-                          {p.description && (
-                            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                              {p.description}
-                            </div>
-                          )}
-                          {p.sale_price > 0 && (
-                            <div style={{ fontSize: 14, fontWeight: 800, color: '#30D158' }}>
-                              S/ {parseFloat(p.sale_price).toFixed(2)}
-                            </div>
-                          )}
-
-                          {/* Chips colores/capacidades */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {p.name}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {catInfo && <span>{catInfo.lbl}</span>}
+                            {p.subcategory && <span style={{ color: '#0A84FF', fontWeight: 600 }}>Serie {p.subcategory}</span>}
+                            {p.chip && <span>{p.chip}</span>}
+                            {p.sale_price > 0 && <span style={{ fontWeight: 700 }}>S/ {parseFloat(p.sale_price).toFixed(0)}</span>}
+                          </div>
+                          {/* Tags GB y colores */}
                           {((p.default_capacities?.length > 0) || (p.default_colors?.length > 0)) && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-                              {(p.default_capacities || []).slice(0, 4).map((c, i) => (
-                                <span key={i} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 20, background: 'rgba(255,159,10,0.14)', color: '#FF9F0A', fontWeight: 700 }}>{c}</span>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                              {(p.default_capacities || []).slice(0, 5).map((c, i) => (
+                                <span key={i} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'rgba(10,132,255,0.1)', color: '#0A84FF', fontWeight: 600 }}>{c}</span>
                               ))}
                               {(p.default_colors || []).slice(0, 4).map((c, i) => (
-                                <span key={i} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 20, background: 'rgba(191,90,242,0.14)', color: '#BF5AF2', fontWeight: 700 }}>{c}</span>
+                                <span key={i} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, background: 'var(--card2)', color: 'var(--text3)', fontWeight: 500, border: '1px solid var(--border)' }}>{c}</span>
                               ))}
-                              {((p.default_capacities?.length || 0) + (p.default_colors?.length || 0)) > 8 && (
-                                <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 20, background: 'var(--card2)', color: 'var(--text3)', fontWeight: 700 }}>+más</span>
-                              )}
                             </div>
                           )}
                         </div>
 
                         {/* Acciones */}
-                        <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px' }}>
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                           <button
                             onClick={() => {
                               setForm({ _edit_id: p.id, name: p.name, description: p.description || '', emoji: p.emoji || '📦', sale_price: p.sale_price || '', category: p.category || 'otro', subcategory: p.subcategory || '', chip: p.chip || '', colors_text: (p.default_colors || []).join(', '), capacities_text: (p.default_capacities || []).join(', '), image_url: p.image_url || '', color_images: p.color_images || {}, _cat_filter: form._cat_filter });
                               setModal('add-product');
                             }}
-                            style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: 'rgba(10,132,255,0.12)', color: '#4DA8FF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                            ✏️ Editar
+                            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                            Editar
                           </button>
                           <button
                             onClick={() => deleteProduct(p.id, p.name)}
-                            style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: 'rgba(255,69,58,0.08)', color: '#FF453A', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                            🗑 Borrar
+                            style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(255,69,58,0.25)', background: 'transparent', color: 'rgba(255,69,58,0.7)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                            ✕
                           </button>
                         </div>
                       </div>

@@ -3,7 +3,10 @@
 -- Corre esto en Supabase SQL Editor
 -- ============================================================
 
--- 1. BORRAR TODO EL STOCK Y PRODUCTOS (en orden por FK)
+-- 1. BORRAR TODO EL STOCK Y PRODUCTOS (en orden correcto por FK)
+DELETE FROM sale_items;
+DELETE FROM deliveries;
+DELETE FROM sales;
 DELETE FROM stock_transfer_items;
 DELETE FROM stock_transfers;
 DELETE FROM stock_items;
