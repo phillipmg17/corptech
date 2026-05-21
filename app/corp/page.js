@@ -301,11 +301,24 @@ export default function CorpPage() {
 
   async function loadGlobalStock() {
     // Siempre cargamos TODO — el filtro se aplica en cliente para que los contadores sean correctos
-    const { data } = await supabase
+    // Intentamos con purchase_lots; si la tabla no existe, cargamos sin el join
+    let data = null;
+    const { data: d1, error: e1 } = await supabase
       .from('stock_items')
       .select('id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), imei_check_id, model_number, color_info, storage_info, lot_id, purchase_lots(numero_lote, proveedor, numero_factura)')
       .order('created_at', { ascending: false })
       .limit(500);
+    if (!e1) {
+      data = d1;
+    } else {
+      // Fallback sin purchase_lots (tabla aún no creada)
+      const { data: d2 } = await supabase
+        .from('stock_items')
+        .select('id, serial_number, imei, status, sale_price, purchase_price, reseller_price, owner_org_id, product_id, products(name), imei_check_id, model_number, color_info, storage_info')
+        .order('created_at', { ascending: false })
+        .limit(500);
+      data = d2;
+    }
     setStocks(data || []);
   }
 
