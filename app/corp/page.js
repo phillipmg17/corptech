@@ -66,9 +66,10 @@ export default function CorpPage() {
   const [loadingRate,    setLoadingRate]    = useState(false);
   const [tcMode,         setTcMode]         = useState('auto'); // 'auto' | 'manual'
   const [excelImporting, setExcelImporting] = useState(false);
-  const [invoiceText,    setInvoiceText]    = useState('');   // texto extraído del PDF
-  const [invoiceName,    setInvoiceName]    = useState('');   // nombre del archivo adjunto
-  const [checkInBatch,   setCheckInBatch]   = useState(null); // lote seleccionado para check-in
+  const [invoiceText,    setInvoiceText]    = useState('');
+  const [invoiceName,    setInvoiceName]    = useState('');
+  const [invoiceItems,   setInvoiceItems]   = useState([]);   // líneas detectadas en la factura
+  const [checkInBatch,   setCheckInBatch]   = useState(null);
 
   /* ── FINANZAS ── */
   const [finFx,       setFinFx]       = useState(null);
@@ -614,9 +615,10 @@ export default function CorpPage() {
 
   async function addBatch(e) {
     e.preventDefault();
-    const tc  = parseFloat(usdRate) || parseFloat(form.imp_rate) || 3.75;
-    const C   = calcLanded(form, tc);
-    const { error, data: batchData } = await supabase.from('import_batches').insert({
+    const tc = parseFloat(usdRate) || parseFloat(form.imp_rate) || 3.75;
+    const C  = calcLanded(form, tc);
+
+    const basePayload = {
       org_id:              CORP_ID,
       descripcion:         form.imp_desc || '',
       proveedor:           form.imp_proveedor || '',
@@ -624,80 +626,48 @@ export default function CorpPage() {
       fecha_llegada_est:   form.imp_fecha_llegada || null,
       estado:              'en_transito',
       num_unidades:        parseInt(form.imp_unidades) || 1,
-      costo_usd:           parseFloat(form.imp_compra)   || 0,
-      flete_usd:           parseFloat(form.imp_flete)    || 0,
-      seguro_usd:          parseFloat(form.imp_seguro)   || 0,
-      arancel_pct:         parseFloat(form.imp_arancel)  || 0,
-      igv_pct:             parseFloat(form.imp_igv)      ?? 18,
-      gastos_lima_pen:     parseFloat(form.imp_gastos)   || 0,
+      costo_usd:           parseFloat(form.imp_compra)  || 0,
+      flete_usd:           parseFloat(form.imp_flete)   || 0,
+      seguro_usd:          parseFloat(form.imp_seguro)  || 0,
+      arancel_pct:         parseFloat(form.imp_arancel) || 0,
+      igv_pct:             parseFloat(form.imp_igv)     ?? 18,
+      gastos_lima_pen:     parseFloat(form.imp_gastos)  || 0,
       tipo_cambio_usado:   C.rate,
       subtotal_usd:        C.subtotalUSD,
       arancel_usd:         C.arancelUSD,
       igv_usd:             C.igvUSD,
       costo_landed_usd:    C.landedUSD,
       costo_landed_pen:    C.landedPEN,
-      margen_pct:          parseFloat(form.imp_margen)   || 30,
+      margen_pct:          parseFloat(form.imp_margen)  || 30,
       precio_sugerido_pen: C.precioSug,
       notas:               form.imp_notas || '',
       created_by:          me?.id,
-    }).select('id').single();
-    if (error) { showToast('Error: ' + error.message, 'err'); return; }
+    };
 
-    // ── Si hay equipos ingresados → guardar a stock_items ──
-    const impDevices = (form.imp_devices || []).filter(d => d.imei1?.trim() || d.serial?.trim());
-    if (impDevices.length > 0 && form.imp_product_id) {
-      // Crear purchase_lot vinculado al batch
-      let lotId = null;
-      try {
-        const numeroLote = form.imp_desc?.trim()
-          ? `IMP-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`
-          : `IMP-${String(Date.now()).slice(-6)}`;
-        const { data: lotData } = await supabase.from('purchase_lots').insert({
-          corp_id: CORP_ID,
-          numero_lote: numeroLote,
-          proveedor: form.imp_proveedor?.trim() || null,
-          fecha_compra: form.imp_fecha_compra || new Date().toISOString().split('T')[0],
-          total_unidades: impDevices.length,
-          notas: form.imp_desc || null,
-        }).select('id').single();
-        if (lotData?.id) lotId = lotData.id;
-      } catch(_) {}
+    // Intentar guardar con invoice_items; si falla por columna faltante, sin invoice_items
+    const colMissing = (msg) => msg && (msg.includes('column') || msg.includes('schema cache') || msg.includes('Could not find') || msg.includes('invoice_items'));
+    let batchError = null;
+    for (const payload of [
+      { ...basePayload, invoice_items: invoiceItems.length > 0 ? invoiceItems : null },
+      basePayload,
+    ]) {
+      const { error: e2 } = await supabase.from('import_batches').insert(payload);
+      batchError = e2;
+      if (!e2) break;
+      if (!colMissing(e2.message)) break;
+    }
+    if (batchError) { showToast('Error: ' + batchError.message, 'err'); return; }
 
-      const colMissing = (msg) => msg && (msg.includes('column') || msg.includes('schema cache') || msg.includes('Could not find'));
-      const purchasePrice = parseFloat(form.imp_purchase_price) || C.costoPorUnd || null;
-      const resellerPrice = parseFloat(form.imp_reseller_price) || null;
-      const salePrice     = parseFloat(form.imp_sale_price) || C.precioSug || null;
-      const colorInfo     = form.imp_color_info?.trim() || null;
-      const storageInfo   = form.imp_storage_info?.trim() || null;
-      const warehouseId   = form.imp_warehouse_id || null;
-
-      const baseRow = (d) => ({
-        owner_org_id: CORP_ID, product_id: form.imp_product_id,
-        imei: d.imei1?.trim()||null, serial_number: d.serial?.trim()||null, status: 'available',
-      });
-      const attempts = [
-        (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, imei2: d.imei2?.trim()||null, ...(lotId?{lot_id:lotId}:{}), ...(warehouseId?{warehouse_id:warehouseId}:{}) }),
-        (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, ...(lotId?{lot_id:lotId}:{}), ...(warehouseId?{warehouse_id:warehouseId}:{}) }),
-        (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, ...(lotId?{lot_id:lotId}:{}) }),
-        (d) => ({ ...baseRow(d) }),
-      ];
-      let saved = false;
-      for (const build of attempts) {
-        const rows = impDevices.map(build);
-        const { error: se } = await supabase.from('stock_items').insert(rows);
-        if (!se) { saved = true; break; }
-        if (!colMissing(se.message)) { showToast('Error al guardar equipos: ' + se.message, 'err'); break; }
-      }
-      if (saved) {
-        showToast(`Lote registrado + ${impDevices.length} equipo${impDevices.length>1?'s':''} al stock ✓`);
-      } else {
-        showToast('Lote registrado. Equipos no guardados (corre MIGRATION_STOCK_COLUMNS.sql)', 'err');
-      }
+    const totalLines = invoiceItems.length;
+    const totalUnits = invoiceItems.reduce((s, it) => s + (parseInt(it.cantidad) || 0), 0);
+    if (totalLines > 0) {
+      showToast(`✅ Lote registrado — ${totalLines} producto${totalLines>1?'s':''}, ${totalUnits} unidad${totalUnits!==1?'es':''} de la factura`);
     } else {
-      showToast('Lote de importación registrado ✓');
+      showToast('✅ Lote de importación registrado');
     }
 
     setModal(null); setForm({});
+    setInvoiceItems([]); setInvoiceName(''); setInvoiceText('');
     loadBatches(); loadGlobalStock(); loadKpis();
   }
 
@@ -1326,6 +1296,127 @@ export default function CorpPage() {
     loadGlobalStock(); loadKpis();
   }
 
+  /* ── PARSEAR LÍNEAS DE FACTURA (multi-producto) ── */
+  function parseInvoiceItems(text) {
+    if (!text) return [];
+    const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 2);
+    const items = [];
+
+    // Patrones para detectar líneas de producto en facturas típicas (Apple, eBay, etc.)
+    // Formato típico: [Qty] [Descripción] [Part#] [PrecioUnit] [PrecioTotal]
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Saltar líneas que son encabezados o totales
+      if (/^(subtotal|total|tax|shipping|discount|grand|amount|descripci|quantity|qty|unit|price|part|item|#|no\.|invoice|bill|date|from|to|ship|sold|buyer|seller)/i.test(line)) continue;
+      if (/^[\-=\*_]{3,}/.test(line)) continue;
+
+      // Buscar patrones numéricos: líneas que tienen cantidad + precio
+      // Patrón 1: "2  iPhone 15 Pro 256GB  MLXG3LL/A  $1099.00  $2198.00"
+      const p1 = line.match(/^(\d{1,4})\s{1,5}(.{5,60?}?)\s{1,5}([A-Z0-9\/\-]{4,20})\s{1,5}\$?([\d,]+\.?\d{0,2})\s{1,5}\$?([\d,]+\.?\d{0,2})/);
+      if (p1) {
+        items.push({
+          cantidad:   parseInt(p1[1]) || 1,
+          descripcion: p1[2].trim(),
+          partNumber:  p1[3].trim(),
+          precioUnit:  parseFloat(p1[4].replace(/,/g,'')) || 0,
+          precioTotal: parseFloat(p1[5].replace(/,/g,'')) || 0,
+        });
+        continue;
+      }
+
+      // Patrón 2: línea con precio al final "$999.00" o "999.00" y al inicio un número
+      const p2 = line.match(/^(\d{1,4})\s+(.{4,70})\s+\$?([\d,]+\.?\d{0,2})$/);
+      if (p2) {
+        const qty = parseInt(p2[1]) || 1;
+        const precio = parseFloat(p2[3].replace(/,/g,'')) || 0;
+        items.push({
+          cantidad:    qty,
+          descripcion: p2[2].trim(),
+          partNumber:  '',
+          precioUnit:  qty > 1 ? parseFloat((precio/qty).toFixed(2)) : precio,
+          precioTotal: precio,
+        });
+        continue;
+      }
+
+      // Patrón 3: "iPhone 15 Pro 256GB Natural  x2  $2198.00" (x antes de cantidad)
+      const p3 = line.match(/^(.{4,70}?)\s+x\s*(\d{1,3})\s+\$?([\d,]+\.?\d{0,2})$/i);
+      if (p3) {
+        const qty = parseInt(p3[2]) || 1;
+        const precio = parseFloat(p3[3].replace(/,/g,'')) || 0;
+        items.push({
+          cantidad:    qty,
+          descripcion: p3[1].trim(),
+          partNumber:  '',
+          precioUnit:  qty > 1 ? parseFloat((precio/qty).toFixed(2)) : precio,
+          precioTotal: precio,
+        });
+        continue;
+      }
+
+      // Patrón 4: detectar líneas que mencionan modelos conocidos con cantidad cercana
+      // "3 x Apple iPhone 14 128GB Black" (sin precio visible — lo tomamos de la siguiente línea)
+      const p4 = line.match(/^(\d{1,3})\s*x\s+(.{6,80})/i);
+      if (p4) {
+        // buscar precio en las próximas 2 líneas
+        let precioTotal = 0; let partNumber = '';
+        for (let j = i+1; j <= Math.min(i+2, lines.length-1); j++) {
+          const m = lines[j].match(/\$?([\d,]+\.?\d{0,2})/);
+          if (m) { precioTotal = parseFloat(m[1].replace(/,/g,'')) || 0; break; }
+        }
+        const qty = parseInt(p4[1]) || 1;
+        items.push({
+          cantidad:    qty,
+          descripcion: p4[2].trim(),
+          partNumber:  partNumber,
+          precioUnit:  qty > 1 && precioTotal ? parseFloat((precioTotal/qty).toFixed(2)) : precioTotal,
+          precioTotal: precioTotal,
+        });
+        continue;
+      }
+
+      // Patrón 5: Excel-style — si la línea tiene varios tokens separados por espacios amplios
+      // y contiene precio USD: "iPhone 15   MLKG3  $999.00  5"
+      const p5 = line.match(/^(.{5,60}?)\s{2,}([A-Z0-9\/\-]{3,20})\s{2,}\$?([\d,]+\.?\d{0,2})\s{2,}(\d{1,3})$/);
+      if (p5) {
+        const qty = parseInt(p5[4]) || 1;
+        const precio = parseFloat(p5[3].replace(/,/g,'')) || 0;
+        items.push({
+          cantidad:    qty,
+          descripcion: p5[1].trim(),
+          partNumber:  p5[2].trim(),
+          precioUnit:  precio,
+          precioTotal: parseFloat((precio * qty).toFixed(2)),
+        });
+        continue;
+      }
+    }
+
+    // Si no se detectó nada con patrones estrictos, intentar heurística suave:
+    // buscar números de cantidad entre 1-500 + descripción con palabras clave de productos tech
+    if (items.length === 0) {
+      const techKeywords = /\b(iphone|ipad|mac|apple|samsung|galaxy|pixel|watch|airpods|laptop|tablet|phone|mobile|device|unit|equipo|celular|producto)\b/i;
+      for (const line of lines) {
+        const soft = line.match(/^(\d{1,3})\s+(.{6,80})/);
+        if (soft && techKeywords.test(soft[2])) {
+          const priceMatch = soft[2].match(/\$?([\d,]+\.?\d{0,2})\s*$/);
+          const precioTotal = priceMatch ? parseFloat(priceMatch[1].replace(/,/g,'')) : 0;
+          const desc = priceMatch ? soft[2].replace(priceMatch[0],'').trim() : soft[2].trim();
+          const qty = parseInt(soft[1]) || 1;
+          items.push({
+            cantidad:    qty,
+            descripcion: desc,
+            partNumber:  '',
+            precioUnit:  qty > 1 && precioTotal ? parseFloat((precioTotal/qty).toFixed(2)) : precioTotal,
+            precioTotal: precioTotal,
+          });
+        }
+      }
+    }
+
+    return items;
+  }
+
   /* ── LEER FACTURA (PDF / Excel / CSV) para pre-llenar lote ── */
   async function handleInvoiceFile(file) {
     if (!file) return;
@@ -1357,21 +1448,27 @@ export default function CorpPage() {
         }
         setInvoiceText(fullText);
 
-        // Intentar pre-llenar campos del form con lo encontrado en el PDF
-        const lower = fullText.toLowerCase();
-        // Cantidad: buscar "qty", "quantity", "units", "unidades", "total", número grande
+        // Parsear líneas de productos del PDF
+        const parsedItems = parseInvoiceItems(fullText);
+        if (parsedItems.length > 0) setInvoiceItems(parsedItems);
+
+        // Pre-llenar campos del form con lo encontrado
+        const totalUnitsFromItems = parsedItems.reduce((s, it) => s + (parseInt(it.cantidad) || 0), 0);
         const qtyMatch = fullText.match(/(?:qty|quantity|units|unidades|total units?)[:\s]+(\d+)/i)
                       || fullText.match(/\b(\d{1,4})\s*(?:units?|pcs|unidades|piezas)\b/i);
-        // Proveedor: primera línea larga que no sea número
-        const lines = fullText.split('\n').map(l => l.trim()).filter(l => l.length > 4 && !/^\d/.test(l));
-        const possibleVendor = lines[0] || '';
+        const linesText = fullText.split('\n').map(l => l.trim()).filter(l => l.length > 4 && !/^\d/.test(l));
+        const possibleVendor = linesText[0] || '';
+        const bestQty = totalUnitsFromItems > 0 ? String(totalUnitsFromItems) : (qtyMatch?.[1] || null);
         setForm(f => ({
           ...f,
-          ...(qtyMatch?.[1] ? { imp_unidades: qtyMatch[1] } : {}),
+          ...(bestQty ? { imp_unidades: bestQty } : {}),
           ...(possibleVendor && !f.imp_proveedor ? { imp_proveedor: possibleVendor.substring(0,60) } : {}),
           ...(f.imp_desc ? {} : { imp_desc: file.name.replace(/\.pdf$/i,'') }),
         }));
-        showToast(`PDF leído (${pdf.numPages} página${pdf.numPages>1?'s':''}). Revisa y ajusta los campos. ✓`);
+        const itemsMsg = parsedItems.length > 0
+          ? ` · ${parsedItems.length} producto${parsedItems.length>1?'s':''} detectado${parsedItems.length>1?'s':''}`
+          : '';
+        showToast(`PDF leído (${pdf.numPages} pág.)${itemsMsg} ✓`);
 
       } else if (ext === 'csv') {
         const text  = await file.text();
@@ -1409,12 +1506,27 @@ export default function CorpPage() {
           setForm(f => ({ ...f, imp_devices: devices, imp_unidades: String(devices.length) }));
           showToast(`${devices.length} equipos cargados del Excel ✓`);
         } else {
-          // Sin IMEIs pero sí datos — pre-llenar descripción
-          const firstRow = rows[0] || {};
-          const desc = gc(firstRow,'descripcion','description','item','product','modelo') || file.name.replace(/\.xlsx?$/i,'');
-          const qty  = gc(firstRow,'qty','quantity','units','unidades','total') || String(rows.length);
-          setForm(f => ({ ...f, imp_desc: f.imp_desc||desc, imp_unidades: f.imp_unidades||qty }));
-          showToast(`Excel adjunto (${rows.length} filas). Sin IMEIs detectados. ✓`);
+          // Sin IMEIs — intentar parsear como factura con líneas de productos
+          const excelItems = rows.map(r => {
+            const desc   = gc(r,'descripcion','description','item','product','modelo','name','nombre') || '';
+            const qty    = parseInt(gc(r,'qty','quantity','units','unidades','cantidad','cant')) || 0;
+            const part   = gc(r,'part','sku','partno','partnumber','codigo','code') || '';
+            const pUnit  = parseFloat(gc(r,'unit price','unitprice','precio unit','precio','price','costo')) || 0;
+            const pTotal = parseFloat(gc(r,'total','amount','subtotal','importe','precio total')) || 0;
+            return { descripcion: desc, cantidad: qty || 1, partNumber: part, precioUnit: pUnit, precioTotal: pTotal || parseFloat((pUnit*(qty||1)).toFixed(2)) };
+          }).filter(it => it.descripcion);
+          if (excelItems.length > 0) {
+            setInvoiceItems(excelItems);
+            const totalU = excelItems.reduce((s,it)=>s+(parseInt(it.cantidad)||0),0);
+            setForm(f => ({ ...f, imp_unidades: f.imp_unidades || String(totalU || excelItems.length) }));
+            showToast(`Excel leído: ${excelItems.length} producto${excelItems.length>1?'s':''} detectados ✓`);
+          } else {
+            const firstRow = rows[0] || {};
+            const desc = gc(firstRow,'descripcion','description','item','product','modelo') || file.name.replace(/\.xlsx?$/i,'');
+            const qty  = gc(firstRow,'qty','quantity','units','unidades','total') || String(rows.length);
+            setForm(f => ({ ...f, imp_desc: f.imp_desc||desc, imp_unidades: f.imp_unidades||qty }));
+            showToast(`Excel adjunto (${rows.length} filas). Revisa los campos. ✓`);
+          }
         }
       }
     } catch(err) {
@@ -3488,7 +3600,7 @@ export default function CorpPage() {
                 onClick={() => {
                   setModal('add-batch');
                   setForm({ imp_igv: '18', imp_margen: '30', imp_unidades: '1', imp_arancel: '0' });
-                  setInvoiceName(''); setInvoiceText('');
+                  setInvoiceName(''); setInvoiceText(''); setInvoiceItems([]);
                 }}>
                 + Nuevo Lote de Importación
               </button>
@@ -6185,6 +6297,49 @@ export default function CorpPage() {
                       </div>
                     </div>
 
+                    {/* ── TABLA PREVIEW DE PRODUCTOS DETECTADOS ── */}
+                    {invoiceItems.length > 0 && (
+                      <div style={{ background:'linear-gradient(135deg,#f0fdf4,#dcfce7)', border:'1px solid #86efac', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                          <div style={{ fontSize:12, fontWeight:800, color:'#166534' }}>
+                            📋 {invoiceItems.length} producto{invoiceItems.length>1?'s':''} detectado{invoiceItems.length>1?'s':''} · {invoiceItems.reduce((s,it)=>s+(parseInt(it.cantidad)||0),0)} unidades totales
+                          </div>
+                          <button type="button" onClick={()=>setInvoiceItems([])} style={{ background:'none',border:'none',color:'#9ca3af',cursor:'pointer',fontSize:12,padding:'2px 6px' }}>✕ Limpiar</button>
+                        </div>
+                        <div style={{ overflowX:'auto' }}>
+                          <table style={{ width:'100%', fontSize:11, borderCollapse:'collapse' }}>
+                            <thead>
+                              <tr style={{ borderBottom:'1px solid #86efac' }}>
+                                {['Cant.','Descripción','Part #','$/Unit','Total'].map(h=>(
+                                  <th key={h} style={{ textAlign: h==='Cant.'?'center':'left', padding:'3px 6px', color:'#166534', fontWeight:700, whiteSpace:'nowrap' }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {invoiceItems.map((it,idx)=>(
+                                <tr key={idx} style={{ borderBottom:'1px solid rgba(134,239,172,0.4)', background: idx%2===0?'transparent':'rgba(255,255,255,0.4)' }}>
+                                  <td style={{ textAlign:'center', padding:'4px 6px' }}>
+                                    <input type="number" min="1" value={it.cantidad} onChange={e=>{
+                                      const newItems=[...invoiceItems];
+                                      newItems[idx]={...it,cantidad:parseInt(e.target.value)||1};
+                                      setInvoiceItems(newItems);
+                                    }} style={{ width:44, textAlign:'center', border:'1px solid #86efac', borderRadius:4, padding:'2px 4px', fontSize:11, background:'#fff' }} />
+                                  </td>
+                                  <td style={{ padding:'4px 6px', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'#1a1a1a' }}>{it.descripcion}</td>
+                                  <td style={{ padding:'4px 6px', color:'#6b7280', fontFamily:'monospace', fontSize:10 }}>{it.partNumber||'—'}</td>
+                                  <td style={{ padding:'4px 6px', color:'#065f46' }}>{it.precioUnit>0?`$${it.precioUnit.toFixed(2)}`:'—'}</td>
+                                  <td style={{ padding:'4px 6px', fontWeight:700, color:'#065f46' }}>{it.precioTotal>0?`$${it.precioTotal.toFixed(2)}`:'—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div style={{ marginTop:8, fontSize:10, color:'#15803d', display:'flex', justifyContent:'flex-end', fontWeight:700 }}>
+                          Total factura: ${invoiceItems.reduce((s,it)=>s+(it.precioTotal||0),0).toFixed(2)} USD
+                        </div>
+                      </div>
+                    )}
+
                     {/* Info del lote */}
                     <div className="form-group">
                       <label className="form-label">Descripción del lote</label>
@@ -6320,10 +6475,42 @@ export default function CorpPage() {
               return (
                 <>
                   <div className="modal-title">📲 Check-in — {b.descripcion || 'Lote'}</div>
-                  <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:8, padding:'8px 12px', marginBottom:12, fontSize:11, color:'#0369a1' }}>
+                  <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:8, padding:'8px 12px', marginBottom:10, fontSize:11, color:'#0369a1' }}>
                     <b>{b.proveedor || 'Proveedor'}</b> · {b.num_unidades} unid. previstas
                     {b.fecha_llegada_est && ` · ETA: ${b.fecha_llegada_est}`}
                   </div>
+
+                  {/* Productos esperados de la factura */}
+                  {b.invoice_items && b.invoice_items.length > 0 && (
+                    <div style={{ background:'linear-gradient(135deg,#fff7ed,#ffedd5)', border:'1px solid #fed7aa', borderRadius:8, padding:'10px 12px', marginBottom:10 }}>
+                      <div style={{ fontSize:11, fontWeight:800, color:'#9a3412', marginBottom:6 }}>
+                        📦 Productos esperados según factura
+                      </div>
+                      <div style={{ overflowX:'auto' }}>
+                        <table style={{ width:'100%', fontSize:10, borderCollapse:'collapse' }}>
+                          <thead>
+                            <tr style={{ borderBottom:'1px solid #fed7aa' }}>
+                              <th style={{ textAlign:'left', padding:'2px 6px', color:'#9a3412' }}>Producto</th>
+                              <th style={{ textAlign:'center', padding:'2px 6px', color:'#9a3412', whiteSpace:'nowrap' }}>Cant.</th>
+                              <th style={{ textAlign:'right', padding:'2px 6px', color:'#9a3412', whiteSpace:'nowrap' }}>$/Unit</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {b.invoice_items.map((it,idx)=>(
+                              <tr key={idx} style={{ borderBottom:'1px solid rgba(253,186,116,0.3)' }}>
+                                <td style={{ padding:'3px 6px', color:'#431407' }}>{it.descripcion}{it.partNumber?` (${it.partNumber})`:''}</td>
+                                <td style={{ textAlign:'center', padding:'3px 6px', fontWeight:700, color:'#ea580c' }}>{it.cantidad}</td>
+                                <td style={{ textAlign:'right', padding:'3px 6px', color:'#9a3412' }}>{it.precioUnit>0?`$${Number(it.precioUnit).toFixed(2)}`:'—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{ marginTop:6, fontSize:10, color:'#9a3412', fontWeight:600 }}>
+                        Total esperado: {b.invoice_items.reduce((s,it)=>s+(parseInt(it.cantidad)||0),0)} unidades · ${b.invoice_items.reduce((s,it)=>s+(it.precioTotal||0),0).toFixed(2)} USD
+                      </div>
+                    </div>
+                  )}
                   <form onSubmit={addCheckin}>
 
                     {/* Empresa + Almacén */}
