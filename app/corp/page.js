@@ -4604,31 +4604,32 @@ export default function CorpPage() {
 
             {/* ── MODAL: Nuevo / Editar Producto ── */}
             {modal === 'add-product' && (() => {
-              const EMOJI_QUICK = ['📱','📲','💻','🖥','⌚','🎧','📟','🔋','🔌','📡','🖱','⌨️','🎮','📷','🎙','📦'];
               const CATS_MODAL = [
-                { id:'iphone',    lbl:'iPhone',     ico:'📱' },
-                { id:'ipad',      lbl:'iPad',       ico:'📟' },
-                { id:'mac',       lbl:'Mac',        ico:'💻' },
-                { id:'airpods',   lbl:'AirPods',    ico:'🎧' },
-                { id:'samsung',   lbl:'Samsung',    ico:'📲' },
-                { id:'accesorio', lbl:'Accesorio',  ico:'🔌' },
-                { id:'otro',      lbl:'Otro',       ico:'📦' },
+                { id:'iphone',    lbl:'iPhone'    },
+                { id:'ipad',      lbl:'iPad'      },
+                { id:'mac',       lbl:'Mac'       },
+                { id:'airpods',   lbl:'AirPods'  },
+                { id:'samsung',   lbl:'Samsung'   },
+                { id:'accesorio', lbl:'Accesorio' },
+                { id:'otro',      lbl:'Otro'      },
               ];
               const CHIPS_QUICK = ['A13 Bionic','A14 Bionic','A15 Bionic','A16 Bionic','A17 Pro','A18','A18 Pro','A19','A19 Pro','Exynos','Snapdragon','M1','M2','M3','M4'];
               return (
                 <>
-                  <div className="modal-title">{form._edit_id ? '✏️ Editar modelo' : '🗂️ Nuevo modelo base'}</div>
+                  <div className="modal-title">{form._edit_id ? 'Editar modelo' : 'Nuevo modelo'}</div>
 
                   {/* Preview en vivo */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 14, marginBottom: 16 }}>
-                    <span style={{ fontSize: 40 }}>{form.emoji || '📦'}</span>
+                  <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:'#f9fafb', borderRadius:8, border:'1px solid #e5e7eb', marginBottom:16 }}>
+                    <div style={{ width:40, height:40, borderRadius:8, background:'#1a56db', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:800, fontSize:15, flexShrink:0 }}>
+                      {(form.name || 'M').charAt(0).toUpperCase()}
+                    </div>
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: 16 }}>{form.name || 'Nombre del modelo'}</div>
-                      {form.chip && <div style={{ fontSize: 12, color: '#FF9F0A', fontWeight: 700 }}>⚡ {form.chip}</div>}
-                      {form.category && <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                        {CATS_MODAL.find(c=>c.id===form.category)?.ico} {CATS_MODAL.find(c=>c.id===form.category)?.lbl}
-                        {form.subcategory && <span style={{ color: '#0A84FF', fontWeight: 700 }}> · Serie {form.subcategory}</span>}
-                      </div>}
+                      <div style={{ fontWeight:700, fontSize:15, color:'#111827' }}>{form.name || 'Nombre del modelo'}</div>
+                      <div style={{ fontSize:11, color:'#6b7280', marginTop:2 }}>
+                        {CATS_MODAL.find(c=>c.id===form.category)?.lbl || 'Categoría'}
+                        {form.subcategory && <span style={{ color:'#1a56db', fontWeight:600 }}> · Serie {form.subcategory}</span>}
+                        {form.chip && <span> · {form.chip}</span>}
+                      </div>
                     </div>
                   </div>
 
@@ -4637,52 +4638,18 @@ export default function CorpPage() {
                     {/* Categoría */}
                     <div className="form-group">
                       <label className="form-label">Categoría *</label>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {CATS_MODAL.map(c => (
                           <button key={c.id} type="button"
                             onClick={() => setForm({ ...form, category: c.id })}
                             style={{
-                              padding: '7px 13px', borderRadius: 10, fontWeight: 700, fontSize: 12,
-                              border: `1.5px solid ${form.category === c.id ? '#0A84FF' : 'var(--border)'}`,
-                              background: form.category === c.id ? 'rgba(10,132,255,0.15)' : 'transparent',
-                              color: form.category === c.id ? '#4DA8FF' : 'var(--text)',
+                              padding: '6px 13px', borderRadius: 6, fontWeight: 600, fontSize: 12,
+                              border: `1.5px solid ${form.category === c.id ? '#1a56db' : '#d1d5db'}`,
+                              background: form.category === c.id ? '#1a56db' : '#fff',
+                              color: form.category === c.id ? '#fff' : '#374151',
                               cursor: 'pointer',
                             }}>
-                            {c.ico} {c.lbl}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Subcategoría */}
-                    <div className="form-group">
-                      <label className="form-label">Serie / Generación (subcategoría)</label>
-                      <input
-                        className="form-input"
-                        placeholder="Ej: 17  ·  16  ·  15  ·  iPad Pro  ·  M4"
-                        value={form.subcategory || ''}
-                        onChange={e => setForm({ ...form, subcategory: e.target.value })}
-                        style={{ fontWeight: 700 }}
-                      />
-                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-                        Ejemplo: categoría = iPhone · subcategoría = 17 · nombre = iPhone 17 Pro
-                      </div>
-                    </div>
-
-                    {/* Emoji */}
-                    <div className="form-group">
-                      <label className="form-label">Ícono</label>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {EMOJI_QUICK.map(ico => (
-                          <button key={ico} type="button"
-                            onClick={() => setForm({ ...form, emoji: ico })}
-                            style={{
-                              fontSize: 22, width: 42, height: 42, borderRadius: 10,
-                              border: `2px solid ${form.emoji === ico ? '#0A84FF' : 'var(--border)'}`,
-                              background: form.emoji === ico ? 'rgba(10,132,255,0.15)' : 'transparent',
-                              cursor: 'pointer',
-                            }}>
-                            {ico}
+                            {c.lbl}
                           </button>
                         ))}
                       </div>
@@ -4693,25 +4660,40 @@ export default function CorpPage() {
                       <label className="form-label">Nombre del modelo *</label>
                       <input
                         className="form-input" required
-                        placeholder="iPhone 15 Pro Max · Samsung S24 · AirPods Pro 2"
+                        placeholder="iPhone 17 Pro Max · Samsung S25 · AirPods Pro 2"
                         value={form.name || ''}
                         onChange={e => setForm({ ...form, name: e.target.value })}
                         style={{ fontWeight: 700 }}
                       />
                     </div>
 
-                    {/* Chip */}
+                    {/* Subcategoría */}
                     <div className="form-group">
-                      <label className="form-label">Chip / Procesador</label>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                      <label className="form-label">Serie / Generación</label>
+                      <input
+                        className="form-input"
+                        placeholder="Ej: 17  ·  16  ·  15  ·  iPad Pro"
+                        value={form.subcategory || ''}
+                        onChange={e => setForm({ ...form, subcategory: e.target.value })}
+                        style={{ fontWeight: 700 }}
+                      />
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                        iPhone (cat) → 17 (serie) → iPhone 17 Pro (nombre)
+                      </div>
+                    </div>
+
+                    {/* Chip — OPCIONAL */}
+                    <div className="form-group">
+                      <label className="form-label">Chip / Procesador <span style={{ color:'#9ca3af', fontWeight:400 }}>(opcional)</span></label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
                         {CHIPS_QUICK.map(c => (
                           <button key={c} type="button"
                             onClick={() => setForm({ ...form, chip: form.chip === c ? '' : c })}
                             style={{
-                              padding: '5px 10px', borderRadius: 8, fontWeight: 700, fontSize: 11,
-                              border: `1.5px solid ${form.chip === c ? '#FF9F0A' : 'var(--border)'}`,
-                              background: form.chip === c ? 'rgba(255,159,10,0.15)' : 'transparent',
-                              color: form.chip === c ? '#FF9F0A' : 'var(--text)',
+                              padding: '4px 10px', borderRadius: 6, fontWeight: 600, fontSize: 11,
+                              border: `1.5px solid ${form.chip === c ? '#1a56db' : '#d1d5db'}`,
+                              background: form.chip === c ? '#eff6ff' : '#fff',
+                              color: form.chip === c ? '#1a56db' : '#6b7280',
                               cursor: 'pointer',
                             }}>
                             {c}
