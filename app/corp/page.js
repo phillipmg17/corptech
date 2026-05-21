@@ -1176,41 +1176,45 @@ export default function CorpPage() {
       if (!lotError && lotData?.id) lotId = lotData.id;
     } catch (_) { /* tabla no existe aún */ }
 
-    // ── 2. Construir filas ──
-    const buildRow = (d, withImei2) => {
-      const row = {
-        owner_org_id:   form.owner_org_id || CORP_ID,
-        product_id:     form.product_id,
-        imei:           d.imei1?.trim() || null,
-        serial_number:  d.serial?.trim() || null,
-        status:         'available',
-        purchase_price: purchasePrice,
-        reseller_price: resellerPrice,
-        sale_price:     salePrice,
-        color_info:     colorInfo,
-        storage_info:   storageInfo,
-      };
-      if (lotId) row.lot_id = lotId;
-      if (withImei2 && d.imei2?.trim()) row.imei2 = d.imei2.trim();
-      return row;
-    };
+    // ── 2. Intentos progresivos (por si faltan columnas en BD) ──
+    // Columnas extras que pueden no existir si no se corrió la migración
+    const colMissing = (msg) => msg && (msg.includes('column') || msg.includes('schema cache') || msg.includes('Could not find'));
 
-    // Intento con imei2
-    let rows = validDevices.map(d => buildRow(d, true));
-    const { error } = await supabase.from('stock_items').insert(rows);
-    if (error) {
-      if (error.message?.includes('imei2')) {
-        // imei2 columna no existe aún — reintentar sin ella
-        rows = validDevices.map(d => buildRow(d, false));
-        const { error: e2 } = await supabase.from('stock_items').insert(rows);
-        if (e2) {
-          if (lotId) await supabase.from('purchase_lots').delete().eq('id', lotId);
-          showToast('Error: ' + e2.message, 'err'); return;
-        }
-      } else {
+    const baseRow = (d) => ({
+      owner_org_id:  form.owner_org_id || CORP_ID,
+      product_id:    form.product_id,
+      imei:          d.imei1?.trim() || null,
+      serial_number: d.serial?.trim() || null,
+      status:        'available',
+    });
+
+    // Intentos en orden de más completo a menos completo
+    const attempts = [
+      // Con todo
+      (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, imei2: d.imei2?.trim()||null, ...(lotId ? {lot_id:lotId} : {}) }),
+      // Sin imei2
+      (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, color_info: colorInfo, storage_info: storageInfo, ...(lotId ? {lot_id:lotId} : {}) }),
+      // Sin color/storage/imei2
+      (d) => ({ ...baseRow(d), purchase_price: purchasePrice, reseller_price: resellerPrice, sale_price: salePrice, ...(lotId ? {lot_id:lotId} : {}) }),
+      // Solo lo básico garantizado
+      (d) => ({ ...baseRow(d) }),
+    ];
+
+    let saved = false;
+    for (const build of attempts) {
+      const rows = validDevices.map(build);
+      const { error } = await supabase.from('stock_items').insert(rows);
+      if (!error) { saved = true; break; }
+      if (!colMissing(error.message)) {
+        // Error que no es de columna faltante — no seguir intentando
         if (lotId) await supabase.from('purchase_lots').delete().eq('id', lotId);
         showToast('Error: ' + error.message, 'err'); return;
       }
+      // Si es columna faltante → probar siguiente intento
+    }
+    if (!saved) {
+      if (lotId) await supabase.from('purchase_lots').delete().eq('id', lotId);
+      showToast('No se pudo guardar. Corre MIGRATION_STOCK_COLUMNS.sql en Supabase.', 'err'); return;
     }
 
     const loteMsg = lotId ? ` — ${numeroLote}` : '';
