@@ -8,6 +8,8 @@ const DOMAIN_MAP = {
   'www.innovatechstore.com.pe': '/tienda/innovatech',
   'futurteck.pe':               '/tienda/futurteck',
   'www.futurteck.pe':           '/tienda/futurteck',
+  'gdgstore.com':               '/tienda/gdg',      // GDG Store — 4ta empresa
+  'www.gdgstore.com':           '/tienda/gdg',
   'corptech.pe':                '/corp-landing',   // landing pública
   'www.corptech.pe':            '/corp-landing',
 };
